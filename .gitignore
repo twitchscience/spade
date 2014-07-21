@@ -1,0 +1,14 @@
+.build
+libexec
+*.sublime-*
+*.pyc
+*.pyo
+.ruby-version
+.aws
+.vagrant
+Vagrantfile
+build/packer.json
+*.prof
+spade
+.DS_STORE
+

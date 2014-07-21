@@ -1,0 +1,78 @@
+{
+	"ImportPath": "github.com/TwitchScience/spade",
+	"GoVersion": "go1.3",
+	"Packages": [
+		".",
+		"./spade_parse"
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/TwitchScience/aws_utils/common",
+			"Rev": "74ca435cd69fa5bfd87c24722f58885132664687"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/aws_utils/environment",
+			"Rev": "74ca435cd69fa5bfd87c24722f58885132664687"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/aws_utils/listener",
+			"Rev": "74ca435cd69fa5bfd87c24722f58885132664687"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/aws_utils/notifier",
+			"Rev": "74ca435cd69fa5bfd87c24722f58885132664687"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/aws_utils/uploader",
+			"Rev": "74ca435cd69fa5bfd87c24722f58885132664687"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/gologging/file_writer",
+			"Rev": "5587a0a0a6db26e14a2cf37db9cd99c2eedf3b9d"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/gologging/gologging",
+			"Rev": "5587a0a0a6db26e14a2cf37db9cd99c2eedf3b9d"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/gologging/key_name_generator",
+			"Rev": "5587a0a0a6db26e14a2cf37db9cd99c2eedf3b9d"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/scoop_protocol/msg_signer",
+			"Rev": "311bd9c1da5fa74304168fe5491112db34a44f4f"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/scoop_protocol/scoop_protocol",
+			"Rev": "311bd9c1da5fa74304168fe5491112db34a44f4f"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/spade_edge/request_handler",
+			"Rev": "836bc8a1fcae8eb98b3bccbac7e1e2f2c6e6ae8a"
+		},
+		{
+			"ImportPath": "github.com/TwitchScience/spade_edge/uuid",
+			"Rev": "836bc8a1fcae8eb98b3bccbac7e1e2f2c6e6ae8a"
+		},
+		{
+			"ImportPath": "github.com/abh/geoip",
+			"Rev": "da130741c8ed2052f5f455d56e552f2e997e1ce9"
+		},
+		{
+			"ImportPath": "github.com/cactus/go-statsd-client/statsd",
+			"Rev": "5b5607a786a6be31226ca2063e49695712aebc6d"
+		},
+		{
+			"ImportPath": "github.com/crowdmob/goamz/aws",
+			"Rev": "c5ba9ad45b6ac022326f0ff9762d6bac33ca8f88"
+		},
+		{
+			"ImportPath": "github.com/crowdmob/goamz/s3",
+			"Rev": "c5ba9ad45b6ac022326f0ff9762d6bac33ca8f88"
+		},
+		{
+			"ImportPath": "github.com/crowdmob/goamz/sqs",
+			"Rev": "c5ba9ad45b6ac022326f0ff9762d6bac33ca8f88"
+		}
+	]
+}
