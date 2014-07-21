@@ -1,0 +1,40 @@
+{
+  "EventName": "test1",
+  "Columns": [
+    {
+      "InboundName": "testIn",
+      "OutboundName": "test",
+      "Transformer": "int",
+      "ColumnCreationOptions": ""
+    },
+    {
+      "InboundName": "testCharIn",
+      "OutboundName": "testChar",
+      "Transformer": "varchar",
+      "ColumnCreationOptions": "(32)"
+    },
+    {
+      "InboundName": "testIn",
+      "OutboundName": "test",
+      "Transformer": "f@timestamp@2006-01-02 15:04:05",
+      "ColumnCreationOptions": ""
+    }
+  ]
+}
+{
+  "EventName": "test2",
+  "Columns": [
+    {
+      "InboundName": "testbIn",
+      "OutboundName": "testb",
+      "Transformer": "int",
+      "ColumnCreationOptions": ""
+    },
+    {
+      "InboundName": "testCharbIn",
+      "OutboundName": "testCharb",
+      "Transformer": "varchar",
+      "ColumnCreationOptions": "(32)"
+    }
+  ]
+}

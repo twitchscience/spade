@@ -1,0 +1,22 @@
+{
+  "ad_feedback": 1,
+  "api-error": 574,
+  "app-launched": 242,
+  "buffer-empty": 534,
+  "buffer-refill": 457,
+  "chat": 471,
+  "chat_forced_disconnect": 18,
+  "chat_room_join": 361,
+  "directory-browse": 181,
+  "error-displayed": 59,
+  "message-sent": 4,
+  "minute-watched": 12859,
+  "search-session-start": 1,
+  "video-error": 74,
+  "video-play": 618,
+  "video_ad_click": 2,
+  "video_ad_impression": 182,
+  "video_ad_opportunity": 846,
+  "video_no_ads_played": 292,
+  "xbox-broadcast-ready-pageview": 4
+}
