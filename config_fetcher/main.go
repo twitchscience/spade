@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/TwitchScience/spade/config_fetcher/fetcher"
+	"github.com/twitchscience/spade/config_fetcher/fetcher"
 )
 
 var (

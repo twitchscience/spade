@@ -7,8 +7,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/TwitchScience/scoop_protocol/scoop_protocol"
-	"github.com/TwitchScience/spade/transformer"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
+	"github.com/twitchscience/spade/transformer"
 )
 
 type Tables struct {

@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/TwitchScience/scoop_protocol/scoop_protocol"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
 var knownScoopProtocolConfig = []scoop_protocol.Config{

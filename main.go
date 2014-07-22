@@ -5,18 +5,18 @@ import (
 	"fmt"
 	"syscall"
 
-	"github.com/TwitchScience/aws_utils/environment"
-	"github.com/TwitchScience/aws_utils/listener"
-	"github.com/TwitchScience/aws_utils/notifier"
-	aws_upload "github.com/TwitchScience/aws_utils/uploader"
+	"github.com/twitchscience/aws_utils/environment"
+	"github.com/twitchscience/aws_utils/listener"
+	"github.com/twitchscience/aws_utils/notifier"
+	aws_upload "github.com/twitchscience/aws_utils/uploader"
 
-	"github.com/TwitchScience/gologging/gologging"
-	gen "github.com/TwitchScience/gologging/key_name_generator"
+	"github.com/twitchscience/gologging/gologging"
+	gen "github.com/twitchscience/gologging/key_name_generator"
 
-	"github.com/TwitchScience/spade/config_fetcher/fetcher"
-	"github.com/TwitchScience/spade/log_manager"
-	"github.com/TwitchScience/spade/reporter"
-	"github.com/TwitchScience/spade/uploader"
+	"github.com/twitchscience/spade/config_fetcher/fetcher"
+	"github.com/twitchscience/spade/log_manager"
+	"github.com/twitchscience/spade/reporter"
+	"github.com/twitchscience/spade/uploader"
 
 	"github.com/cactus/go-statsd-client/statsd"
 

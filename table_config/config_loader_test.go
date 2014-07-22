@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TwitchScience/scoop_protocol/scoop_protocol"
-	"github.com/TwitchScience/spade/reporter"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
+	"github.com/twitchscience/spade/reporter"
 	"github.com/cactus/go-statsd-client/statsd"
 )
 

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/TwitchScience/spade/reporter"
+	"github.com/twitchscience/spade/reporter"
 )
 
 type MixpanelEvent struct {

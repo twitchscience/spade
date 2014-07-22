@@ -17,7 +17,7 @@ sudo ln -s ${GOROOT}/bin/* /usr/local/bin
 BASEDIR="/home/vagrant"
 export GOPATH="${BASEDIR}/go"
 mkdir -p ${GOPATH}/{bin,pkg,src}
-GOSRCDIR="${GOPATH}/src/github.com/TwitchScience/${PROJECT_NAME}"
+GOSRCDIR="${GOPATH}/src/github.com/twitchscience/${PROJECT_NAME}"
 SRCDIR="${BASEDIR}/src"
 PATH=${PATH}:${GOPATH}/bin
 

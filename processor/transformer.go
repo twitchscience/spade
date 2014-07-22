@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/TwitchScience/spade/parser"
-	"github.com/TwitchScience/spade/transformer"
-	"github.com/TwitchScience/spade/writer"
+	"github.com/twitchscience/spade/parser"
+	"github.com/twitchscience/spade/transformer"
+	"github.com/twitchscience/spade/writer"
 )
 
 type RequestTransformer struct {

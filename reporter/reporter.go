@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TwitchScience/gologging/gologging"
+	"github.com/twitchscience/gologging/gologging"
 )
 
 const reportBuffer = 400000

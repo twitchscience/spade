@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TwitchScience/spade/parser"
-	"github.com/TwitchScience/spade/reporter"
+	"github.com/twitchscience/spade/parser"
+	"github.com/twitchscience/spade/reporter"
 )
 
 func TestGobTransport(t *testing.T) {

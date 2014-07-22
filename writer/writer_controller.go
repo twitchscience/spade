@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/TwitchScience/aws_utils/uploader"
-	"github.com/TwitchScience/spade/gzip_pool"
-	"github.com/TwitchScience/spade/parser"
-	"github.com/TwitchScience/spade/reporter"
+	"github.com/twitchscience/aws_utils/uploader"
+	"github.com/twitchscience/spade/gzip_pool"
+	"github.com/twitchscience/spade/parser"
+	"github.com/twitchscience/spade/reporter"
 )
 
 const (

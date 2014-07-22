@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/TwitchScience/spade/reporter"
+	"github.com/twitchscience/spade/reporter"
 )
 
 var (

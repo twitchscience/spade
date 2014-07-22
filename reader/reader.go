@@ -3,7 +3,7 @@ package reader
 import (
 	"bufio"
 	"compress/gzip"
-	"github.com/TwitchScience/spade/parser"
+	"github.com/twitchscience/spade/parser"
 	"os"
 	"time"
 )
