@@ -5,7 +5,7 @@
 The Spade Processor provides a service to transform and collate stat
 events into a format that is consistent with the current storage schema
 for a paricular event (if it exists). If you are interested in how we
-create and maintain schemas take a look at TwitchScience/blueprint.
+create and maintain schemas take a look at twitchscience/blueprint.
 
 The above has a lot of big words that are kind of confusing so lets start off
 with an example.

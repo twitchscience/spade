@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 
-	"github.com/TwitchScience/spade/transformer"
+	"github.com/twitchscience/spade/transformer"
 )
 
 var outFile string

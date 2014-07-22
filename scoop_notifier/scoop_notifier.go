@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/TwitchScience/scoop_protocol/scoop_protocol"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
 const (

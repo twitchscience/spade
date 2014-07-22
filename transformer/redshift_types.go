@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TwitchScience/spade/geoip"
+	"github.com/twitchscience/spade/geoip"
 )
 
 // Contains transformers to cast and munge properties coming in into types

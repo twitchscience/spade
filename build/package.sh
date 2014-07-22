@@ -2,7 +2,7 @@
 set -e -u -o pipefail
 
 export GOPATH="/home/vagrant/go"
-export SRCDIR="${GOPATH}/src/github.com/TwitchScience/spade"
+export SRCDIR="${GOPATH}/src/github.com/twitchscience/spade"
 export PKGDIR="/tmp/pkg"
 export DEPLOYDIR="${PKGDIR}/deploy"
 export PATH=${PATH}:${GOPATH}/bin

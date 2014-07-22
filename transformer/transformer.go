@@ -1,8 +1,8 @@
 package transformer
 
 import (
-	"github.com/TwitchScience/spade/parser"
-	"github.com/TwitchScience/spade/writer"
+	"github.com/twitchscience/spade/parser"
+	"github.com/twitchscience/spade/writer"
 )
 
 type Transformer interface {

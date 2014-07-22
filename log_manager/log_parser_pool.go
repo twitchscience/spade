@@ -5,10 +5,10 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/TwitchScience/spade/processor"
-	"github.com/TwitchScience/spade/reader"
-	"github.com/TwitchScience/spade/reporter"
-	"github.com/TwitchScience/spade/writer"
+	"github.com/twitchscience/spade/processor"
+	"github.com/twitchscience/spade/reader"
+	"github.com/twitchscience/spade/reporter"
+	"github.com/twitchscience/spade/writer"
 )
 
 type LogParser struct {

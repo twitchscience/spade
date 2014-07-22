@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/TwitchScience/spade/reporter"
+	"github.com/twitchscience/spade/reporter"
 )
 
 var MultiEventEscape = []byte{'[', '{'}

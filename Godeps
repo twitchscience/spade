@@ -1,59 +1,11 @@
 {
-	"ImportPath": "github.com/TwitchScience/spade",
+	"ImportPath": "github.com/twitchscience/spade",
 	"GoVersion": "go1.3",
 	"Packages": [
 		".",
 		"./spade_parse"
 	],
 	"Deps": [
-		{
-			"ImportPath": "github.com/TwitchScience/aws_utils/common",
-			"Rev": "74ca435cd69fa5bfd87c24722f58885132664687"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/aws_utils/environment",
-			"Rev": "74ca435cd69fa5bfd87c24722f58885132664687"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/aws_utils/listener",
-			"Rev": "74ca435cd69fa5bfd87c24722f58885132664687"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/aws_utils/notifier",
-			"Rev": "74ca435cd69fa5bfd87c24722f58885132664687"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/aws_utils/uploader",
-			"Rev": "74ca435cd69fa5bfd87c24722f58885132664687"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/gologging/file_writer",
-			"Rev": "5587a0a0a6db26e14a2cf37db9cd99c2eedf3b9d"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/gologging/gologging",
-			"Rev": "5587a0a0a6db26e14a2cf37db9cd99c2eedf3b9d"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/gologging/key_name_generator",
-			"Rev": "5587a0a0a6db26e14a2cf37db9cd99c2eedf3b9d"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/scoop_protocol/msg_signer",
-			"Rev": "311bd9c1da5fa74304168fe5491112db34a44f4f"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/scoop_protocol/scoop_protocol",
-			"Rev": "311bd9c1da5fa74304168fe5491112db34a44f4f"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/spade_edge/request_handler",
-			"Rev": "836bc8a1fcae8eb98b3bccbac7e1e2f2c6e6ae8a"
-		},
-		{
-			"ImportPath": "github.com/TwitchScience/spade_edge/uuid",
-			"Rev": "836bc8a1fcae8eb98b3bccbac7e1e2f2c6e6ae8a"
-		},
 		{
 			"ImportPath": "github.com/abh/geoip",
 			"Rev": "da130741c8ed2052f5f455d56e552f2e997e1ce9"
@@ -64,15 +16,63 @@
 		},
 		{
 			"ImportPath": "github.com/crowdmob/goamz/aws",
-			"Rev": "c5ba9ad45b6ac022326f0ff9762d6bac33ca8f88"
+			"Rev": "2973a6ba9e3be51be437eaeb0a9c54154259f6f8"
 		},
 		{
 			"ImportPath": "github.com/crowdmob/goamz/s3",
-			"Rev": "c5ba9ad45b6ac022326f0ff9762d6bac33ca8f88"
+			"Rev": "2973a6ba9e3be51be437eaeb0a9c54154259f6f8"
 		},
 		{
 			"ImportPath": "github.com/crowdmob/goamz/sqs",
-			"Rev": "c5ba9ad45b6ac022326f0ff9762d6bac33ca8f88"
+			"Rev": "2973a6ba9e3be51be437eaeb0a9c54154259f6f8"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/aws_utils/common",
+			"Rev": "1e4391b1a75844fda9620d7ad5613ad787e407f2"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/aws_utils/environment",
+			"Rev": "1e4391b1a75844fda9620d7ad5613ad787e407f2"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/aws_utils/listener",
+			"Rev": "1e4391b1a75844fda9620d7ad5613ad787e407f2"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/aws_utils/notifier",
+			"Rev": "1e4391b1a75844fda9620d7ad5613ad787e407f2"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/aws_utils/uploader",
+			"Rev": "1e4391b1a75844fda9620d7ad5613ad787e407f2"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/gologging/file_writer",
+			"Rev": "ce64fcfdd73113b2bfc2e21ead59d13371fc4551"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/gologging/gologging",
+			"Rev": "ce64fcfdd73113b2bfc2e21ead59d13371fc4551"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/gologging/key_name_generator",
+			"Rev": "ce64fcfdd73113b2bfc2e21ead59d13371fc4551"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
+			"Rev": "1be70a6e3efd298e18b1d3df1806f313580c5eb6"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/scoop_protocol/scoop_protocol",
+			"Rev": "1be70a6e3efd298e18b1d3df1806f313580c5eb6"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/spade_edge/request_handler",
+			"Rev": "f42dee51e004307107cd77f366e9fe689638ceb2"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/spade_edge/uuid",
+			"Rev": "f42dee51e004307107cd77f366e9fe689638ceb2"
 		}
 	]
 }

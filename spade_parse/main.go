@@ -4,14 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"time"
-	"github.com/TwitchScience/spade/table_config"
+	"github.com/twitchscience/spade/table_config"
 
 	"net/http"
 
 	"log"
 	"os"
 
-	"github.com/TwitchScience/spade_edge/request_handler"
+	"github.com/twitchscience/spade_edge/request_handler"
 )
 
 const usage = `A handy tool to verify spade events.`

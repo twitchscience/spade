@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TwitchScience/spade/config_fetcher/fetcher"
-	"github.com/TwitchScience/spade/reporter"
-	"github.com/TwitchScience/spade/transformer"
+	"github.com/twitchscience/spade/config_fetcher/fetcher"
+	"github.com/twitchscience/spade/reporter"
+	"github.com/twitchscience/spade/transformer"
 )
 
 type StaticLoader struct {

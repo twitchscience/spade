@@ -6,12 +6,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/TwitchScience/spade/parser"
-	"github.com/TwitchScience/spade/reporter"
-	"github.com/TwitchScience/spade/table_config"
-	"github.com/TwitchScience/spade/transformer"
+	"github.com/twitchscience/spade/parser"
+	"github.com/twitchscience/spade/reporter"
+	"github.com/twitchscience/spade/table_config"
+	"github.com/twitchscience/spade/transformer"
 
-	"github.com/TwitchScience/spade/writer"
+	"github.com/twitchscience/spade/writer"
 )
 
 type dummyReporter struct{}

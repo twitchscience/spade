@@ -7,9 +7,9 @@ import (
 
 	"strings"
 
-	"github.com/TwitchScience/spade/parser"
-	"github.com/TwitchScience/spade/reporter"
-	"github.com/TwitchScience/spade/writer"
+	"github.com/twitchscience/spade/parser"
+	"github.com/twitchscience/spade/reporter"
+	"github.com/twitchscience/spade/writer"
 )
 
 type RedshiftTransformer struct {
