@@ -123,7 +123,7 @@ func getFilename(path string, r *WriteRequest) string {
 	return fmt.Sprintf("%s/%s.gz", path, r.GetCategory())
 }
 
-func (c *writerController) getPath(r *WriteRequest) string {
+func (c *writerController) getPath() string {
 	return c.SpadeFolder + "/" + EventDir
 }
 
@@ -148,6 +148,33 @@ func (c *writerController) Listen() {
 	}
 }
 
+func (controller *writerController) initWriter(r *WriteRequest) SpadeWriter {
+	path := controller.getPath()
+	dirErr := os.MkdirAll(path, 0766)
+	if dirErr != nil {
+		return dirErr
+	}
+	filename := getFilename(path, request)
+	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	if err != nil {
+		return err
+	}
+
+	gzWriter := gzPool.Get(file)
+	writer := &writerSet{
+		ParentFolder: controller.SpadeFolder,
+		FullName:     filename,
+		File:         file,
+		GzWriter:     gzWriter,
+		in:           make(chan *WriteRequest),
+		Reporter:     controller.Reporter,
+		uploader:     controller.uploader,
+	}
+	go writer.Listen()
+
+	controller.Routes[category] = writer
+}
+
 func (controller *writerController) route(request *WriteRequest) error {
 	if request.Failure != reporter.NONE && request.Failure != reporter.SKIPPED_COLUMN {
 		controller.Reporter.Record(request.GetResult())
@@ -161,30 +188,7 @@ func (controller *writerController) route(request *WriteRequest) error {
 
 	category := request.GetCategory()
 	if _, hasWriter := controller.Routes[category]; !hasWriter {
-		path := controller.getPath(request)
-		dirErr := os.MkdirAll(path, 0766)
-		if dirErr != nil {
-			return dirErr
-		}
-		filename := getFilename(path, request)
-		file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
-		if err != nil {
-			return err
-		}
-
-		gzWriter := gzPool.Get(file)
-		writer := &writerSet{
-			ParentFolder: controller.SpadeFolder,
-			FullName:     filename,
-			File:         file,
-			GzWriter:     gzWriter,
-			in:           make(chan *WriteRequest),
-			Reporter:     controller.Reporter,
-			uploader:     controller.uploader,
-		}
-		go writer.Listen()
-
-		controller.Routes[category] = writer
+		initWriter(request)
 	}
 	controller.Routes[category].Write(request)
 	return nil
