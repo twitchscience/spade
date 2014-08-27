@@ -59,6 +59,8 @@ type writerController struct {
 	Routes      map[string]SpadeWriter
 	Reporter    reporter.Reporter
 	uploader    *uploader.UploaderPool
+	// The writer for the untracked events.
+	UntrackedWriter SpadeWriter
 
 	inbound   chan *WriteRequest
 	closeChan chan chan error
@@ -151,6 +153,12 @@ func (controller *writerController) route(request *WriteRequest) error {
 		controller.Reporter.Record(request.GetResult())
 		return nil
 	}
+	// We route non-tracked events to a seperate logger to allow us to suggest which events should be tracked.
+	if request.Failure == reporter.NON_TRACKING_EVENT {
+		controller.UntrackedWriter.Write(request)
+		return nil
+	}
+
 	category := request.GetCategory()
 	if _, hasWriter := controller.Routes[category]; !hasWriter {
 		path := controller.getPath(request)
