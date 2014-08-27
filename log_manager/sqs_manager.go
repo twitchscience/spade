@@ -55,7 +55,8 @@ func New(
 	outputDir string,
 	stats reporter.StatsLogger,
 	s3 *s3.S3,
-	spadeUploaderPool *uploader.UploaderPool,
+	redshiftUploaderPool *uploader.UploaderPool,
+	blueprintUploaderPool *uploader.UploaderPool,
 	logger *gologging.UploadLogger,
 	fetcher fetcher.ConfigFetcher,
 ) *SpadeEdgeLogManager {
@@ -83,7 +84,15 @@ func New(
 	}
 	go loader.Crank()
 
-	writerController := writer.NewWriterController(reporter, outputDir, spadeUploaderPool)
+	writerController, err := writer.NewWriterController(
+		outputDir,
+		reporter,
+		redshiftUploaderPool,
+		blueprintUploaderPool,
+	)
+	if err != nil {
+		log.Panicf("Could not create writer Controller %v\n", err)
+	}
 	processor := processor.BuildProcessorPool(
 		ParserPoolSize,
 		TransformerPoolSize,

@@ -173,7 +173,7 @@ func TestNotTrackedEventConsume(t *testing.T) {
 	}
 	_transformer_runner(t, _notTrackedEvent, &writer.WriteRequest{
 		Category: _notTrackedEvent.Event,
-		Line:     "NotTracked is not being tracked",
+		Line:     `{"event":"NotTracked","properties":{"times":42,"fraction":0.1234,"name":"kai.hayashi","now":1382033155}}`,
 		Source:   _notTrackedEvent.Properties,
 		Failure:  reporter.NON_TRACKING_EVENT,
 		Pstart:   _notTrackedEvent.Pstart,

@@ -20,8 +20,11 @@ import (
 var (
 	CLOUD_ENV = environment.GetCloudEnv()
 
-	uploaderQueue = fmt.Sprintf("spade-compactor-%s", CLOUD_ENV)
-	bucketName    = "spade-compacter"
+	redshiftQueue      = fmt.Sprintf("spade-compactor-%s", CLOUD_ENV)
+	redshiftBucketName = "spade-compacter"
+
+	nonTrackedQueue      = fmt.Sprintf("spade-nontracked-%s", CLOUD_ENV)
+	nonTrackedBucketName = "spade-nontracked"
 )
 
 type SQSNotifierHarness struct {
@@ -29,17 +32,19 @@ type SQSNotifierHarness struct {
 	notifier *notifier.SQSClient
 }
 
-type ProcessorErrorHandler struct{}
+type ProcessorErrorHandler struct {
+	qName string
+}
 
 func (p *ProcessorErrorHandler) SendError(err error) {
 	log.Println(err)
-	e := notifier.DefaultClient.SendMessage("error", "uploader-error-"+uploaderQueue, err)
+	e := notifier.DefaultClient.SendMessage("error", "uploader-error-"+p.qName, err)
 	if e != nil {
 		log.Println(e)
 	}
 }
 
-func BuildSQSNotifierHarness() *SQSNotifierHarness {
+func BuildSQSNotifierHarness(qName string) *SQSNotifierHarness {
 	client := notifier.DefaultClient
 	client.Signer.RegisterMessageType("uploadNotify", func(args ...interface{}) (string, error) {
 		if len(args) < 2 {
@@ -48,7 +53,7 @@ func BuildSQSNotifierHarness() *SQSNotifierHarness {
 		return fmt.Sprintf("{\"tablename\":\"%s\",\"keyname\":\"%s\"}", args...), nil
 	})
 	return &SQSNotifierHarness{
-		qName:    fmt.Sprintf("spade-compactor-%s", CLOUD_ENV),
+		qName:    qName,
 		notifier: client,
 	}
 }
@@ -81,20 +86,26 @@ func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) er
 	})
 }
 
-func BuildUploader(numWorkers int, awsConnection *s3.S3) *uploader.UploaderPool {
-
+func buildUploader(bucketName, queueName string, numWorkers int, awsConnection *s3.S3) *uploader.UploaderPool {
 	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
 	bucket := awsConnection.Bucket(bucketName + "-" + CLOUD_ENV)
 	bucket.PutBucket(s3.BucketOwnerFull)
 
-	u := uploader.StartUploaderPool(
+	return uploader.StartUploaderPool(
 		numWorkers,
-		&ProcessorErrorHandler{},
-		BuildSQSNotifierHarness(),
+		&ProcessorErrorHandler{qName: queueName},
+		BuildSQSNotifierHarness(queueName),
 		&uploader.S3UploaderBuilder{
 			Bucket:           bucket,
 			KeyNameGenerator: &gen.ProcessorKeyNameGenerator{info},
 		},
 	)
-	return u
+}
+
+func BuildUploaderForRedshift(numWorkers int, awsConnection *s3.S3) *uploader.UploaderPool {
+	return buildUploader(redshiftBucketName, redshiftQueue, numWorkers, awsConnection)
+}
+
+func BuildUploaderForBlueprint(numWorkers int, awsConnection *s3.S3) *uploader.UploaderPool {
+	return buildUploader(nonTrackedBucketName, nonTrackedQueue, numWorkers, awsConnection)
 }
