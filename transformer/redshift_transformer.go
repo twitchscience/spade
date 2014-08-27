@@ -16,6 +16,11 @@ type RedshiftTransformer struct {
 	Configs ConfigLoader
 }
 
+type nontrackedEvent struct {
+	Event      string          `json:"event"`
+	Properties json.RawMessage `json:"properties"`
+}
+
 func NewRedshiftTransformer(configs ConfigLoader) Transformer {
 	return &RedshiftTransformer{
 		Configs: configs,
@@ -57,9 +62,16 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 			Pstart:   event.Pstart,
 		}
 	case NotTrackedError:
+		dump, err := json.Marshal(&nontrackedEvent{
+			Event:      event.Event,
+			Properties: event.Properties,
+		})
+		if err != nil {
+			dump = []byte("")
+		}
 		return &writer.WriteRequest{
 			Category: event.Event,
-			Line:     err.Error(),
+			Line:     string(dump),
 			UUID:     event.UUID,
 			Source:   event.Properties,
 			Failure:  reporter.NON_TRACKING_EVENT,

@@ -1,29 +1,29 @@
 package writer
 
 import (
-	"compress/gzip"
-	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/twitchscience/aws_utils/uploader"
-	"github.com/twitchscience/spade/gzip_pool"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 )
 
 const (
-	EventDir             = "events"
 	inboundChannelBuffer = 400000
 )
 
 var (
 	MaxLogSize     = loadFromEnv("MAX_LOG_SIZE", 1<<32)                                     // default 4GB
 	MaxTimeAllowed = time.Duration(loadFromEnv("MAX_LOG_LIFETIME_MINS", 300)) * time.Minute // default 5 hours
-	gzPool         = gzip_pool.New(16)
+
+	MaxNonTrackedLogSize     = loadFromEnv("MAX_UNTRACKED_LOG_SIZE", 1<<29)                                    // default 500MB
+	MaxNonTrackedTimeAllowed = time.Duration(loadFromEnv("MAX_UNTRACKED_LOG_LIFETIME_MINS", 10)) * time.Minute // default 10 mins
+
+	EventsDir     = "events"
+	NonTrackedDir = "nontracked"
 )
 
 func loadFromEnv(target string, def int64) int64 {
@@ -44,85 +44,54 @@ type SpadeWriter interface {
 	Reset() error
 }
 
-type writerSet struct {
-	ParentFolder string
-	FullName     string
-	File         *os.File
-	GzWriter     *gzip.Writer
-	in           chan *WriteRequest
-	Reporter     reporter.Reporter
-	uploader     *uploader.UploaderPool
-}
-
 type writerController struct {
-	SpadeFolder string
-	Routes      map[string]SpadeWriter
-	Reporter    reporter.Reporter
-	uploader    *uploader.UploaderPool
+	SpadeFolder       string
+	Routes            map[string]SpadeWriter
+	Reporter          reporter.Reporter
+	redshiftUploader  *uploader.UploaderPool
+	blueprintUploader *uploader.UploaderPool
+	// The writer for the untracked events.
+	NonTrackedWriter SpadeWriter
 
 	inbound   chan *WriteRequest
 	closeChan chan chan error
 	resetChan chan chan error
 }
 
-type WriteRequest struct {
-	Category string
-	Line     string
-	UUID     string
-	// Keep the source around for logging
-	Source  json.RawMessage
-	Failure reporter.FailMode
-	Pstart  time.Time
-}
-
-func (r *WriteRequest) GetStartTime() time.Time {
-	return r.Pstart
-}
-
-func (r *WriteRequest) GetCategory() string {
-	return r.Category
-}
-
-func (r *WriteRequest) GetMessage() string {
-	return string(r.Source)
-}
-
-func (r *WriteRequest) GetResult() *reporter.Result {
-	return &reporter.Result{
-		Failure:    r.Failure,
-		UUID:       r.UUID,
-		Line:       r.Line,
-		FinishedAt: time.Now(),
-		Duration:   time.Now().Sub(r.Pstart),
-	}
-}
-
 // The WriterController handles logic to distribute writes across a number of workers.
 // Each worker owns and operates one file. There are several sets of workers.
 // Each set corresponds to a event type. Thus if we are processing a log
 // file with 2 types of events we should produce (nWriters * 2) files
-func NewWriterController(reporter reporter.Reporter, folder string, spadeUploaderPool *uploader.UploaderPool) SpadeWriter {
+func NewWriterController(
+	folder string,
+	reporter reporter.Reporter,
+	spadeUploaderPool *uploader.UploaderPool,
+	blueprintUploaderPool *uploader.UploaderPool,
+) (SpadeWriter, error) {
 	c := &writerController{
-		SpadeFolder: folder,
-		Routes:      make(map[string]SpadeWriter),
-		inbound:     make(chan *WriteRequest, inboundChannelBuffer),
-		closeChan:   make(chan chan error),
-		resetChan:   make(chan chan error),
-		Reporter:    reporter,
-		uploader:    spadeUploaderPool,
+		SpadeFolder:       folder,
+		Routes:            make(map[string]SpadeWriter),
+		Reporter:          reporter,
+		redshiftUploader:  spadeUploaderPool,
+		blueprintUploader: blueprintUploaderPool,
+
+		inbound:   make(chan *WriteRequest, inboundChannelBuffer),
+		closeChan: make(chan chan error),
+		resetChan: make(chan chan error),
 	}
+	err := c.initNonTrackedWriter()
+	if err != nil {
+		return nil, err
+	}
+
 	go c.Listen()
-	return c
+	return c, nil
 }
 
 // we put the event name in twice so that everything has a
 // common prefix when we upload to s3
-func getFilename(path string, r *WriteRequest) string {
-	return fmt.Sprintf("%s/%s.gz", path, r.GetCategory())
-}
-
-func (c *writerController) getPath(r *WriteRequest) string {
-	return c.SpadeFolder + "/" + EventDir
+func getFilename(path, writerCategory string) string {
+	return fmt.Sprintf("%s/%s.gz", path, writerCategory)
 }
 
 func (c *writerController) Write(req *WriteRequest) error {
@@ -147,38 +116,56 @@ func (c *writerController) Listen() {
 }
 
 func (controller *writerController) route(request *WriteRequest) error {
-	if request.Failure != reporter.NONE && request.Failure != reporter.SKIPPED_COLUMN {
+	switch request.Failure {
+	// Success case
+	case reporter.NONE, reporter.SKIPPED_COLUMN:
+		category := request.GetCategory()
+		if _, hasWriter := controller.Routes[category]; !hasWriter {
+			newWriter, err := NewGzipWriter(
+				controller.SpadeFolder,
+				EventsDir,
+				category,
+				controller.Reporter,
+				controller.redshiftUploader,
+				RotateConditions{
+					MaxLogSize:     MaxLogSize,
+					MaxTimeAllowed: MaxTimeAllowed,
+				},
+			)
+			if err != nil {
+				return err
+			}
+			controller.Routes[category] = newWriter
+		}
+		controller.Routes[category].Write(request)
+
+	// Log non tracking events for blueprint
+	case reporter.NON_TRACKING_EVENT:
+		controller.NonTrackedWriter.Write(request)
+
+	// Otherwise tell the reporter that we got the event but it failed somewhere.
+	default:
 		controller.Reporter.Record(request.GetResult())
-		return nil
 	}
-	category := request.GetCategory()
-	if _, hasWriter := controller.Routes[category]; !hasWriter {
-		path := controller.getPath(request)
-		dirErr := os.MkdirAll(path, 0766)
-		if dirErr != nil {
-			return dirErr
-		}
-		filename := getFilename(path, request)
-		file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
-		if err != nil {
-			return err
-		}
+	return nil
+}
 
-		gzWriter := gzPool.Get(file)
-		writer := &writerSet{
-			ParentFolder: controller.SpadeFolder,
-			FullName:     filename,
-			File:         file,
-			GzWriter:     gzWriter,
-			in:           make(chan *WriteRequest),
-			Reporter:     controller.Reporter,
-			uploader:     controller.uploader,
-		}
-		go writer.Listen()
-
-		controller.Routes[category] = writer
+func (c *writerController) initNonTrackedWriter() error {
+	w, err := NewGzipWriter(
+		c.SpadeFolder,
+		NonTrackedDir,
+		"nontracked",
+		c.Reporter,
+		c.blueprintUploader,
+		RotateConditions{
+			MaxLogSize:     MaxNonTrackedLogSize,
+			MaxTimeAllowed: MaxNonTrackedTimeAllowed,
+		},
+	)
+	if err != nil {
+		return err
 	}
-	controller.Routes[category].Write(request)
+	c.NonTrackedWriter = w
 	return nil
 }
 
@@ -196,7 +183,13 @@ func (controller *writerController) close() error {
 			return err
 		}
 	}
-	return nil
+
+	err := controller.NonTrackedWriter.Close()
+	if err != nil {
+		return err
+	}
+
+	return controller.initNonTrackedWriter()
 }
 
 func (c *writerController) Reset() error {
@@ -209,75 +202,6 @@ func (c *writerController) Reset() error {
 func (c *writerController) reset() {
 	for k, _ := range c.Routes {
 		delete(c.Routes, k)
-	}
-}
-
-func (w *writerSet) Close() error {
-	defer gzPool.Put(w.GzWriter)
-	close(w.in)
-
-	inode, err := w.File.Stat()
-	if err != nil {
-		return err
-	}
-	if gzFlushErr := w.GzWriter.Flush(); gzFlushErr != nil {
-		return gzFlushErr
-	}
-	if gzCloseErr := w.GzWriter.Close(); gzCloseErr != nil {
-		return gzCloseErr
-	}
-
-	if closeErr := w.File.Close(); closeErr != nil {
-		return closeErr
-	}
-	// Rotate the logs if necessary.
-	if ok, _ := isRotateNeeded(inode, w.FullName); ok {
-		dirErr := os.MkdirAll(w.ParentFolder+"/upload/", 0766)
-		if dirErr != nil {
-			return dirErr
-		}
-		// We have to move the file so that we are free to
-		// overwrite this file next log processed.
-		rotatedFileName := fmt.Sprintf("%s/upload/%s.gz",
-			w.ParentFolder, inode.Name())
-		os.Rename(w.FullName, rotatedFileName)
-		w.uploader.Upload(&uploader.UploadRequest{
-			Filename: rotatedFileName,
-			FileType: uploader.Gzip,
-		})
-	}
-	return nil
-}
-
-func (w *writerSet) Reset() error {
-	return nil
-}
-
-func (writer *writerSet) Write(req *WriteRequest) error {
-	writer.in <- req
-	return nil
-}
-
-func (writer *writerSet) Listen() {
-	for {
-		req, ok := <-writer.in
-		if !ok {
-			return
-		}
-		_, err := writer.GzWriter.Write([]byte(req.Line + "\n"))
-		if err != nil {
-
-			log.Printf("Failed Write: %v\n", err)
-			writer.Reporter.Record(&reporter.Result{
-				Failure:    reporter.FAILED_WRITE,
-				UUID:       req.UUID,
-				Line:       req.Line,
-				FinishedAt: time.Now(),
-				Duration:   time.Now().Sub(req.Pstart),
-			})
-		} else {
-			writer.Reporter.Record(req.GetResult())
-		}
 	}
 }
 
