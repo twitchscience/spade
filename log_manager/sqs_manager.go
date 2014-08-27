@@ -83,7 +83,7 @@ func New(
 	}
 	go loader.Crank()
 
-	writerController := writer.NewWriterController(reporter, outputDir, spadeUploaderPool)
+	writerController := writer.NewWriterController(outputDir, reporter, spadeUploaderPool)
 	processor := processor.BuildProcessorPool(
 		ParserPoolSize,
 		TransformerPoolSize,
