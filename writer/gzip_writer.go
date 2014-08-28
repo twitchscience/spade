@@ -13,16 +13,15 @@ import (
 )
 
 var (
-	gzPool   = gzip_pool.New(16)
-	EventDir = "events"
+	gzPool = gzip_pool.New(16)
 )
 
 func NewGzipWriter(
-	folder, writerType string,
+	folder, subfolder, writerType string,
 	reporter reporter.Reporter,
 	uploader *uploader.UploaderPool,
 ) (SpadeWriter, error) {
-	path := folder + "/" + EventDir
+	path := folder + "/" + subfolder
 	dirErr := os.MkdirAll(path, 0766)
 	if dirErr != nil {
 		return nil, dirErr

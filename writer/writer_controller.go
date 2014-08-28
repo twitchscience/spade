@@ -18,6 +18,9 @@ const (
 var (
 	MaxLogSize     = loadFromEnv("MAX_LOG_SIZE", 1<<32)                                     // default 4GB
 	MaxTimeAllowed = time.Duration(loadFromEnv("MAX_LOG_LIFETIME_MINS", 300)) * time.Minute // default 5 hours
+
+	EventsDir     = "events"
+	NonTrackedDir = "nontracked"
 )
 
 func loadFromEnv(target string, def int64) int64 {
@@ -39,12 +42,13 @@ type SpadeWriter interface {
 }
 
 type writerController struct {
-	SpadeFolder string
-	Routes      map[string]SpadeWriter
-	Reporter    reporter.Reporter
-	uploader    *uploader.UploaderPool
+	SpadeFolder       string
+	Routes            map[string]SpadeWriter
+	Reporter          reporter.Reporter
+	redshiftUploader  *uploader.UploaderPool
+	blueprintUploader *uploader.UploaderPool
 	// The writer for the untracked events.
-	UntrackedWriter SpadeWriter
+	NonTrackedWriter SpadeWriter
 
 	inbound   chan *WriteRequest
 	closeChan chan chan error
@@ -59,18 +63,32 @@ func NewWriterController(
 	folder string,
 	reporter reporter.Reporter,
 	spadeUploaderPool *uploader.UploaderPool,
-) SpadeWriter {
+	blueprintUploaderPool *uploader.UploaderPool,
+) (SpadeWriter, error) {
+	w, err := NewGzipWriter(
+		folder,
+		NonTrackedDir,
+		"nontracked",
+		reporter,
+		blueprintUploaderPool,
+	)
+	if err != nil {
+		return nil, err
+	}
 	c := &writerController{
-		SpadeFolder: folder,
-		Routes:      make(map[string]SpadeWriter),
-		inbound:     make(chan *WriteRequest, inboundChannelBuffer),
-		closeChan:   make(chan chan error),
-		resetChan:   make(chan chan error),
-		Reporter:    reporter,
-		uploader:    spadeUploaderPool,
+		SpadeFolder:       folder,
+		Routes:            make(map[string]SpadeWriter),
+		Reporter:          reporter,
+		redshiftUploader:  spadeUploaderPool,
+		blueprintUploader: blueprintUploaderPool,
+		NonTrackedWriter:  w,
+
+		inbound:   make(chan *WriteRequest, inboundChannelBuffer),
+		closeChan: make(chan chan error),
+		resetChan: make(chan chan error),
 	}
 	go c.Listen()
-	return c
+	return c, nil
 }
 
 // we put the event name in twice so that everything has a
@@ -108,9 +126,10 @@ func (controller *writerController) route(request *WriteRequest) error {
 		if _, hasWriter := controller.Routes[category]; !hasWriter {
 			newWriter, err := NewGzipWriter(
 				controller.SpadeFolder,
+				EventsDir,
 				category,
 				controller.Reporter,
-				controller.uploader,
+				controller.redshiftUploader,
 			)
 			if err != nil {
 				return err
@@ -121,7 +140,7 @@ func (controller *writerController) route(request *WriteRequest) error {
 
 	// Log non tracking events for blueprint
 	case reporter.NON_TRACKING_EVENT:
-		controller.UntrackedWriter.Write(request)
+		controller.NonTrackedWriter.Write(request)
 
 	// Otherwise tell the reporter that we got the event but it failed somewhere.
 	default:
@@ -144,6 +163,23 @@ func (controller *writerController) close() error {
 			return err
 		}
 	}
+
+	err := controller.NonTrackedWriter.Close()
+	if err != nil {
+		return err
+	}
+
+	w, err := NewGzipWriter(
+		controller.SpadeFolder,
+		NonTrackedDir,
+		"nontracked",
+		controller.Reporter,
+		controller.blueprintUploader,
+	)
+	if err != nil {
+		return err
+	}
+	controller.NonTrackedWriter = w
 	return nil
 }
 
@@ -158,7 +194,6 @@ func (c *writerController) reset() {
 	for k, _ := range c.Routes {
 		delete(c.Routes, k)
 	}
-	// close Untracked events writer and then rebuild...
 }
 
 func MakeErrorRequest(e *parser.MixpanelEvent, err interface{}) *WriteRequest {

@@ -17,6 +17,7 @@ import (
 	"github.com/twitchscience/spade/log_manager"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/uploader"
+	"github.com/twitchscience/spade/writer"
 
 	"github.com/cactus/go-statsd-client/statsd"
 
@@ -152,7 +153,8 @@ func main() {
 		log.Printf("Connected to statsd at %s\n", statsdHostport)
 	}
 
-	spadeUploaderPool := uploader.BuildUploader(3, awsConnection)
+	spadeUploaderPool := uploader.BuildUploaderForRedshift(3, awsConnection)
+	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(1, awsConnection)
 
 	sqsListener := listener.BuildSQSListener(&listener.SQSAddr{
 		QueueName: "spade-edge-" + CLOUD_ENV,
@@ -163,6 +165,7 @@ func main() {
 		reporter.WrapCactusStatter(stats, 0.1),
 		awsConnection,
 		spadeUploaderPool,
+		blueprintUploaderPool,
 		auditLogger,
 		fetcher.New(*configUrl),
 	), time.Second*60)
@@ -185,9 +188,16 @@ func main() {
 	sqsListener.Listen()
 	<-wait
 
-	err = uploader.ClearEventsFolder(spadeUploaderPool, *_dir+"/events/")
+	err = uploader.ClearEventsFolder(spadeUploaderPool, *_dir+"/"+writer.EventsDir+"/")
 	if err != nil {
 		log.Println(err)
 	}
+
+	err = uploader.ClearEventsFolder(blueprintUploaderPool, *_dir+"/"+writer.NonTrackedDir+"/")
+	if err != nil {
+		log.Println(err)
+	}
+
 	spadeUploaderPool.Close()
+	blueprintUploaderPool.Close()
 }
