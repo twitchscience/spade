@@ -19,6 +19,9 @@ var (
 	MaxLogSize     = loadFromEnv("MAX_LOG_SIZE", 1<<32)                                     // default 4GB
 	MaxTimeAllowed = time.Duration(loadFromEnv("MAX_LOG_LIFETIME_MINS", 300)) * time.Minute // default 5 hours
 
+	MaxNonTrackedLogSize     = loadFromEnv("MAX_UNTRACKED_LOG_SIZE", 1<<29)                                    // default 500MB
+	MaxNonTrackedTimeAllowed = time.Duration(loadFromEnv("MAX_UNTRACKED_LOG_LIFETIME_MINS", 10)) * time.Minute // default 10 mins
+
 	EventsDir     = "events"
 	NonTrackedDir = "nontracked"
 )
@@ -65,28 +68,22 @@ func NewWriterController(
 	spadeUploaderPool *uploader.UploaderPool,
 	blueprintUploaderPool *uploader.UploaderPool,
 ) (SpadeWriter, error) {
-	w, err := NewGzipWriter(
-		folder,
-		NonTrackedDir,
-		"nontracked",
-		reporter,
-		blueprintUploaderPool,
-	)
-	if err != nil {
-		return nil, err
-	}
 	c := &writerController{
 		SpadeFolder:       folder,
 		Routes:            make(map[string]SpadeWriter),
 		Reporter:          reporter,
 		redshiftUploader:  spadeUploaderPool,
 		blueprintUploader: blueprintUploaderPool,
-		NonTrackedWriter:  w,
 
 		inbound:   make(chan *WriteRequest, inboundChannelBuffer),
 		closeChan: make(chan chan error),
 		resetChan: make(chan chan error),
 	}
+	err := c.initNonTrackedWriter()
+	if err != nil {
+		return nil, err
+	}
+
 	go c.Listen()
 	return c, nil
 }
@@ -130,6 +127,10 @@ func (controller *writerController) route(request *WriteRequest) error {
 				category,
 				controller.Reporter,
 				controller.redshiftUploader,
+				RotateConditions{
+					MaxLogSize:     MaxLogSize,
+					MaxTimeAllowed: MaxTimeAllowed,
+				},
 			)
 			if err != nil {
 				return err
@@ -146,6 +147,25 @@ func (controller *writerController) route(request *WriteRequest) error {
 	default:
 		controller.Reporter.Record(request.GetResult())
 	}
+	return nil
+}
+
+func (c *writerController) initNonTrackedWriter() error {
+	w, err := NewGzipWriter(
+		c.SpadeFolder,
+		NonTrackedDir,
+		"nontracked",
+		c.Reporter,
+		c.blueprintUploader,
+		RotateConditions{
+			MaxLogSize:     MaxNonTrackedLogSize,
+			MaxTimeAllowed: MaxNonTrackedTimeAllowed,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	c.NonTrackedWriter = w
 	return nil
 }
 
@@ -169,18 +189,7 @@ func (controller *writerController) close() error {
 		return err
 	}
 
-	w, err := NewGzipWriter(
-		controller.SpadeFolder,
-		NonTrackedDir,
-		"nontracked",
-		controller.Reporter,
-		controller.blueprintUploader,
-	)
-	if err != nil {
-		return err
-	}
-	controller.NonTrackedWriter = w
-	return nil
+	return c.initNonTrackedWriter()
 }
 
 func (c *writerController) Reset() error {

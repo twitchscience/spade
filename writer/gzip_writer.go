@@ -13,13 +13,19 @@ import (
 )
 
 var (
-	gzPool = gzip_pool.New(16)
+	gzPool = gzip_pool.New(32)
 )
+
+type RotateConditions struct {
+	MaxLogSize     int
+	MaxTimeAllowed time.Duration
+}
 
 func NewGzipWriter(
 	folder, subfolder, writerType string,
 	reporter reporter.Reporter,
 	uploader *uploader.UploaderPool,
+	rotateOn RotateConditions,
 ) (SpadeWriter, error) {
 	path := folder + "/" + subfolder
 	dirErr := os.MkdirAll(path, 0766)
@@ -34,13 +40,15 @@ func NewGzipWriter(
 
 	gzWriter := gzPool.Get(file)
 	writer := &gzipFileWriter{
-		ParentFolder: folder,
-		FullName:     filename,
-		File:         file,
-		GzWriter:     gzWriter,
-		in:           make(chan *WriteRequest),
-		Reporter:     reporter,
-		uploader:     uploader,
+		ParentFolder:     folder,
+		FullName:         filename,
+		File:             file,
+		GzWriter:         gzWriter,
+		Reporter:         reporter,
+		uploader:         uploader,
+		RotateConditions: rotateOn,
+
+		in: make(chan *WriteRequest),
 	}
 	go writer.Listen()
 
@@ -48,12 +56,13 @@ func NewGzipWriter(
 }
 
 type gzipFileWriter struct {
-	ParentFolder string
-	FullName     string
-	File         *os.File
-	GzWriter     *gzip.Writer
-	Reporter     reporter.Reporter
-	uploader     *uploader.UploaderPool
+	ParentFolder     string
+	FullName         string
+	File             *os.File
+	GzWriter         *gzip.Writer
+	Reporter         reporter.Reporter
+	uploader         *uploader.UploaderPool
+	RotateConditions RotateConditions
 
 	in chan *WriteRequest
 }
@@ -77,7 +86,7 @@ func (w *gzipFileWriter) Close() error {
 		return closeErr
 	}
 	// Rotate the logs if necessary.
-	if ok, _ := isRotateNeeded(inode, w.FullName); ok {
+	if ok, _ := isRotateNeeded(inode, w.FullName, w.RotateConditions); ok {
 		dirErr := os.MkdirAll(w.ParentFolder+"/upload/", 0766)
 		if dirErr != nil {
 			return dirErr
