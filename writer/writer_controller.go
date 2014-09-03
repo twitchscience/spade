@@ -189,7 +189,7 @@ func (controller *writerController) close() error {
 		return err
 	}
 
-	return c.initNonTrackedWriter()
+	return controller.initNonTrackedWriter()
 }
 
 func (c *writerController) Reset() error {

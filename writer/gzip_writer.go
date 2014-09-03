@@ -17,7 +17,7 @@ var (
 )
 
 type RotateConditions struct {
-	MaxLogSize     int
+	MaxLogSize     int64
 	MaxTimeAllowed time.Duration
 }
 
