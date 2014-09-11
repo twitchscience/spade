@@ -88,4 +88,7 @@ func TestIpConversion(t *testing.T) {
 
 	ipAsnConverter := RedshiftType{ipAsnFormat, "_"}
 	_type_runner(t, "222.22.24.22", ipAsnConverter, "\"AS4538 China Education and Research Network Center\"", false)
+
+	ipAsnIntConverter := RedshiftType{ipAsnIntFormat, "_"}
+	_type_runner(t, "222.22.24.22", ipAsnIntConverter, "4538", false)
 }
