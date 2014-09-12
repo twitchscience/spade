@@ -251,8 +251,6 @@ func ipAsnFormat(target interface{}) (string, error) {
 func ipAsnIntFormat(target interface{}) (string, error) {
 	str, ok := target.(string)
 	if !ok {
-		fmt.Println(str)
-
 		return "", genError(target, "Ip Asn")
 	}
 	asnString := geoIpDB.GetAsn(str)
