@@ -67,16 +67,17 @@ func GetTransform(t_type string) ColumnTranformer {
 // New types should register here
 var (
 	transformMap = map[string]ColumnTranformer{
-		"int":       intFormat,
-		"bigint":    intFormat,
-		"int8":      intFormat,
-		"float":     floatFormat,
-		"varchar":   varcharFormat,
-		"bool":      boolFormat,
-		"ipCity":    ipCityFormat,
-		"ipCountry": ipCountryFormat,
-		"ipRegion":  ipRegionFormat,
-		"ipAsn":     ipAsnFormat,
+		"int":          intFormat,
+		"bigint":       intFormat,
+		"int8":         intFormat,
+		"float":        floatFormat,
+		"varchar":      varcharFormat,
+		"bool":         boolFormat,
+		"ipCity":       ipCityFormat,
+		"ipCountry":    ipCountryFormat,
+		"ipRegion":     ipRegionFormat,
+		"ipAsn":        ipAsnFormat,
+		"ipAsnInteger": ipAsnIntFormat,
 	}
 	transformGeneratorMap = map[string]func(string) ColumnTranformer{
 		"timestamp": genTimeFormat,
@@ -245,4 +246,21 @@ func ipAsnFormat(target interface{}) (string, error) {
 		return "", genError(target, "Ip Asn")
 	}
 	return geoIpDB.GetAsn(str), nil
+}
+
+func ipAsnIntFormat(target interface{}) (string, error) {
+	str, ok := target.(string)
+	if !ok {
+		return "", genError(target, "Ip Asn")
+	}
+	asnString := geoIpDB.GetAsn(str)
+	index := strings.Index(asnString, " ")
+	if index < 0 || !strings.HasPrefix(asnString, "\"AS") {
+		return "", genError(target, "Ip Asn")
+	}
+	asnInt, err := strconv.Atoi(asnString[3:index])
+	if err != nil {
+		return "", genError(target, "Ip Asn")
+	}
+	return strconv.Itoa(asnInt), nil
 }
