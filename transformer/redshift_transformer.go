@@ -118,12 +118,13 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, er
 	decoder := json.NewDecoder(bytes.NewReader(event.Properties))
 	decoder.UseNumber()
 	decoder.Decode(&temp)
-	if _, ok := temp["time"]; !ok {
-		temp["time"] = event.EventTime
+	// Always replace the timestamp with server Time
+	if _, ok := temp["time"]; ok {
+		temp["client_time"] = temp["time"]
 	}
-	if _, ok := temp["ip"]; !ok {
-		temp["ip"] = event.ClientIp
-	}
+	temp["time"] = event.EventTime
+	// and override ip with what the edge says their ip is.
+	temp["ip"] = event.ClientIp
 
 	for n, column := range columns {
 		o, err := column.Format(temp)
