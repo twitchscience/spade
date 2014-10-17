@@ -123,8 +123,11 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, er
 		temp["client_time"] = temp["time"]
 	}
 	temp["time"] = event.EventTime
-	// and override ip with what the edge says their ip is.
-	temp["ip"] = event.ClientIp
+
+	// Still allow clients to override the ip address.
+	if _, ok := temp["ip"]; !ok {
+		temp["ip"] = event.ClientIp
+	}
 
 	for n, column := range columns {
 		o, err := column.Format(temp)
