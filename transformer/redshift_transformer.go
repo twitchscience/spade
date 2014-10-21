@@ -118,9 +118,13 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, er
 	decoder := json.NewDecoder(bytes.NewReader(event.Properties))
 	decoder.UseNumber()
 	decoder.Decode(&temp)
-	if _, ok := temp["time"]; !ok {
-		temp["time"] = event.EventTime
+	// Always replace the timestamp with server Time
+	if _, ok := temp["time"]; ok {
+		temp["client_time"] = temp["time"]
 	}
+	temp["time"] = event.EventTime
+
+	// Still allow clients to override the ip address.
 	if _, ok := temp["ip"]; !ok {
 		temp["ip"] = event.ClientIp
 	}

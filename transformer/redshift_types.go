@@ -177,7 +177,8 @@ func unixTimeFormat(target interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if i < 1000000000 {
+	// we also error if the year will be converted into a > 4 digit number
+	if i < 1000000000 || i > 13140000000 {
 		return "", genError(target, "Time: unix")
 	}
 	return time.Unix(i, 0).In(PST).Format(RedshiftDatetimeIngestString), nil
