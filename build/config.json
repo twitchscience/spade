@@ -1,7 +1,7 @@
 {
   "name": "spade",
   "creds": "~/.aws",
-  "baseami": "ami-7bc8874b",
+  "baseami": "ami-55612f65",
   "stages": {
     "build": "./build/gobuild.sh",
     "test": "./build/gotest.sh",

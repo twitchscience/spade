@@ -3,6 +3,9 @@ set -e -u -o pipefail
 
 SPADE_DIR="/opt/science/spade"
 
+/usr/sbin/ebslvm vgebs lvebs /mnt
+ln -s /mnt ${SPADE_DIR}/data
+
 export GOMAXPROCS="3" # we need 3 or more for spade to run well..
 
 export GEO_IP_DB="${SPADE_DIR}/config/GeoLiteCity.dat"
