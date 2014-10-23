@@ -8,7 +8,6 @@ UPSTARTDIR="/etc/init"
 PKGDIR="/tmp/pkg"
 
 mv ${PKGDIR}/deploy ${SPADEDIR}
-ln -s /mnt ${SPADEDIR}/data
 
 # Setup upstart
 mv ${CONFDIR}/spade.conf ${UPSTARTDIR}/spade.conf
