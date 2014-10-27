@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,9 +15,9 @@ import (
 
 	"github.com/twitchscience/aws_utils/environment"
 
+	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/gologging/gologging"
 	"github.com/twitchscience/spade_edge/uuid"
-	"github.com/cactus/go-statsd-client/statsd"
 )
 
 var (
@@ -44,7 +43,7 @@ var (
 )
 
 type SpadeEdgeLogger interface {
-	Log(string, string, time.Time, string) error
+	Log(EventRecord)
 	Close()
 }
 
@@ -59,34 +58,14 @@ type FileAuditLogger struct {
 	SpadeLogger *gologging.UploadLogger
 }
 
-type Event struct {
-	RecievedAt time.Time
-	ClientIp   net.IP
-	UUID       string
-	Data       string
-}
-
 func (a *FileAuditLogger) Close() {
 	a.AuditLogger.Close()
 	a.SpadeLogger.Close()
 }
 
-func (a *FileAuditLogger) Log(ip string, data string, t time.Time, UUID string) error {
-	a.AuditLogger.Log("[%d] %s", t.Unix(), UUID)
-	a.SpadeLogger.Log("%s", writeInfo(ip, data, t, UUID))
-	return nil
-}
-
-func writeInfo(ip string, data string, t time.Time, UUID string) string {
-	b := bytes.NewBuffer(make([]byte, 0, 256))
-	b.WriteString(ip)
-	b.WriteString(" [")
-	b.WriteString(strconv.FormatInt(t.Unix(), 10))
-	b.WriteString(".000] data=")
-	b.WriteString(data)
-	b.WriteRune(' ')
-	b.WriteString(UUID)
-	return b.String()
+func (a *FileAuditLogger) Log(log EventRecord) {
+	a.AuditLogger.Log("%s", log.AuditTrail())
+	a.SpadeLogger.Log("%s", log.HttpRequest())
 }
 
 func getIpFromHeader(headerKey string, header http.Header) string {
@@ -116,46 +95,28 @@ func extractDataQuery(rawQuery string) string {
 
 func (s *SpadeHandler) HandleSpadeRequests(r *http.Request, context *requestContext) int {
 	statTimer := newTimerInstance()
+
+	clientIp := getIpFromHeader(context.IpHeader, r.Header)
+	if clientIp == "" {
+		return http.StatusBadRequest
+	}
+	context.Timers["ip"] = statTimer.stopTiming()
+
+	var data string
+
 	switch r.Method {
 	case "GET":
-		clientIp := getIpFromHeader(context.IpHeader, r.Header)
-		if clientIp == "" {
-			return http.StatusBadRequest
-		}
-		context.Timers["ip"] = statTimer.stopTiming()
-
-		statTimer.reset()
 		// Get data from url
 		queryString, err := url.QueryUnescape(r.URL.RawQuery)
 		if err != nil {
 			return http.StatusBadRequest
 		}
-		data := extractDataQuery(queryString)
+		data = extractDataQuery(queryString)
 		if data == "" {
 			return http.StatusBadRequest
 		}
-		context.Timers["data"] = statTimer.stopTiming()
-
-		// // get event
-		statTimer.reset()
-		uuid := s.Assigner.Assign()
-		context.Timers["uuid"] = statTimer.stopTiming()
-
-		statTimer.reset()
-		s.EdgeLogger.Log(clientIp, data, context.Now, uuid)
-		context.Timers["write"] = statTimer.stopTiming()
-
-		return http.StatusNoContent
 	case "POST":
-		// Get client IP
-		clientIp := getIpFromHeader(context.IpHeader, r.Header)
-		if clientIp == "" {
-			return http.StatusBadRequest
-		}
-		context.Timers["ip"] = statTimer.stopTiming()
-
 		// This supports one request per post...
-		statTimer.reset()
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			return http.StatusBadRequest
@@ -163,21 +124,29 @@ func (s *SpadeHandler) HandleSpadeRequests(r *http.Request, context *requestCont
 		if bytes.Equal(b[:5], DataFlag) {
 			b = b[5:]
 		}
-		context.Timers["data"] = statTimer.stopTiming()
-
-		// get event
-		statTimer.reset()
-		uuid := s.Assigner.Assign()
-		context.Timers["uuid"] = statTimer.stopTiming()
-
-		statTimer.reset()
-		s.EdgeLogger.Log(clientIp, string(b), context.Now, uuid)
-		context.Timers["write"] = statTimer.stopTiming()
-
-		return http.StatusNoContent
+		data = string(b)
 	default:
 		return http.StatusBadRequest
 	}
+
+	context.Timers["data"] = statTimer.stopTiming()
+
+	// // get event
+	uuid := s.Assigner.Assign()
+	context.Timers["uuid"] = statTimer.stopTiming()
+
+	record := &Event{
+		ReceivedAt: context.Now,
+		ClientIp:   clientIp,
+		UUID:       uuid,
+		Data:       data,
+		Version:    EVENT_VERSION,
+	}
+
+	s.EdgeLogger.Log(record)
+	context.Timers["write"] = statTimer.stopTiming()
+
+	return http.StatusNoContent
 }
 
 const (

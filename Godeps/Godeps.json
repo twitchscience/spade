@@ -3,7 +3,7 @@
 	"GoVersion": "go1.3",
 	"Packages": [
 		".",
-		"./spade_parse"
+		"./..."
 	],
 	"Deps": [
 		{
@@ -60,19 +60,19 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
-			"Rev": "1be70a6e3efd298e18b1d3df1806f313580c5eb6"
+			"Rev": "af0b8f76870a4b7cec7dd6734facec2adc3b9131"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/scoop_protocol",
-			"Rev": "1be70a6e3efd298e18b1d3df1806f313580c5eb6"
+			"Rev": "af0b8f76870a4b7cec7dd6734facec2adc3b9131"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/spade_edge/request_handler",
-			"Rev": "f42dee51e004307107cd77f366e9fe689638ceb2"
+			"Rev": "956dcec0924222da55d6bf5f4f28851a6cdf692a"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/spade_edge/uuid",
-			"Rev": "f42dee51e004307107cd77f366e9fe689638ceb2"
+			"Rev": "956dcec0924222da55d6bf5f4f28851a6cdf692a"
 		}
 	]
 }
