@@ -19,12 +19,10 @@ func newTimerInstance() *timerInstance {
 	}
 }
 
-func (t *timerInstance) reset() {
+func (t *timerInstance) stopTiming() (r time.Duration) {
+	r = time.Now().Sub(t.start)
 	t.start = time.Now()
-}
-
-func (t *timerInstance) stopTiming() time.Duration {
-	return time.Now().Sub(t.start)
+	return
 }
 
 type requestContext struct {
