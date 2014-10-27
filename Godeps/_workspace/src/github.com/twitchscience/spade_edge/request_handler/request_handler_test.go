@@ -40,9 +40,8 @@ type testTuple struct {
 
 var epoch = time.Unix(0, 0)
 
-func (t *testEdgeLogger) Log(ip string, data string, m time.Time, UUID string) error {
-	t.events = append(t.events, writeInfo(ip, data, epoch, UUID))
-	return nil
+func (t *testEdgeLogger) Log(record EventRecord) {
+	t.events = append(t.events, record.HttpRequest())
 }
 
 func (t *testEdgeLogger) Close() {}
@@ -121,16 +120,18 @@ func TestEndPoints(t *testing.T) {
 		}
 	}
 	// test logs
+	baseFmt := "222.222.222.222 [1399059241.000] data=%s recordversion=1"
 	expectedEvents := []string{
-		"222.222.222.222 [0.000] data=blah 1",
-		"222.222.222.222 [0.000] data=blah 2",
-		"222.222.222.222 [0.000] data=eyJldmVudCI6ImhlbGxvIn0 3",
-		"222.222.222.222 [0.000] data=blat 4",
-		"222.222.222.222 [0.000] data=blag 5",
-		"222.222.222.222 [0.000] data=bleck 6",
+		fmt.Sprintf(baseFmt, "blah 1"),
+		fmt.Sprintf(baseFmt, "blah 2"),
+		fmt.Sprintf(baseFmt, "eyJldmVudCI6ImhlbGxvIn0 3"),
+		fmt.Sprintf(baseFmt, "blat 4"),
+		fmt.Sprintf(baseFmt, "blag 5"),
+		fmt.Sprintf(baseFmt, "bleck 6"),
 	}
 	if !reflect.DeepEqual(SpadeHandler.EdgeLogger.(*testEdgeLogger).events, expectedEvents) {
-		t.Fatalf("expected %s not %s\n", expectedEvents, SpadeHandler.EdgeLogger.(*testEdgeLogger).events)
+
+		t.Fatalf(fmt.Sprintf("\nExpected: %s\nGot: %s", expectedEvents, SpadeHandler.EdgeLogger.(*testEdgeLogger).events))
 	}
 }
 
@@ -145,7 +146,7 @@ func TestHandle(t *testing.T) {
 		testrecorder := httptest.NewRecorder()
 		req, err := http.NewRequest(
 			tt.Request.Verb,
-			"http://spade.twitch.tv/"+tt.Request.Endpoint,
+			"http://spade.example.com/"+tt.Request.Endpoint,
 			strings.NewReader(tt.Request.Body),
 		)
 		if err != nil {
@@ -154,7 +155,7 @@ func TestHandle(t *testing.T) {
 		req.Header.Add("X-Forwarded-For", "222.222.222.222")
 		req.Header.Add("X-Original-Msec", "1399059241.000")
 		context := &requestContext{
-			Now:      time.Now(),
+			Now:      epoch,
 			Method:   req.Method,
 			Endpoint: req.URL.Path,
 			IpHeader: ipForwardHeader,

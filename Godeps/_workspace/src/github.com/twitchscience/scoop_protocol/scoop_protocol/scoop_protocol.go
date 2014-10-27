@@ -46,11 +46,12 @@ type AuthScoopSigner struct {
 var (
 	BadVerified        error = errors.New("Bad Signature")
 	transformerTypeMap       = map[string]string{
-		"ipCity":      "varchar(64)",
-		"ipCountry":   "varchar(2)",
-		"ipRegion":    "varchar(64)",
-		"ipAsn":       "varchar(128)",
-		"f@timestamp": "datetime",
+		"ipCity":       "varchar(64)",
+		"ipCountry":    "varchar(2)",
+		"ipRegion":     "varchar(64)",
+		"ipAsn":        "varchar(128)",
+		"ipAsnInteger": "int",
+		"f@timestamp":  "datetime",
 	}
 )
 
