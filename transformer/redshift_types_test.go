@@ -55,6 +55,7 @@ func TestVarCharConversion(t *testing.T) {
 
 func TestTimestampConversion(t *testing.T) {
 	unixDateTime := RedshiftType{unixTimeFormat, "_"}
+	_type_runner(t, json.Number("1382033155.045"), unixDateTime, "2013-10-17 11:05:55.045", false)
 	_type_runner(t, json.Number("1382033155"), unixDateTime, "2013-10-17 11:05:55", false)
 	_type_runner(t, json.Number("138203315"), unixDateTime, "", true)
 	_type_runner(t, "asd", unixDateTime, "", true)
