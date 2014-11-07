@@ -180,7 +180,7 @@ func unixTimeFormat(target interface{}) (string, error) {
 	}
 
 	seconds := math.Trunc(i)
-	nanos := time.Duration((i - seconds) * float64(time.Second))
+	nanos := (i - seconds) * float64(time.Second)
 	// we also error if the year will be converted into a > 4 digit number
 	if seconds < 1000000000 || seconds > 13140000000 {
 		return "", genError(target, "Time: unix")
