@@ -68,13 +68,17 @@ func LexLine(line []byte) *parseResult {
 			state = DATA_GRAB
 		case state == DATA_EQ:
 			state = D
-		case state == DATA_GRAB && (c == '"' || c == '&' || c == ' ' || c == ';'):
+		case state == DATA_GRAB && (c == '"' || c == '&' || c == ';'):
 			state = UUID_WAIT
+		case state == DATA_GRAB && c == ' ':
+			state = UUID_GRAB
 		case state == DATA_GRAB:
 			data.WriteByte(c)
-		case state == UUID_WAIT && c == ' ':
-			continue
 		case state == UUID_WAIT && c != ' ':
+			continue
+		case state == UUID_WAIT && c == ' ':
+			state = UUID_GRAB
+		case state == UUID_GRAB && c != ' ':
 			uuid.WriteByte(c)
 			state = UUID_GRAB
 		case state == UUID_GRAB && c == ' ':
