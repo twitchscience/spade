@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -125,7 +126,7 @@ func SetGeoDB(geoloc string, asnloc string) error {
 
 type ColumnTranformer func(interface{}) (string, error)
 
-const RedshiftDatetimeIngestString = "2006-01-02 15:04:05"
+const RedshiftDatetimeIngestString = "2006-01-02 15:04:05.999"
 
 func intFormat(target interface{}) (string, error) {
 	// Note that the json decoder we are using outputs as json.Number
@@ -173,15 +174,18 @@ func unixTimeFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Time: unix")
 	}
-	i, err := t.Int64()
+	i, err := t.Float64()
 	if err != nil {
 		return "", err
 	}
+
+	seconds := math.Trunc(i)
+	nanos := (i - seconds) * float64(time.Second)
 	// we also error if the year will be converted into a > 4 digit number
-	if i < 1000000000 || i > 13140000000 {
+	if seconds < 1000000000 || seconds > 13140000000 {
 		return "", genError(target, "Time: unix")
 	}
-	return time.Unix(i, 0).In(PST).Format(RedshiftDatetimeIngestString), nil
+	return time.Unix(int64(seconds), int64(nanos)).In(PST).Format(RedshiftDatetimeIngestString), nil
 }
 
 func genTimeFormat(format string) ColumnTranformer {
