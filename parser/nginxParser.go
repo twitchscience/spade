@@ -40,6 +40,7 @@ func BuildSpadeParser(r reporter.Reporter) Parser {
 func (p *parseResult) Equal(other *parseResult) bool {
 	return p.Ip == other.Ip &&
 		p.Time == other.Time &&
+		p.UUID == other.UUID &&
 		bytes.Equal(p.Data, other.Data)
 }
 
