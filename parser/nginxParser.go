@@ -68,11 +68,14 @@ func MakePanicedEvent(line *ParseRequest) *MixpanelEvent {
 	}
 }
 
-func MakeErrorEvent(line *ParseRequest) *MixpanelEvent {
+func MakeErrorEvent(line *ParseRequest, matches *parseResult) *MixpanelEvent {
+	if matches.UUID == "" {
+		matches.UUID = "error"
+	}
 	return &MixpanelEvent{
 		Pstart:     line.Pstart,
 		EventTime:  json.Number(0),
-		UUID:       "error",
+		UUID:       matches.UUID,
 		ClientIp:   "",
 		Event:      "Unknown",
 		Properties: json.RawMessage{},
@@ -116,7 +119,7 @@ func (worker *NginxLogParser) Parse(line *ParseRequest) ([]MixpanelEvent, error)
 
 	events, err := worker.decodeData(matches)
 	if err != nil {
-		return []MixpanelEvent{*MakeErrorEvent(line)}, err
+		return []MixpanelEvent{*MakeErrorEvent(line, matches)}, err
 	}
 
 	m := make([]MixpanelEvent, len(events))
