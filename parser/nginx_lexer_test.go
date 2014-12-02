@@ -85,4 +85,15 @@ func TestVariants(t *testing.T) {
 	if !reflect.DeepEqual(expected, *matches) {
 		t.Errorf("Expecting %v got %v", expected, matches)
 	}
+	var7 := `98.227.19.187, 222.222.222.222 [1397781324.000] data=ip=1&data=eyJldmVudCI6ImhlbGxvIn0%3D b965f6d8-49e13880-5350734c-fa42601d46b5ddda`
+	matches = LexLine([]byte(var7))
+	expected = parseResult{
+		Ip:   "98.227.19.187",
+		Time: "1397781324",
+		Data: []byte("ip=1"),
+		UUID: "b965f6d8-49e13880-5350734c-fa42601d46b5ddda",
+	}
+	if !reflect.DeepEqual(expected, *matches) {
+		t.Errorf("Expecting %+v got %+v", expected, matches)
+	}
 }
