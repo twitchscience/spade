@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/twitchscience/spade/reporter"
@@ -72,9 +73,16 @@ func MakeErrorEvent(line *ParseRequest, matches *parseResult) *MixpanelEvent {
 	if matches.UUID == "" {
 		matches.UUID = "error"
 	}
+	if matches.Time == "" {
+		matches.Time = "0"
+	}
+	t, ok := strconv.Atoi(matches.Time)
+	if ok != nil {
+		t = 0
+	}
 	return &MixpanelEvent{
 		Pstart:     line.Pstart,
-		EventTime:  json.Number(0),
+		EventTime:  json.Number(t),
 		UUID:       matches.UUID,
 		ClientIp:   "",
 		Event:      "Unknown",
