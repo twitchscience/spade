@@ -2,7 +2,8 @@
 	"ImportPath": "github.com/twitchscience/spade",
 	"GoVersion": "go1.3",
 	"Packages": [
-		"./..."
+		".",
+		"./spade_parse"
 	],
 	"Deps": [
 		{

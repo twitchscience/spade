@@ -317,7 +317,7 @@ func TestErrorRequestProcessing(t *testing.T) {
 	expected := writer.WriteRequest{
 		Category: "Unknown",
 		Line:     "",
-		UUID:     "error",
+		UUID:     "uuid1",
 		Source:   nil,
 		Pstart:   now,
 		Failure:  reporter.UNABLE_TO_PARSE_DATA,
