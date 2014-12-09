@@ -108,6 +108,9 @@ def request_parameters(csvline, verb):
             }
             return base_parameters
         if verb == 'POST':
+            base_parameters['headers']['Content-Type'] = "application/x-www-form-urlencoded"
+            if "data=" != d[:5]:
+                d = "data="+d
             base_parameters['data'] = d
             return base_parameters
     except ValueError as e:
