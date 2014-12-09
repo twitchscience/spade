@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/twitchscience/spade/reporter"
@@ -68,11 +69,21 @@ func MakePanicedEvent(line *ParseRequest) *MixpanelEvent {
 	}
 }
 
-func MakeErrorEvent(line *ParseRequest) *MixpanelEvent {
+func MakeErrorEvent(line *ParseRequest, matches *parseResult) *MixpanelEvent {
+	if matches.UUID == "" {
+		matches.UUID = "error"
+	}
+	if matches.Time == "" {
+		matches.Time = "0"
+	}
+	t, ok := strconv.Atoi(matches.Time)
+	if ok != nil {
+		t = 0
+	}
 	return &MixpanelEvent{
 		Pstart:     line.Pstart,
-		EventTime:  json.Number(0),
-		UUID:       "error",
+		EventTime:  json.Number(t),
+		UUID:       matches.UUID,
 		ClientIp:   "",
 		Event:      "Unknown",
 		Properties: json.RawMessage{},
@@ -116,7 +127,7 @@ func (worker *NginxLogParser) Parse(line *ParseRequest) ([]MixpanelEvent, error)
 
 	events, err := worker.decodeData(matches)
 	if err != nil {
-		return []MixpanelEvent{*MakeErrorEvent(line)}, err
+		return []MixpanelEvent{*MakeErrorEvent(line, matches)}, err
 	}
 
 	m := make([]MixpanelEvent, len(events))

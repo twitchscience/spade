@@ -3,7 +3,7 @@
 	"GoVersion": "go1.3",
 	"Packages": [
 		".",
-		"./..."
+		"./spade_parse"
 	],
 	"Deps": [
 		{
@@ -68,11 +68,11 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/spade_edge/request_handler",
-			"Rev": "956dcec0924222da55d6bf5f4f28851a6cdf692a"
+			"Rev": "e96703f45fc68d4bf15575bea8a81f23c20d53c1"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/spade_edge/uuid",
-			"Rev": "956dcec0924222da55d6bf5f4f28851a6cdf692a"
+			"Rev": "e96703f45fc68d4bf15575bea8a81f23c20d53c1"
 		}
 	]
 }

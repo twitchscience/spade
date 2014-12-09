@@ -23,9 +23,10 @@ type testUUIDAssigner struct {
 }
 
 type testRequest struct {
-	Endpoint string
-	Verb     string
-	Body     string
+	Endpoint    string
+	Verb        string
+	ContentType string
+	Body        string
 }
 
 type testResponse struct {
@@ -34,8 +35,9 @@ type testResponse struct {
 }
 
 type testTuple struct {
-	Request  testRequest
-	Response testResponse
+	Expectation string
+	Request     testRequest
+	Response    testResponse
 }
 
 var epoch = time.Unix(0, 0)
@@ -80,18 +82,6 @@ func TestGetForwardedIpAndTimeStamp(t *testing.T) {
 	}
 }
 
-func TestExtractDataQuery(t *testing.T) {
-	for expected, input := range map[string]string{
-		"blah":  "data=blah",
-		"blah2": "data=blah2&",
-	} {
-		actual := extractDataQuery(input)
-		if expected != actual {
-			t.Fatalf("expected %s but got %s\n", expected, actual)
-		}
-	}
-}
-
 func TestEndPoints(t *testing.T) {
 	c, _ := statsd.NewNoop()
 	SpadeHandler := &SpadeHandler{
@@ -99,6 +89,11 @@ func TestEndPoints(t *testing.T) {
 		Assigner:   &testUUIDAssigner{},
 		StatLogger: c,
 	}
+
+	var expectedEvents []string
+	uuidIdx := 1
+	baseFmt := "222.222.222.222 [1399059241.000] data=%s %d recordversion=1"
+
 	for _, tt := range testRequests {
 		testrecorder := httptest.NewRecorder()
 		req, err := http.NewRequest(
@@ -111,6 +106,9 @@ func TestEndPoints(t *testing.T) {
 		}
 		req.Header.Add("X-Forwarded-For", "222.222.222.222")
 		req.Header.Add("X-Original-Msec", "1399059241.000")
+		if tt.Request.ContentType != "" {
+			req.Header.Add("Content-Type", tt.Request.ContentType)
+		}
 		SpadeHandler.ServeHTTP(testrecorder, req)
 		if testrecorder.Code != tt.Response.Code {
 			t.Fatalf("%s expected code %d not %d\n", tt.Request.Endpoint, tt.Response.Code, testrecorder.Code)
@@ -118,19 +116,12 @@ func TestEndPoints(t *testing.T) {
 		if testrecorder.Body.String() != tt.Response.Body {
 			t.Fatalf("%s expected body %s not %s\n", tt.Request.Endpoint, tt.Response.Body, testrecorder.Body.String())
 		}
-	}
-	// test logs
-	baseFmt := "222.222.222.222 [1399059241.000] data=%s recordversion=1"
-	expectedEvents := []string{
-		fmt.Sprintf(baseFmt, "blah 1"),
-		fmt.Sprintf(baseFmt, "blah 2"),
-		fmt.Sprintf(baseFmt, "eyJldmVudCI6ImhlbGxvIn0 3"),
-		fmt.Sprintf(baseFmt, "blat 4"),
-		fmt.Sprintf(baseFmt, "blag 5"),
-		fmt.Sprintf(baseFmt, "bleck 6"),
+		if tt.Expectation != "" {
+			expectedEvents = append(expectedEvents, fmt.Sprintf(baseFmt, tt.Expectation, uuidIdx))
+			uuidIdx++
+		}
 	}
 	if !reflect.DeepEqual(SpadeHandler.EdgeLogger.(*testEdgeLogger).events, expectedEvents) {
-
 		t.Fatalf(fmt.Sprintf("\nExpected: %s\nGot: %s", expectedEvents, SpadeHandler.EdgeLogger.(*testEdgeLogger).events))
 	}
 }
@@ -154,6 +145,9 @@ func TestHandle(t *testing.T) {
 		}
 		req.Header.Add("X-Forwarded-For", "222.222.222.222")
 		req.Header.Add("X-Original-Msec", "1399059241.000")
+		if tt.Request.ContentType != "" {
+			req.Header.Add("Content-Type", tt.Request.ContentType)
+		}
 		context := &requestContext{
 			Now:      epoch,
 			Method:   req.Method,
@@ -189,12 +183,6 @@ func BenchmarkUUIDAssigner(b *testing.B) {
 	}
 	b.ReportAllocs()
 
-}
-
-func BenchmarkExtractDataQuery(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		extractDataQuery("data=1234567890101112131415161718191011239601278364o8123746&")
-	}
 }
 
 func BenchmarkRequests(b *testing.B) {
@@ -250,6 +238,7 @@ var (
 			},
 		},
 		testTuple{
+			Expectation: "blah",
 			Request: testRequest{
 				Endpoint: "track?data=blah",
 				Verb:     "GET",
@@ -259,6 +248,7 @@ var (
 			},
 		},
 		testTuple{
+			Expectation: "blah",
 			Request: testRequest{
 				Endpoint: "track/?data=blah",
 				Verb:     "GET",
@@ -268,8 +258,9 @@ var (
 			},
 		},
 		testTuple{
+			Expectation: "eyJldmVudCI6ImhlbGxvIn0",
 			Request: testRequest{
-				Endpoint: "track/?data=eyJldmVudCI6ImhlbGxvIn0%26ip%3D1",
+				Endpoint: "track/?data=eyJldmVudCI6ImhlbGxvIn0&ip=1",
 				Verb:     "GET",
 			},
 			Response: testResponse{
@@ -286,6 +277,7 @@ var (
 			},
 		},
 		testTuple{
+			Expectation: "blat",
 			Request: testRequest{
 				Endpoint: "?data=blat",
 				Verb:     "GET",
@@ -295,18 +287,67 @@ var (
 			},
 		},
 		testTuple{
+			Expectation: "blag",
 			Request: testRequest{
-				Verb: "POST",
-				Body: "blag",
+				Verb:        "POST",
+				ContentType: "application/x-randomfoofoo",
+				Body:        "blag",
+			},
+			Response: testResponse{
+				Code: http.StatusNoContent,
+			},
+		},
+		// The next request is a bad client that passes our tests,
+		// hopefully these should be incredibly rare. They do not parse at
+		// our processor level
+		testTuple{
+			Expectation: "ip=&data=blagi",
+			Request: testRequest{
+				Verb:        "POST",
+				ContentType: "application/x-randomfoofoo",
+				Body:        "ip=&data=blagi",
 			},
 			Response: testResponse{
 				Code: http.StatusNoContent,
 			},
 		},
 		testTuple{
+			Expectation: "bleck",
 			Request: testRequest{
-				Verb: "POST",
-				Body: "data=bleck",
+				Verb:        "POST",
+				ContentType: "application/x-www-form-urlencoded",
+				Body:        "data=bleck",
+			},
+			Response: testResponse{
+				Code: http.StatusNoContent,
+			},
+		},
+		testTuple{
+			Expectation: "blog",
+			Request: testRequest{
+				Verb:        "POST",
+				ContentType: "application/x-www-form-urlencoded",
+				Body:        "ip=&data=blog",
+			},
+			Response: testResponse{
+				Code: http.StatusNoContent,
+			},
+		},
+		testTuple{
+			Expectation: "blem",
+			Request: testRequest{
+				Verb:     "POST",
+				Endpoint: "track?ip=&data=blem",
+			},
+			Response: testResponse{
+				Code: http.StatusNoContent,
+			},
+		},
+		testTuple{
+			Expectation: "blamo",
+			Request: testRequest{
+				Verb:     "GET",
+				Endpoint: "track?ip=&data=blamo",
 			},
 			Response: testResponse{
 				Code: http.StatusNoContent,
