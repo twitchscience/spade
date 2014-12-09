@@ -7,7 +7,6 @@ import (
 	"log"
 	"mime"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -81,18 +80,6 @@ func getIpFromHeader(headerKey string, header http.Header) string {
 	return clientIp
 }
 
-func extractDataQuery(rawQuery string) string {
-	dataIdx := strings.Index(rawQuery, "data=") + 5
-	if dataIdx < 5 {
-		return ""
-	}
-	endOfData := strings.IndexRune(rawQuery[dataIdx:], '&')
-	if endOfData < 0 {
-		return rawQuery[dataIdx:]
-	}
-	return rawQuery[dataIdx : dataIdx+endOfData]
-}
-
 func (s *SpadeHandler) HandleSpadeRequests(r *http.Request, context *requestContext) int {
 	statTimer := newTimerInstance()
 
@@ -102,30 +89,29 @@ func (s *SpadeHandler) HandleSpadeRequests(r *http.Request, context *requestCont
 	}
 	context.Timers["ip"] = statTimer.stopTiming()
 
-	var data string
+	err := r.ParseForm()
+	if err != nil {
+		return http.StatusBadRequest
+	}
 
-	switch r.Method {
-	case "GET":
-		// Get data from url
-		queryString, err := url.QueryUnescape(r.URL.RawQuery)
-		if err != nil {
-			return http.StatusBadRequest
-		}
-		data = extractDataQuery(queryString)
-		if data == "" {
-			return http.StatusBadRequest
-		}
-	case "POST":
-		// This supports one request per post...
+	data := r.Form.Get("data")
+	if data == "" && r.Method == "POST" {
+		// if we're here then our clients have POSTed us something weird,
+		// for example, something that maybe
+		// application/x-www-form-urlencoded but with the Content-Type
+		// header set incorrectly... best effort here on out
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			return http.StatusBadRequest
 		}
 		if bytes.Equal(b[:5], DataFlag) {
+			context.BadClient = true
 			b = b[5:]
 		}
 		data = string(b)
-	default:
+
+	}
+	if data == "" {
 		return http.StatusBadRequest
 	}
 
@@ -194,11 +180,12 @@ func (s *SpadeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	//
 	context := &requestContext{
-		Now:      ts,
-		Method:   r.Method,
-		Endpoint: r.URL.Path,
-		IpHeader: ipForwardHeader,
-		Timers:   make(map[string]time.Duration, nTimers),
+		Now:       ts,
+		Method:    r.Method,
+		Endpoint:  r.URL.Path,
+		IpHeader:  ipForwardHeader,
+		Timers:    make(map[string]time.Duration, nTimers),
+		BadClient: false,
 	}
 	timer := newTimerInstance()
 	context.setStatus(s.serve(w, r, context))

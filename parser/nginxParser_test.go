@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"fmt"
 	"io/ioutil"
 	"testing"
 
@@ -56,9 +55,22 @@ func TestDecodeData(t *testing.T) {
 		UUID: "39bffff7-4ffff880-539775b5-0",
 	}
 	p := BuildSpadeParser(&dummyReporter{}).(*NginxLogParser)
-	es, err := p.decodeData(&test1)
+	_, err := p.decodeData(&test1)
 	if err != nil {
 		t.Fatalf("got error: %v\n", err)
 	}
-	fmt.Printf("%+v\n", es)
+}
+
+func TestBadUUIDDecodeData(t *testing.T) {
+	test1 := parseResult{
+		Ip:   "22.22.22.222",
+		Time: "1395707641",
+		Data: []byte("ip=1"),
+		UUID: "",
+	}
+	p := BuildSpadeParser(&dummyReporter{}).(*NginxLogParser)
+	_, err := p.decodeData(&test1)
+	if err == nil {
+		t.Fatalf("should have gotten error")
+	}
 }
