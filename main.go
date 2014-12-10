@@ -9,25 +9,24 @@ import (
 	"github.com/twitchscience/aws_utils/listener"
 	"github.com/twitchscience/aws_utils/notifier"
 	aws_upload "github.com/twitchscience/aws_utils/uploader"
-
 	"github.com/twitchscience/gologging/gologging"
 	gen "github.com/twitchscience/gologging/key_name_generator"
-
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/log_manager"
+	jsonLog "github.com/twitchscience/spade/parser/json_log"
+	nginx "github.com/twitchscience/spade/parser/server_log"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/uploader"
 	"github.com/twitchscience/spade/writer"
-
-	"github.com/cactus/go-statsd-client/statsd"
-
-	"github.com/crowdmob/goamz/aws"
-	"github.com/crowdmob/goamz/s3"
 
 	"log"
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/cactus/go-statsd-client/statsd"
+	"github.com/crowdmob/goamz/aws"
+	"github.com/crowdmob/goamz/s3"
 )
 
 const (
@@ -107,7 +106,7 @@ func init() {
 		&DummyNotifierHarness{},
 		&aws_upload.S3UploaderBuilder{
 			Bucket:           auditBucket,
-			KeyNameGenerator: &gen.EdgeKeyNameGenerator{auditInfo},
+			KeyNameGenerator: &gen.EdgeKeyNameGenerator{Info: auditInfo},
 		},
 		BuildSQSErrorHarness(),
 		2,
@@ -115,6 +114,11 @@ func init() {
 	if err != nil {
 		log.Fatalf("Got Error while building audit: %s\n", err)
 	}
+
+	// First try the nginx/space-delimited parser, if that fails try the
+	// json log parser
+	nginx.Register()
+	jsonLog.Register()
 }
 
 func main() {

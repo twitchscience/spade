@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/twitchscience/spade/parser"
+	nginx "github.com/twitchscience/spade/parser/server_log"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/table_config"
 	"github.com/twitchscience/spade/transformer"
@@ -59,7 +60,7 @@ func loadFile(file string) string {
 //
 type _panicParser struct{}
 
-func (p *_panicParser) Parse(*parser.ParseRequest) ([]parser.MixpanelEvent, error) {
+func (p *_panicParser) Parse(parser.Parseable) ([]parser.MixpanelEvent, error) {
 	panic("paniced!")
 }
 
@@ -128,10 +129,54 @@ func (d *dummyReporter) Finalize() map[string]int {
 	return make(map[string]int)
 }
 
+type parseRequest struct {
+	data  []byte
+	start time.Time
+}
+
+func (p *parseRequest) Data() []byte {
+	return p.data
+}
+
+func (p *parseRequest) StartTime() time.Time {
+	return p.start
+}
+
 //////////////////////////////////
 //
 //  Helper test functions
 //
+func buildTestPool(nConverters, nTransformers int, p parser.Parser, t transformer.Transformer) *SpadeProcessorPool {
+	transformers := make([]*RequestTransformer, nTransformers)
+	converters := make([]*RequestConverter, nConverters)
+
+	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
+	transport := NewGobTransport(NewBufferedTransport())
+
+	for i := 0; i < nConverters; i++ {
+		converters[i] = &RequestConverter{
+			parser: p,
+			in:     requestChannel,
+			T:      transport,
+			closer: make(chan bool),
+		}
+	}
+
+	for i := 0; i < nTransformers; i++ {
+		transformers[i] = &RequestTransformer{
+			t:      t,
+			T:      transport,
+			closer: make(chan bool),
+		}
+	}
+
+	return &SpadeProcessorPool{
+		in:           requestChannel,
+		converters:   converters,
+		transformers: transformers,
+	}
+}
+
 func requestEqual(r1, r2 *writer.WriteRequest) bool {
 	return r1.Category == r2.Category &&
 		r1.Line == r2.Line &&
@@ -145,10 +190,14 @@ func requestEqual(r1, r2 *writer.WriteRequest) bool {
 //
 //  Tests
 //
+func init() {
+	nginx.Register() // TODO: replace with TestMain() in go 1.4
+}
+
 func TestPanicRecoveryProcessing(t *testing.T) {
 	now := time.Now().In(PST)
 	rawLine := `10.1.40.26 [1382033155.388] "ip=0&data=eyJldmVudCIgOiJsb2dpbiJ9" uuid1`
-	_exampleRequest := &parser.ParseRequest{
+	_exampleRequest := &parseRequest{
 		[]byte(rawLine),
 		now,
 	}
@@ -202,7 +251,7 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 
 func TestEmptyPropertyProcessing(t *testing.T) {
 	now := time.Now().In(PST)
-	_exampleRequest := &parser.ParseRequest{
+	_exampleRequest := &parseRequest{
 		[]byte(`10.1.40.26 [1382033155.388] "ip=0&data=eyJldmVudCIgOiJsb2dpbiJ9" uuid1`),
 		now,
 	}
@@ -243,7 +292,7 @@ func TestEmptyPropertyProcessing(t *testing.T) {
 
 func TestRequestProcessing(t *testing.T) {
 	now := time.Now().In(PST)
-	_exampleRequest := &parser.ParseRequest{
+	_exampleRequest := &parseRequest{
 		[]byte(sampleLogLine),
 		now,
 	}
@@ -279,7 +328,7 @@ func TestRequestProcessing(t *testing.T) {
 
 func TestErrorRequestProcessing(t *testing.T) {
 	now := time.Now().In(PST)
-	_exampleRequest := &parser.ParseRequest{
+	_exampleRequest := &parseRequest{
 		[]byte(sampleErrorLogLine),
 		now,
 	}
@@ -316,7 +365,7 @@ func TestErrorRequestProcessing(t *testing.T) {
 
 func TestMultiRequestProcessing(t *testing.T) {
 	now := time.Now().In(PST)
-	_exampleRequest := &parser.ParseRequest{
+	_exampleRequest := &parseRequest{
 		[]byte(sampleMultiLogLine),
 		now,
 	}
@@ -380,7 +429,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 // Use to figure out how many converters vs transformers we need
 func BenchmarkRequestProcessing(b *testing.B) {
 	now := time.Now().In(PST)
-	_exampleRequest := &parser.ParseRequest{
+	_exampleRequest := &parseRequest{
 		[]byte(sampleLogLine),
 		now,
 	}
@@ -397,12 +446,12 @@ func BenchmarkRequestProcessing(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		wait.Add(1)
 		go func() {
-			for j := 0; j < queueSize*2; j++ {
+			for j := 0; j < QUEUE_SIZE*2; j++ {
 				<-w.r
 			}
 			wait.Done()
 		}()
-		for j := 0; j < queueSize*2; j++ {
+		for j := 0; j < QUEUE_SIZE*2; j++ {
 			rp.Process(_exampleRequest)
 		}
 		wait.Wait()

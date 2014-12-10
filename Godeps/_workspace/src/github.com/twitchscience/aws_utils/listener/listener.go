@@ -6,10 +6,9 @@ package listener
 
 // TODO make seperate sqs wrapper for queues
 import (
+	"fmt"
 	"github.com/crowdmob/goamz/aws"
 	"github.com/crowdmob/goamz/sqs"
-
-	"fmt"
 	"time"
 )
 

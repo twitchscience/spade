@@ -6,12 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/table_config"
 	"github.com/twitchscience/spade/transformer"
-	"github.com/twitchscience/spade_edge/request_handler"
-
 	"github.com/twitchscience/spade/writer"
 )
 
@@ -38,6 +37,19 @@ type RequestParser struct {
 	parser parser.Parser
 }
 
+type parseRequest struct {
+	data  []byte
+	start time.Time
+}
+
+func (p *parseRequest) Data() []byte {
+	return p.data
+}
+
+func (p *parseRequest) StartTime() time.Time {
+	return p.start
+}
+
 // This is for simple applications of the parser.
 func BuildProcessor(configs map[string][]transformer.RedshiftType) *RequestParser {
 	return &RequestParser{
@@ -48,7 +60,7 @@ func BuildProcessor(configs map[string][]transformer.RedshiftType) *RequestParse
 	}
 }
 
-func (p *RequestParser) Process(request *parser.ParseRequest) (result []writer.WriteRequest) {
+func (p *RequestParser) Process(request parser.Parseable) (result []writer.WriteRequest) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			result = []writer.WriteRequest{
@@ -56,9 +68,9 @@ func (p *RequestParser) Process(request *parser.ParseRequest) (result []writer.W
 					Category: "Unknown",
 					Line:     fmt.Sprintf("%v", recovered),
 					UUID:     "error",
-					Source:   json.RawMessage(request.Target),
+					Source:   json.RawMessage(request.Data()),
 					Failure:  reporter.PANICED_IN_PROCESSING,
-					Pstart:   request.Pstart,
+					Pstart:   request.StartTime(),
 				},
 			}
 		}
@@ -95,17 +107,26 @@ func (s *StdoutSpadeWriter) Close() error {
 	return nil
 }
 
-func (e *EZSpadeEdgeLogger) Log(r request_handler.EventRecord) {
-	for _, request := range e.p.Process(e.edgeEventToParseRequest(r)) {
+func (e *EZSpadeEdgeLogger) Log(r *spade.Event) error {
+	parseable, err := e.edgeEventToParseRequest(r)
+	if err != nil {
+		return err
+	}
+	for _, request := range e.p.Process(parseable) {
 		e.w.Write(&request)
 	}
+	return nil
 }
 
 func (e *EZSpadeEdgeLogger) Close() {}
 
-func (e *EZSpadeEdgeLogger) edgeEventToParseRequest(r request_handler.EventRecord) *parser.ParseRequest {
-	return &parser.ParseRequest{
-		Target: []byte(fmt.Sprintf("%v\n", r.HttpRequest())),
-		Pstart: time.Now(),
+func (e *EZSpadeEdgeLogger) edgeEventToParseRequest(r *spade.Event) (parser.Parseable, error) {
+	b, err := spade.Marshal(r)
+	if err != nil {
+		return nil, err
 	}
+	return &parseRequest{
+		data:  b,
+		start: time.Now(),
+	}, nil
 }

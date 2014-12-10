@@ -1,4 +1,4 @@
-package parser
+package server_log
 
 import "bytes"
 
@@ -17,8 +17,27 @@ const (
 	DONE
 )
 
+type parseResult struct {
+	ip   string
+	when string
+	data []byte
+	uuid string
+}
+
+func (p *parseResult) UUID() string {
+	return p.uuid
+}
+
+func (p *parseResult) Time() string {
+	return p.when
+}
+
+func (p *parseResult) Data() []byte {
+	return p.data
+}
+
 // This is a super ugly state machine to parse Nginx logs and extract info in a single pass
-func LexLine(line []byte) *parseResult {
+func lexLine(line []byte) *parseResult {
 	state := IP_GRAB
 	ip := bytes.NewBuffer(make([]byte, 0, 16))
 	time := bytes.NewBuffer(make([]byte, 0, 16))
@@ -90,9 +109,9 @@ func LexLine(line []byte) *parseResult {
 		}
 	}
 	return &parseResult{
-		Ip:   ip.String(),
-		Time: time.String(),
-		Data: data.Bytes(),
-		UUID: uuid.String(),
+		ip:   ip.String(),
+		when: time.String(),
+		data: data.Bytes(),
+		uuid: uuid.String(),
 	}
 }

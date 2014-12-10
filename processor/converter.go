@@ -20,13 +20,13 @@ func MakeTransportError(event *parser.MixpanelEvent) *reporter.Result {
 
 type RequestConverter struct {
 	r      reporter.Reporter
-	in     chan *parser.ParseRequest
+	in     chan parser.Parseable
 	closer chan bool
 	parser parser.Parser
 	T      *GobTransport
 }
 
-func (p *RequestConverter) Process(r *parser.ParseRequest) (events []parser.MixpanelEvent, err error) {
+func (p *RequestConverter) Process(r parser.Parseable) (events []parser.MixpanelEvent, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			events = []parser.MixpanelEvent{

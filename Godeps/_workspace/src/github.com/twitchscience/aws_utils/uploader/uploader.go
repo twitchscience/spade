@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/crowdmob/goamz/s3"
-
 	"github.com/twitchscience/aws_utils/common"
 )
 
