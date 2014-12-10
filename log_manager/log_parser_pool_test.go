@@ -1,6 +1,7 @@
 package log_manager
 
 import (
+	"io/ioutil"
 	"reflect"
 	"sync"
 
@@ -133,14 +134,27 @@ func TestLogParser(t *testing.T) {
 	}
 }
 
-var testLines = []parser.ParseRequest{
-	parser.ParseRequest{
-		Target: []byte("222.222.222.222 [1418172623.000] data=eyJldmVudCI6ImxvZ2luIiwicHJvcGVydGllcyI6eyJkaXN0aW5jdF9pZCI6ImZmZmZmZmZmZmZmZmZmZmZmZiIsInNhbXBsaW5nX2ZhY3RvciI6MC41fX0= fffff-fffff-fffff-1 recordversion=1"),
-	},
-	parser.ParseRequest{
-		Target: []byte("222.222.222.222 [1418172623.000] data=eyJldmVudCI6Imxv Z2luIiwicHJvcGVydGllcyI6eyJkaXN0aW5jdF9pZCI6ImZmZmZmZmZmZmZmZmZmZmZmZiIsInNhbXBsaW5nX2ZhY3RvciI6MC41fX0= fffff-fffff-fffff-2 recordversion=1"),
-	},
-	parser.ParseRequest{
-		Target: []byte("222.222.222.222 [1418172623.000] data=W3siZXZlbnQiOiJsb2dpbiIsInByb3BlcnRpZXMiOnsiZGlzdGluY3RfaWQiOiJmZmZmZmZmZmZmZmZmZmZmZmYiLCJzYW1wbGluZ19mYWN0b3IiOjAuNX19LHsiZXZlbnQiOiJsb2dpbiIsInByb3BlcnRpZXMiOnsiZGlzdGluY3RfaWQiOiJmZmZmZmZmZmZmZmZmZmZmZmYiLCJzYW1wbGluZ19mYWN0b3IiOjAuNX19LHsiZXZlbnQiOiJsb2dpbiIsInByb3BlcnRpZXMiOnsiZGlzdGluY3RfaWQiOiJmZmZmZmZmZmZmZmZmZmZmZmYiLCJzYW1wbGluZ19mYWN0b3IiOjAuNX19XQ== fffff-fffff-fffff-3 recordversion=1"),
-	},
+func loadFile(file string) []byte {
+	b, err := ioutil.ReadFile(file)
+	if err != nil {
+		return nil
+	}
+	return b
 }
+
+var (
+	testLines = []parser.ParseRequest{
+		// contains 1 line
+		parser.ParseRequest{
+			Target: loadFile("test_resources/single_line.txt"),
+		},
+		// should be a UNABLE_TO_PARSE_DATA error
+		parser.ParseRequest{
+			Target: loadFile("test_resources/broken_line.txt"),
+		},
+		// Contains 3 lines
+		parser.ParseRequest{
+			Target: loadFile("test_resources/multi_line.txt"),
+		},
+	}
+)
