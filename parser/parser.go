@@ -17,11 +17,11 @@ type MixpanelEvent struct {
 	Failure    reporter.FailMode // a flag for failure modes
 }
 
-type ParseRequest struct {
-	Target []byte
-	Pstart time.Time
+type Parseable interface {
+	Data() []byte
+	StartTime() time.Time
 }
 
 type Parser interface {
-	Parse(*ParseRequest) ([]MixpanelEvent, error)
+	Parse(Parseable) ([]MixpanelEvent, error)
 }

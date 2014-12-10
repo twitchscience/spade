@@ -57,19 +57,19 @@ func MakeBadEncodedEvent() *MixpanelEvent {
 	}
 }
 
-func MakePanicedEvent(line *ParseRequest) *MixpanelEvent {
+func MakePanicedEvent(line Parseable) *MixpanelEvent {
 	return &MixpanelEvent{
-		Pstart:     line.Pstart,
+		Pstart:     line.StartTime(),
 		EventTime:  json.Number(0),
 		UUID:       "error",
 		ClientIp:   "",
 		Event:      "Unknown",
-		Properties: json.RawMessage(line.Target),
+		Properties: json.RawMessage(line.Data()),
 		Failure:    reporter.PANICED_IN_PROCESSING,
 	}
 }
 
-func MakeErrorEvent(line *ParseRequest, matches *parseResult) *MixpanelEvent {
+func MakeErrorEvent(line Parseable, matches *parseResult) *MixpanelEvent {
 	if matches.UUID == "" || len(matches.UUID) > 64 {
 		matches.UUID = "error"
 	}
@@ -81,7 +81,7 @@ func MakeErrorEvent(line *ParseRequest, matches *parseResult) *MixpanelEvent {
 		t = 0
 	}
 	return &MixpanelEvent{
-		Pstart:     line.Pstart,
+		Pstart:     line.StartTime(),
 		EventTime:  json.Number(t),
 		UUID:       matches.UUID,
 		ClientIp:   "",
@@ -122,8 +122,8 @@ func (worker *NginxLogParser) decodeData(matches *parseResult) ([]MixpanelEvent,
 }
 
 // ParseRequest -> MixpanelEvent
-func (worker *NginxLogParser) Parse(line *ParseRequest) ([]MixpanelEvent, error) {
-	matches := LexLine(line.Target)
+func (worker *NginxLogParser) Parse(line Parseable) ([]MixpanelEvent, error) {
+	matches := LexLine(line.Data())
 
 	events, err := worker.decodeData(matches)
 	if err != nil {
@@ -135,7 +135,7 @@ func (worker *NginxLogParser) Parse(line *ParseRequest) ([]MixpanelEvent, error)
 		m[i] = e
 		m[i].EventTime = json.Number(matches.Time)
 		m[i].ClientIp = matches.Ip
-		m[i].Pstart = line.Pstart
+		m[i].Pstart = line.StartTime()
 		if len(events) > 1 {
 			m[i].UUID = fmt.Sprintf("%s-%d", matches.UUID, i)
 		} else {

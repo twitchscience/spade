@@ -38,6 +38,19 @@ type RequestParser struct {
 	parser parser.Parser
 }
 
+type parseRequest struct {
+	data  []byte
+	start time.Time
+}
+
+func (p *parseRequest) Data() []byte {
+	return p.data
+}
+
+func (p *parseRequest) StartTime() time.Time {
+	return p.start
+}
+
 // This is for simple applications of the parser.
 func BuildProcessor(configs map[string][]transformer.RedshiftType) *RequestParser {
 	return &RequestParser{
@@ -48,7 +61,7 @@ func BuildProcessor(configs map[string][]transformer.RedshiftType) *RequestParse
 	}
 }
 
-func (p *RequestParser) Process(request *parser.ParseRequest) (result []writer.WriteRequest) {
+func (p *RequestParser) Process(request parser.Parseable) (result []writer.WriteRequest) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			result = []writer.WriteRequest{
@@ -56,9 +69,9 @@ func (p *RequestParser) Process(request *parser.ParseRequest) (result []writer.W
 					Category: "Unknown",
 					Line:     fmt.Sprintf("%v", recovered),
 					UUID:     "error",
-					Source:   json.RawMessage(request.Target),
+					Source:   json.RawMessage(request.Data()),
 					Failure:  reporter.PANICED_IN_PROCESSING,
-					Pstart:   request.Pstart,
+					Pstart:   request.StartTime(),
 				},
 			}
 		}
@@ -103,9 +116,9 @@ func (e *EZSpadeEdgeLogger) Log(r request_handler.EventRecord) {
 
 func (e *EZSpadeEdgeLogger) Close() {}
 
-func (e *EZSpadeEdgeLogger) edgeEventToParseRequest(r request_handler.EventRecord) *parser.ParseRequest {
-	return &parser.ParseRequest{
-		Target: []byte(fmt.Sprintf("%v\n", r.HttpRequest())),
-		Pstart: time.Now(),
+func (e *EZSpadeEdgeLogger) edgeEventToParseRequest(r request_handler.EventRecord) parser.Parseable {
+	return &parseRequest{
+		data:  []byte(fmt.Sprintf("%v\n", r.HttpRequest())),
+		start: time.Now(),
 	}
 }

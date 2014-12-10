@@ -76,24 +76,37 @@ func buildTestReporter() reporter.Reporter {
 }
 
 type testReader struct {
-	lines []parser.ParseRequest
+	lines []parser.Parseable
 	pos   int
 	lock  sync.Mutex
 }
 
-func (r *testReader) ProvideLine() (*parser.ParseRequest, error) {
+func (r *testReader) ProvideLine() (parser.Parseable, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	defer func() { r.pos++ }()
 	if r.pos >= len(r.lines) {
 		return nil, reader.EOF{}
 	}
-	r.lines[r.pos].Pstart = time.Now()
-	return &r.lines[r.pos], nil
+	r.lines[r.pos].(*parseRequest).start = time.Now()
+	return r.lines[r.pos], nil
 }
 
 func (r *testReader) Close() error {
 	return nil
+}
+
+type parseRequest struct {
+	data  []byte
+	start time.Time
+}
+
+func (p *parseRequest) Data() []byte {
+	return p.data
+}
+
+func (p *parseRequest) StartTime() time.Time {
+	return p.start
 }
 
 ///////////////////////////////////
@@ -143,18 +156,18 @@ func loadFile(file string) []byte {
 }
 
 var (
-	testLines = []parser.ParseRequest{
+	testLines = []parser.Parseable{
 		// contains 1 line
-		parser.ParseRequest{
-			Target: loadFile("test_resources/single_line.txt"),
+		&parseRequest{
+			data: loadFile("test_resources/single_line.txt"),
 		},
 		// should be a UNABLE_TO_PARSE_DATA error
-		parser.ParseRequest{
-			Target: loadFile("test_resources/broken_line.txt"),
+		&parseRequest{
+			data: loadFile("test_resources/broken_line.txt"),
 		},
 		// Contains 3 lines
-		parser.ParseRequest{
-			Target: loadFile("test_resources/multi_line.txt"),
+		&parseRequest{
+			data: loadFile("test_resources/multi_line.txt"),
 		},
 	}
 )
