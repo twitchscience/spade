@@ -8,21 +8,30 @@ import (
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
+func makeColumnDefs(in, out, transformer, opts string) scoop_protocol.ColumnDefinition {
+	return scoop_protocol.ColumnDefinition{
+		InboundName:           in,
+		OutboundName:          out,
+		Transformer:           transformer,
+		ColumnCreationOptions: opts,
+	}
+}
+
 func buildConfig() []byte {
 	data := []scoop_protocol.Config{
 		scoop_protocol.Config{
 			EventName: "test1",
 			Columns: []scoop_protocol.ColumnDefinition{
-				scoop_protocol.ColumnDefinition{"testIn", "test", "int", ""},
-				scoop_protocol.ColumnDefinition{"testCharIn", "testChar", "varchar", "(32)"},
-				scoop_protocol.ColumnDefinition{"testIn", "test", "f@timestamp@2006-01-02 15:04:05", ""},
+				makeColumnDefs("testIn", "test", "int", ""),
+				makeColumnDefs("testCharIn", "testChar", "varchar", "(32)"),
+				makeColumnDefs("testIn", "test", "f@timestamp@2006-01-02 15:04:05", ""),
 			},
 		},
 		scoop_protocol.Config{
 			EventName: "test2",
 			Columns: []scoop_protocol.ColumnDefinition{
-				scoop_protocol.ColumnDefinition{"testbIn", "testb", "int", ""},
-				scoop_protocol.ColumnDefinition{"testCharbIn", "testCharb", "varchar", "(32)"},
+				makeColumnDefs("testbIn", "testb", "int", ""),
+				makeColumnDefs("testCharbIn", "testCharb", "varchar", "(32)"),
 			},
 		},
 	}

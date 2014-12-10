@@ -12,10 +12,11 @@ import (
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
+	"github.com/twitchscience/scoop_protocol/spade"
 )
 
 type testEdgeLogger struct {
-	events []string
+	events [][]byte
 }
 
 type testUUIDAssigner struct {
@@ -42,8 +43,13 @@ type testTuple struct {
 
 var epoch = time.Unix(0, 0)
 
-func (t *testEdgeLogger) Log(record EventRecord) {
-	t.events = append(t.events, record.HttpRequest())
+func (t *testEdgeLogger) Log(e *spade.Event) error {
+	logLine, err := spade.Marshal(e)
+	if err != nil {
+		return err
+	}
+	t.events = append(t.events, logLine)
+	return nil
 }
 
 func (t *testEdgeLogger) Close() {}
@@ -63,7 +69,7 @@ func TestGetIpAndTimeStamp(t *testing.T) {
 	}
 	ip := getIpFromHeader("X-Forwarded-For", headers)
 
-	if testIp.String() != ip {
+	if testIp.String() != ip.String() {
 		t.Errorf("Expecting %s for ip got %s\n", testIp, ip)
 	}
 }
@@ -77,7 +83,7 @@ func TestGetForwardedIpAndTimeStamp(t *testing.T) {
 		textproto.CanonicalMIMEHeaderKey("X-Forwarded-For"): []string{"222.222.222.222, 123.123.123.123, 123.123.123.124"},
 	}
 	ip := getIpFromHeader("X-Forwarded-For", headers)
-	if testIp.String() != ip {
+	if testIp.String() != ip.String() {
 		t.Errorf("Expecting %s for ip got %s\n", testIp, ip)
 	}
 }
@@ -90,9 +96,11 @@ func TestEndPoints(t *testing.T) {
 		StatLogger: c,
 	}
 
-	var expectedEvents []string
-	uuidIdx := 1
-	baseFmt := "222.222.222.222 [1399059241.000] data=%s %d recordversion=1"
+	var expectedEvents []spade.Event
+	fixedIP := net.ParseIP("222.222.222.222")
+	fixedTime, _ := time.Parse(time.RFC3339, "2014-05-02T19:34:01+00:00")
+
+	uuidCounter := 1
 
 	for _, tt := range testRequests {
 		testrecorder := httptest.NewRecorder()
@@ -116,13 +124,27 @@ func TestEndPoints(t *testing.T) {
 		if testrecorder.Body.String() != tt.Response.Body {
 			t.Fatalf("%s expected body %s not %s\n", tt.Request.Endpoint, tt.Response.Body, testrecorder.Body.String())
 		}
+
 		if tt.Expectation != "" {
-			expectedEvents = append(expectedEvents, fmt.Sprintf(baseFmt, tt.Expectation, uuidIdx))
-			uuidIdx++
+			expectedEvents = append(expectedEvents, spade.Event{
+				ReceivedAt: fixedTime.UTC(),
+				ClientIp:   fixedIP,
+				Uuid:       fmt.Sprintf("%d", uuidCounter),
+				Data:       tt.Expectation,
+				Version:    2,
+			})
+			uuidCounter++
 		}
 	}
-	if !reflect.DeepEqual(SpadeHandler.EdgeLogger.(*testEdgeLogger).events, expectedEvents) {
-		t.Fatalf(fmt.Sprintf("\nExpected: %s\nGot: %s", expectedEvents, SpadeHandler.EdgeLogger.(*testEdgeLogger).events))
+	for idx, byteLog := range SpadeHandler.EdgeLogger.(*testEdgeLogger).events {
+		var ev spade.Event
+		err := spade.Unmarshal(byteLog, &ev)
+		if err != nil {
+			t.Errorf("Expected Unmarshal to work, input: %s, err:%s", byteLog, err)
+		}
+		if !reflect.DeepEqual(ev, expectedEvents[idx]) {
+			t.Errorf("Event processed incorrectly: expected:%s got:%s", expectedEvents[idx], ev)
+		}
 	}
 }
 

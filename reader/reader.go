@@ -3,9 +3,10 @@ package reader
 import (
 	"bufio"
 	"compress/gzip"
-	"github.com/twitchscience/spade/parser"
 	"os"
 	"time"
+
+	"github.com/twitchscience/spade/parser"
 )
 
 type EOF struct{}
@@ -15,7 +16,7 @@ func (e EOF) Error() string {
 }
 
 type LogReader interface {
-	ProvideLine() (*parser.ParseRequest, error)
+	ProvideLine() (parser.Parseable, error)
 	Close() error
 }
 
@@ -31,6 +32,19 @@ type DummyLogReader struct {
 	timesRepeated uint
 }
 
+type parseRequest struct {
+	data  []byte
+	start time.Time
+}
+
+func (p *parseRequest) Data() []byte {
+	return p.data
+}
+
+func (p *parseRequest) StartTime() time.Time {
+	return p.start
+}
+
 func GetFileLogReader(filename string, useGzip bool) (*FileLogReader, error) {
 	scanner, file, gzFile, err := getScanner(filename, useGzip)
 	if err != nil {
@@ -39,33 +53,32 @@ func GetFileLogReader(filename string, useGzip bool) (*FileLogReader, error) {
 	return &FileLogReader{scanner, file, gzFile}, nil
 }
 
-func (reader *FileLogReader) Close() error {
-	var err error = nil
+func (reader *FileLogReader) Close() (err error) {
 	if reader.gzip != nil {
 		err = reader.gzip.Close()
 	}
 	if reader.file != nil {
 		err = reader.file.Close()
 	}
-	return err
+	return
 }
 
-func (reader *FileLogReader) ProvideLine() (*parser.ParseRequest, error) {
+func (reader *FileLogReader) ProvideLine() (parser.Parseable, error) {
 	if reader.scanner.Scan() {
-		return &parser.ParseRequest{[]byte(reader.scanner.Text()), time.Now()}, nil
+		return &parseRequest{[]byte(reader.scanner.Text()), time.Now()}, nil
 	}
 	err := reader.scanner.Err()
 	if err != nil {
-		return &parser.ParseRequest{nil, time.Now()}, err
+		return &parseRequest{nil, time.Now()}, err
 	}
-	return &parser.ParseRequest{nil, time.Now()}, EOF{}
+	return &parseRequest{nil, time.Now()}, EOF{}
 }
 
-func (reader *DummyLogReader) ProvideLine() (*parser.ParseRequest, error) {
+func (reader *DummyLogReader) ProvideLine() (parser.Parseable, error) {
 	if reader.timesRepeated <= reader.timesToRepeat {
-		return &parser.ParseRequest{reader.logLine, time.Now()}, nil
+		return &parseRequest{reader.logLine, time.Now()}, nil
 	}
-	return &parser.ParseRequest{nil, time.Now()}, EOF{}
+	return &parseRequest{nil, time.Now()}, EOF{}
 }
 
 func (reader *DummyLogReader) Close() error { return nil }

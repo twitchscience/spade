@@ -7,10 +7,10 @@ import (
 	"github.com/twitchscience/spade/writer"
 )
 
-const queueSize = 400000
+const QUEUE_SIZE = 400000
 
 type SpadeProcessorPool struct {
-	in           chan *parser.ParseRequest
+	in           chan parser.Parseable
 	converters   []*RequestConverter
 	transformers []*RequestTransformer
 }
@@ -21,7 +21,7 @@ func BuildProcessorPool(nConverters, nTransformers int,
 	transformers := make([]*RequestTransformer, nTransformers)
 	converters := make([]*RequestConverter, nConverters)
 
-	requestChannel := make(chan *parser.ParseRequest, queueSize)
+	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
 	transport := NewGobTransport(NewBufferedTransport())
 
 	for i := 0; i < nConverters; i++ {
@@ -69,7 +69,7 @@ func (p *SpadeProcessorPool) Listen(w writer.SpadeWriter) {
 	}
 }
 
-func (p *SpadeProcessorPool) Process(request *parser.ParseRequest) {
+func (p *SpadeProcessorPool) Process(request parser.Parseable) {
 	p.in <- request
 }
 
@@ -77,7 +77,7 @@ func BuildTestPool(nConverters, nTransformers int, p parser.Parser, t transforme
 	transformers := make([]*RequestTransformer, nTransformers)
 	converters := make([]*RequestConverter, nConverters)
 
-	requestChannel := make(chan *parser.ParseRequest, queueSize)
+	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
 	transport := NewGobTransport(NewBufferedTransport())
 
 	for i := 0; i < nConverters; i++ {

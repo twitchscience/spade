@@ -29,6 +29,29 @@ type RowCopyRequest struct {
 	TableName string
 }
 
+type ManifestRowCopyRequest struct {
+	ManifestURL string
+	TableName   string
+}
+
+type LoadCheckRequest struct {
+	ManifestURL string
+}
+
+type LoadCheckResponse struct {
+	LoadStatus  LoadStatus
+	ManifestURL string
+}
+
+type LoadStatus string
+
+const (
+	LoadNotFound   LoadStatus = "load-not-found"
+	LoadFailed     LoadStatus = "load-failed"
+	LoadInProgress LoadStatus = "load-in-progress"
+	LoadComplete   LoadStatus = "load-complete"
+)
+
 type ScoopSigner interface {
 	GetConfig(io.Reader) (*Config, error)
 	GetRowCopyRequest(io.Reader) (*RowCopyRequest, error)
