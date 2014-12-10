@@ -72,3 +72,34 @@ func (p *SpadeProcessorPool) Listen(w writer.SpadeWriter) {
 func (p *SpadeProcessorPool) Process(request *parser.ParseRequest) {
 	p.in <- request
 }
+
+func BuildTestPool(nConverters, nTransformers int, p parser.Parser, t transformer.Transformer) *SpadeProcessorPool {
+	transformers := make([]*RequestTransformer, nTransformers)
+	converters := make([]*RequestConverter, nConverters)
+
+	requestChannel := make(chan *parser.ParseRequest, queueSize)
+	transport := NewGobTransport(NewBufferedTransport())
+
+	for i := 0; i < nConverters; i++ {
+		converters[i] = &RequestConverter{
+			parser: p,
+			in:     requestChannel,
+			T:      transport,
+			closer: make(chan bool),
+		}
+	}
+
+	for i := 0; i < nTransformers; i++ {
+		transformers[i] = &RequestTransformer{
+			t:      t,
+			T:      transport,
+			closer: make(chan bool),
+		}
+	}
+
+	return &SpadeProcessorPool{
+		in:           requestChannel,
+		converters:   converters,
+		transformers: transformers,
+	}
+}
