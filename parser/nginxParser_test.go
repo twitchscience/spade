@@ -29,24 +29,6 @@ func (d *dummyReporter) Finalize() map[string]int {
 	return make(map[string]int)
 }
 
-func BenchmarkStringQueryUnescape(b *testing.B) {
-	escaper := StringQueryUnescaper{}
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		escaper.QueryUnescape(sample)
-	}
-}
-
-func BenchmarkByteQueryUnescape(b *testing.B) {
-	escaper := ByteQueryUnescaper{}
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		escaper.QueryUnescape(sample)
-	}
-}
-
 func TestDecodeData(t *testing.T) {
 	test1 := parseResult{
 		Ip:   "22.22.22.222",
