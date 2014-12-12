@@ -53,15 +53,14 @@ func GetFileLogReader(filename string, useGzip bool) (*FileLogReader, error) {
 	return &FileLogReader{scanner, file, gzFile}, nil
 }
 
-func (reader *FileLogReader) Close() error {
-	var err error = nil
+func (reader *FileLogReader) Close() (err error) {
 	if reader.gzip != nil {
 		err = reader.gzip.Close()
 	}
 	if reader.file != nil {
 		err = reader.file.Close()
 	}
-	return err
+	return
 }
 
 func (reader *FileLogReader) ProvideLine() (parser.Parseable, error) {
