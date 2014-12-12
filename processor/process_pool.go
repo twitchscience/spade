@@ -2,13 +2,12 @@ package processor
 
 import (
 	"github.com/twitchscience/spade/parser"
-	"github.com/twitchscience/spade/parser/nginx"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/writer"
 )
 
-const queueSize = 400000
+const QUEUE_SIZE = 400000
 
 type SpadeProcessorPool struct {
 	in           chan parser.Parseable
@@ -22,13 +21,13 @@ func BuildProcessorPool(nConverters, nTransformers int,
 	transformers := make([]*RequestTransformer, nTransformers)
 	converters := make([]*RequestConverter, nConverters)
 
-	requestChannel := make(chan parser.Parseable, queueSize)
+	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
 	transport := NewGobTransport(NewBufferedTransport())
 
 	for i := 0; i < nConverters; i++ {
 		converters[i] = &RequestConverter{
 			r:      rep,
-			parser: nginx.BuildSpadeParser(rep),
+			parser: parser.BuildSpadeParser(rep),
 			in:     requestChannel,
 			T:      transport,
 			closer: make(chan bool),
@@ -78,7 +77,7 @@ func BuildTestPool(nConverters, nTransformers int, p parser.Parser, t transforme
 	transformers := make([]*RequestTransformer, nTransformers)
 	converters := make([]*RequestConverter, nConverters)
 
-	requestChannel := make(chan parser.Parseable, queueSize)
+	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
 	transport := NewGobTransport(NewBufferedTransport())
 
 	for i := 0; i < nConverters; i++ {

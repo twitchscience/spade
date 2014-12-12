@@ -2,8 +2,8 @@ package nginx
 
 import (
 	"io/ioutil"
+	"net/url"
 	"testing"
-
 	"github.com/twitchscience/spade/reporter"
 )
 
@@ -18,6 +18,16 @@ func loadFile(file string) []byte {
 		return nil
 	}
 	return b
+}
+
+type StringQueryUnescaper struct{}
+
+func (s *StringQueryUnescaper) QueryUnescape(q []byte) ([]byte, error) {
+	out, err := url.QueryUnescape(string(q))
+	if err != nil {
+		return nil, err
+	}
+	return []byte(out), nil
 }
 
 type dummyReporter struct{}
@@ -54,7 +64,9 @@ func TestDecodeData(t *testing.T) {
 		data: sampleLogLine,
 		uuid: "39bffff7-4ffff880-539775b5-0",
 	}
-	p := BuildSpadeParser(&dummyReporter{})
+	p := &NginxLogParser{
+		Escaper: &ByteQueryUnescaper{},
+	}
 	_, err := p.decodeData(&test1)
 	if err != nil {
 		t.Fatalf("got error: %v\n", err)
@@ -68,7 +80,9 @@ func TestBadUUIDDecodeData(t *testing.T) {
 		data: []byte("ip=1"),
 		uuid: "",
 	}
-	p := BuildSpadeParser(&dummyReporter{})
+	p := &NginxLogParser{
+		Escaper: &ByteQueryUnescaper{},
+	}
 	_, err := p.decodeData(&test1)
 	if err == nil {
 		t.Fatalf("should have gotten error")

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/twitchscience/spade/parser"
-	"github.com/twitchscience/spade/parser/nginx"
+	_ "github.com/twitchscience/spade/parser/nginx"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reader"
 	"github.com/twitchscience/spade/reporter"
@@ -116,7 +116,7 @@ func (p *parseRequest) StartTime() time.Time {
 //
 func TestLogParser(t *testing.T) {
 	r := buildTestReporter()
-	parser := nginx.BuildSpadeParser(r)
+	parser := parser.BuildSpadeParser(r)
 	writer := buildTestWriter(r)
 
 	pool := processor.BuildTestPool(1, 1, parser, _transformer)

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/twitchscience/spade/parser"
-	"github.com/twitchscience/spade/parser/nginx"
+	_ "github.com/twitchscience/spade/parser/nginx"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/table_config"
 	"github.com/twitchscience/spade/transformer"
@@ -35,7 +35,7 @@ var (
 		},
 	)
 	_transformer transformer.Transformer = transformer.NewRedshiftTransformer(_config)
-	_parser                              = nginx.BuildSpadeParser(&dummyReporter{})
+	_parser                              = parser.BuildSpadeParser(&dummyReporter{})
 )
 
 func getPST() *time.Location {
@@ -150,7 +150,7 @@ func buildTestPool(nConverters, nTransformers int, p parser.Parser, t transforme
 	transformers := make([]*RequestTransformer, nTransformers)
 	converters := make([]*RequestConverter, nConverters)
 
-	requestChannel := make(chan parser.Parseable, queueSize)
+	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
 	transport := NewGobTransport(NewBufferedTransport())
 
 	for i := 0; i < nConverters; i++ {
@@ -442,12 +442,12 @@ func BenchmarkRequestProcessing(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		wait.Add(1)
 		go func() {
-			for j := 0; j < queueSize*2; j++ {
+			for j := 0; j < QUEUE_SIZE*2; j++ {
 				<-w.r
 			}
 			wait.Done()
 		}()
-		for j := 0; j < queueSize*2; j++ {
+		for j := 0; j < QUEUE_SIZE*2; j++ {
 			rp.Process(_exampleRequest)
 		}
 		wait.Wait()

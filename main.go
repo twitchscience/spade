@@ -15,6 +15,7 @@ import (
 
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/log_manager"
+	_ "github.com/twitchscience/spade/parser/nginx"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/uploader"
 	"github.com/twitchscience/spade/writer"

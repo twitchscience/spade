@@ -6,17 +6,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 
 	"github.com/twitchscience/spade/parser"
-	"github.com/twitchscience/spade/reporter"
 )
 
 var MultiEventEscape = []byte{'[', '{'}
 
+func init() {
+	parser.Register("nginx", &NginxLogParser{
+		Escaper: &ByteQueryUnescaper{},
+	})
+}
+
 type NginxLogParser struct {
-	Reporter reporter.Reporter
-	Escaper  URLEscaper
+	Escaper parser.URLEscaper
 }
 
 type parseResult struct {
@@ -32,17 +35,6 @@ func (p *parseResult) UUID() string {
 
 func (p *parseResult) Time() string {
 	return p.when
-}
-
-type URLEscaper interface {
-	QueryUnescape([]byte) ([]byte, error)
-}
-
-func BuildSpadeParser(r reporter.Reporter) *NginxLogParser {
-	return &NginxLogParser{
-		Reporter: r,
-		Escaper:  &ByteQueryUnescaper{},
-	}
 }
 
 func (worker *NginxLogParser) decodeData(matches *parseResult) ([]parser.MixpanelEvent, error) {
@@ -96,20 +88,7 @@ func (worker *NginxLogParser) Parse(line parser.Parseable) ([]parser.MixpanelEve
 			m[i].UUID = matches.uuid
 		}
 	}
-	if len(m) > 1 {
-		worker.Reporter.IncrementExpected(len(m) - 1)
-	}
 	return m, nil
-}
-
-type StringQueryUnescaper struct{}
-
-func (s *StringQueryUnescaper) QueryUnescape(q []byte) ([]byte, error) {
-	out, err := url.QueryUnescape(string(q))
-	if err != nil {
-		return nil, err
-	}
-	return []byte(out), nil
 }
 
 type ByteQueryUnescaper struct{}
