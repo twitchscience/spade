@@ -56,7 +56,7 @@ func (p *LogParser) process(task *LogTask) error {
 	stats, parseErr := p.parse(logReader)
 	log.Printf("Parsed %v - stats: %v\n", filename, stats)
 	if parseErr != nil {
-		log.Printf("Got error of while reading %v: %v", reflect.TypeOf(parseErr), filename, parseErr)
+		log.Printf("Got error of while reading %v: %v, %s", reflect.TypeOf(parseErr), filename, parseErr)
 	}
 	return nil
 }

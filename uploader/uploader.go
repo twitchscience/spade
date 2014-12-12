@@ -97,7 +97,7 @@ func buildUploader(bucketName, queueName string, numWorkers int, awsConnection *
 		BuildSQSNotifierHarness(queueName),
 		&uploader.S3UploaderBuilder{
 			Bucket:           bucket,
-			KeyNameGenerator: &gen.ProcessorKeyNameGenerator{info},
+			KeyNameGenerator: &gen.ProcessorKeyNameGenerator{Info: info},
 		},
 	)
 }

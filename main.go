@@ -107,7 +107,7 @@ func init() {
 		&DummyNotifierHarness{},
 		&aws_upload.S3UploaderBuilder{
 			Bucket:           auditBucket,
-			KeyNameGenerator: &gen.EdgeKeyNameGenerator{auditInfo},
+			KeyNameGenerator: &gen.EdgeKeyNameGenerator{Info: auditInfo},
 		},
 		BuildSQSErrorHarness(),
 		2,
