@@ -1,4 +1,4 @@
-package parser
+package nginx
 
 import (
 	"io/ioutil"
@@ -49,12 +49,12 @@ func BenchmarkByteQueryUnescape(b *testing.B) {
 
 func TestDecodeData(t *testing.T) {
 	test1 := parseResult{
-		Ip:   "22.22.22.222",
-		Time: "1395707641",
-		Data: sampleLogLine,
-		UUID: "39bffff7-4ffff880-539775b5-0",
+		ip:   "22.22.22.222",
+		when: "1395707641",
+		data: sampleLogLine,
+		uuid: "39bffff7-4ffff880-539775b5-0",
 	}
-	p := BuildSpadeParser(&dummyReporter{}).(*NginxLogParser)
+	p := BuildSpadeParser(&dummyReporter{})
 	_, err := p.decodeData(&test1)
 	if err != nil {
 		t.Fatalf("got error: %v\n", err)
@@ -63,12 +63,12 @@ func TestDecodeData(t *testing.T) {
 
 func TestBadUUIDDecodeData(t *testing.T) {
 	test1 := parseResult{
-		Ip:   "22.22.22.222",
-		Time: "1395707641",
-		Data: []byte("ip=1"),
-		UUID: "",
+		ip:   "22.22.22.222",
+		when: "1395707641",
+		data: []byte("ip=1"),
+		uuid: "",
 	}
-	p := BuildSpadeParser(&dummyReporter{}).(*NginxLogParser)
+	p := BuildSpadeParser(&dummyReporter{})
 	_, err := p.decodeData(&test1)
 	if err == nil {
 		t.Fatalf("should have gotten error")

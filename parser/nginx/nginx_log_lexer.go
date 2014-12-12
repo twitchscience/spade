@@ -1,4 +1,4 @@
-package parser
+package nginx
 
 import "bytes"
 
@@ -90,9 +90,9 @@ func LexLine(line []byte) *parseResult {
 		}
 	}
 	return &parseResult{
-		Ip:   ip.String(),
-		Time: time.String(),
-		Data: data.Bytes(),
-		UUID: uuid.String(),
+		ip:   ip.String(),
+		when: time.String(),
+		data: data.Bytes(),
+		uuid: uuid.String(),
 	}
 }

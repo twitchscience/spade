@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/twitchscience/spade/parser"
+	"github.com/twitchscience/spade/parser/nginx"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/table_config"
 	"github.com/twitchscience/spade/transformer"
@@ -34,7 +35,7 @@ var (
 		},
 	)
 	_transformer transformer.Transformer = transformer.NewRedshiftTransformer(_config)
-	_parser                              = parser.BuildSpadeParser(&dummyReporter{})
+	_parser                              = nginx.BuildSpadeParser(&dummyReporter{})
 )
 
 func getPST() *time.Location {

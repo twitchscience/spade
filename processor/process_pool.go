@@ -2,6 +2,7 @@ package processor
 
 import (
 	"github.com/twitchscience/spade/parser"
+	"github.com/twitchscience/spade/parser/nginx"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/writer"
@@ -27,7 +28,7 @@ func BuildProcessorPool(nConverters, nTransformers int,
 	for i := 0; i < nConverters; i++ {
 		converters[i] = &RequestConverter{
 			r:      rep,
-			parser: parser.BuildSpadeParser(rep),
+			parser: nginx.BuildSpadeParser(rep),
 			in:     requestChannel,
 			T:      transport,
 			closer: make(chan bool),

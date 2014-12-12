@@ -1,4 +1,4 @@
-package parser
+package nginx
 
 import (
 	"bytes"
@@ -7,9 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"strconv"
-	"time"
 
+	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 )
 
@@ -21,78 +20,33 @@ type NginxLogParser struct {
 }
 
 type parseResult struct {
-	Ip   string
-	Time string
-	Data []byte
-	UUID string
+	ip   string
+	when string
+	data []byte
+	uuid string
+}
+
+func (p *parseResult) UUID() string {
+	return p.uuid
+}
+
+func (p *parseResult) Time() string {
+	return p.when
 }
 
 type URLEscaper interface {
 	QueryUnescape([]byte) ([]byte, error)
 }
 
-func BuildSpadeParser(r reporter.Reporter) Parser {
+func BuildSpadeParser(r reporter.Reporter) *NginxLogParser {
 	return &NginxLogParser{
 		Reporter: r,
 		Escaper:  &ByteQueryUnescaper{},
 	}
 }
 
-func (p *parseResult) Equal(other *parseResult) bool {
-	return p.Ip == other.Ip &&
-		p.Time == other.Time &&
-		p.UUID == other.UUID &&
-		bytes.Equal(p.Data, other.Data)
-}
-
-func MakeBadEncodedEvent() *MixpanelEvent {
-	return &MixpanelEvent{
-		Pstart:     time.Now(),
-		EventTime:  json.Number(0),
-		UUID:       "error",
-		ClientIp:   "",
-		Event:      "Unknown",
-		Properties: json.RawMessage{},
-		Failure:    reporter.FAILED_TRANSPORT,
-	}
-}
-
-func MakePanicedEvent(line Parseable) *MixpanelEvent {
-	return &MixpanelEvent{
-		Pstart:     line.StartTime(),
-		EventTime:  json.Number(0),
-		UUID:       "error",
-		ClientIp:   "",
-		Event:      "Unknown",
-		Properties: json.RawMessage(line.Data()),
-		Failure:    reporter.PANICED_IN_PROCESSING,
-	}
-}
-
-func MakeErrorEvent(line Parseable, matches *parseResult) *MixpanelEvent {
-	if matches.UUID == "" || len(matches.UUID) > 64 {
-		matches.UUID = "error"
-	}
-	if matches.Time == "" {
-		matches.Time = "0"
-	}
-	t, ok := strconv.Atoi(matches.Time)
-	if ok != nil {
-		t = 0
-	}
-	return &MixpanelEvent{
-		Pstart:     line.StartTime(),
-		EventTime:  json.Number(t),
-		UUID:       matches.UUID,
-		ClientIp:   "",
-		Event:      "Unknown",
-		Properties: json.RawMessage{},
-		Failure:    reporter.UNABLE_TO_PARSE_DATA,
-	}
-}
-
-func (worker *NginxLogParser) decodeData(matches *parseResult) ([]MixpanelEvent, error) {
-	data := matches.Data
+func (worker *NginxLogParser) decodeData(matches *parseResult) ([]parser.MixpanelEvent, error) {
+	data := matches.data
 	data, err := worker.Escaper.QueryUnescape(data)
 	if err != nil {
 		return nil, err
@@ -102,44 +56,44 @@ func (worker *NginxLogParser) decodeData(matches *parseResult) ([]MixpanelEvent,
 	if b64Err != nil {
 		return nil, b64Err
 	}
-	var events []MixpanelEvent
+	var events []parser.MixpanelEvent
 	if n > 1 && bytes.Equal(data[:2], MultiEventEscape) {
 		err = json.Unmarshal(data[:n], &events)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		event := new(MixpanelEvent)
+		event := new(parser.MixpanelEvent)
 		err = json.Unmarshal(data[:n], event)
 		if err != nil {
 			return nil, err
 		}
-		events = []MixpanelEvent{
+		events = []parser.MixpanelEvent{
 			*event,
 		}
 	}
 	return events, nil
 }
 
-// ParseRequest -> MixpanelEvent
-func (worker *NginxLogParser) Parse(line Parseable) ([]MixpanelEvent, error) {
+// ParseRequest -> parser.MixpanelEvent
+func (worker *NginxLogParser) Parse(line parser.Parseable) ([]parser.MixpanelEvent, error) {
 	matches := LexLine(line.Data())
 
 	events, err := worker.decodeData(matches)
 	if err != nil {
-		return []MixpanelEvent{*MakeErrorEvent(line, matches)}, err
+		return []parser.MixpanelEvent{*parser.MakeErrorEvent(line, matches)}, err
 	}
 
-	m := make([]MixpanelEvent, len(events))
+	m := make([]parser.MixpanelEvent, len(events))
 	for i, e := range events {
 		m[i] = e
-		m[i].EventTime = json.Number(matches.Time)
-		m[i].ClientIp = matches.Ip
+		m[i].EventTime = json.Number(matches.when)
+		m[i].ClientIp = matches.ip
 		m[i].Pstart = line.StartTime()
 		if len(events) > 1 {
-			m[i].UUID = fmt.Sprintf("%s-%d", matches.UUID, i)
+			m[i].UUID = fmt.Sprintf("%s-%d", matches.uuid, i)
 		} else {
-			m[i].UUID = matches.UUID
+			m[i].UUID = matches.uuid
 		}
 	}
 	if len(m) > 1 {

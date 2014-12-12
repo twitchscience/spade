@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/twitchscience/spade/parser"
+	"github.com/twitchscience/spade/parser/nginx"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/table_config"
 	"github.com/twitchscience/spade/transformer"
@@ -57,7 +58,7 @@ func BuildProcessor(configs map[string][]transformer.RedshiftType) *RequestParse
 		t: transformer.NewRedshiftTransformer(
 			table_config.NewStaticLoader(configs),
 		),
-		parser: parser.BuildSpadeParser(&dummyReporter{}),
+		parser: nginx.BuildSpadeParser(&dummyReporter{}),
 	}
 }
 
