@@ -70,7 +70,7 @@ func MakePanicedEvent(line *ParseRequest) *MixpanelEvent {
 }
 
 func MakeErrorEvent(line *ParseRequest, matches *parseResult) *MixpanelEvent {
-	if matches.UUID == "" {
+	if matches.UUID == "" || len(matches.UUID) > 64 {
 		matches.UUID = "error"
 	}
 	if matches.Time == "" {
