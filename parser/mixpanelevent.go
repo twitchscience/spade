@@ -42,12 +42,10 @@ func MakePanicedEvent(line Parseable) *MixpanelEvent {
 	}
 }
 
-func MakeErrorEvent(line Parseable, res ParseResult) *MixpanelEvent {
-	uuid := res.UUID()
+func MakeErrorEvent(line Parseable, uuid string, when string) *MixpanelEvent {
 	if uuid == "" || len(uuid) > 64 {
 		uuid = "error"
 	}
-	when := res.Time()
 	if when == "" {
 		when = "0"
 	}

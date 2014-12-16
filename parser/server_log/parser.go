@@ -8,22 +8,24 @@ import (
 )
 
 func Register() {
-	parser.Register("server_log", &NginxLogParser{
+	parser.Register("server_log", &serverLogParser{
 		escaper: &parser.ByteQueryUnescaper{},
 	})
 }
 
-type NginxLogParser struct {
+type serverLogParser struct {
 	escaper parser.URLEscaper
 }
 
 // ParseRequest -> parser.MixpanelEvent
-func (worker *NginxLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, error) {
-	matches := LexLine(raw.Data())
+func (worker *serverLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, error) {
+	matches := lexLine(raw.Data())
 
 	events, err := parser.DecodeBase64(matches, worker.escaper)
 	if err != nil {
-		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, matches)}, err
+		return []parser.MixpanelEvent{
+			*parser.MakeErrorEvent(raw, matches.uuid, matches.when),
+		}, err
 	}
 
 	m := make([]parser.MixpanelEvent, len(events))

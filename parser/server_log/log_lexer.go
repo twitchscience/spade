@@ -37,7 +37,7 @@ func (p *parseResult) Data() []byte {
 }
 
 // This is a super ugly state machine to parse Nginx logs and extract info in a single pass
-func LexLine(line []byte) *parseResult {
+func lexLine(line []byte) *parseResult {
 	state := IP_GRAB
 	ip := bytes.NewBuffer(make([]byte, 0, 16))
 	time := bytes.NewBuffer(make([]byte, 0, 16))
