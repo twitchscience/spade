@@ -9,11 +9,7 @@ import (
 var parsers = make(map[string]Parser)
 
 // Register makes Parsers available to parse lines. Each Parser should
-// implement an init() call which registers itself by calling this
-// method. Ensure the init() method is called by importing the parser
-// from whichever entry point makes the most sense. For example, in
-// main.go: import _ "github.com/twitchscience/spade/parser/nginx"
-// ensures that the nginx log parser is available
+// provide a mechanism to register themselves with this Registry.
 func Register(name string, p Parser) {
 	if p == nil {
 		panic("parser: Register parser is nil")
@@ -29,7 +25,7 @@ type fanoutParser struct {
 }
 
 func (f *fanoutParser) Parse(p Parseable) (events []MixpanelEvent, err error) {
-	if nginx, ok := parsers["nginx"]; ok {
+	if nginx, ok := parsers["server_log"]; ok {
 		events, err = nginx.Parse(p)
 		if err != nil {
 			return
@@ -39,7 +35,7 @@ func (f *fanoutParser) Parse(p Parseable) (events []MixpanelEvent, err error) {
 		}
 		return
 	}
-	panic("parser: nginx parser not found")
+	panic("parser: server_log parser not found")
 }
 
 func BuildSpadeParser(r reporter.Reporter) Parser {

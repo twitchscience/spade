@@ -1,4 +1,4 @@
-package nginx
+package server_log
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 var MultiEventEscape = []byte{'[', '{'}
 
 func Register() {
-	parser.Register("nginx", &NginxLogParser{
+	parser.Register("server_log", &NginxLogParser{
 		Escaper: &ByteQueryUnescaper{},
 	})
 }

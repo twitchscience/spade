@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/twitchscience/spade/parser"
-	"github.com/twitchscience/spade/parser/nginx"
+	nginx "github.com/twitchscience/spade/parser/server_log"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reader"
 	"github.com/twitchscience/spade/reporter"

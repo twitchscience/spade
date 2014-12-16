@@ -1,4 +1,4 @@
-package nginx
+package server_log
 
 import (
 	"reflect"

@@ -1,9 +1,10 @@
-package nginx
+package server_log
 
 import (
 	"io/ioutil"
 	"net/url"
 	"testing"
+
 	"github.com/twitchscience/spade/reporter"
 )
 
