@@ -12,7 +12,7 @@ import (
 
 var MultiEventEscape = []byte{'[', '{'}
 
-func init() {
+func Register() {
 	parser.Register("nginx", &NginxLogParser{
 		Escaper: &ByteQueryUnescaper{},
 	})

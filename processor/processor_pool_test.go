@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/twitchscience/spade/parser"
-	_ "github.com/twitchscience/spade/parser/nginx"
+	"github.com/twitchscience/spade/parser/nginx"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/table_config"
 	"github.com/twitchscience/spade/transformer"
@@ -190,6 +190,10 @@ func requestEqual(r1, r2 *writer.WriteRequest) bool {
 //
 //  Tests
 //
+func init() {
+	nginx.Register() // TODO: replace with TestMain() in go 1.4
+}
+
 func TestPanicRecoveryProcessing(t *testing.T) {
 	now := time.Now().In(PST)
 	rawLine := `10.1.40.26 [1382033155.388] "ip=0&data=eyJldmVudCIgOiJsb2dpbiJ9" uuid1`

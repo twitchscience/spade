@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/twitchscience/spade/parser"
-	_ "github.com/twitchscience/spade/parser/nginx"
+	"github.com/twitchscience/spade/parser/nginx"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reader"
 	"github.com/twitchscience/spade/reporter"
@@ -114,7 +114,12 @@ func (p *parseRequest) StartTime() time.Time {
 //
 //  Tests
 //
+func init() {
+	nginx.Register() // TODO: replace with TestMain() in go 1.4
+}
+
 func TestLogParser(t *testing.T) {
+
 	r := buildTestReporter()
 	parser := parser.BuildSpadeParser(r)
 	writer := buildTestWriter(r)
