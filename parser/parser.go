@@ -58,6 +58,7 @@ type URLEscaper interface {
 }
 
 type ParseResult interface {
+	Data() []byte
 	UUID() string
 	Time() string
 }

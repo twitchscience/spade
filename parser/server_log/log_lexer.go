@@ -17,6 +17,25 @@ const (
 	DONE
 )
 
+type parseResult struct {
+	ip   string
+	when string
+	data []byte
+	uuid string
+}
+
+func (p *parseResult) UUID() string {
+	return p.uuid
+}
+
+func (p *parseResult) Time() string {
+	return p.when
+}
+
+func (p *parseResult) Data() []byte {
+	return p.data
+}
+
 // This is a super ugly state machine to parse Nginx logs and extract info in a single pass
 func LexLine(line []byte) *parseResult {
 	state := IP_GRAB
