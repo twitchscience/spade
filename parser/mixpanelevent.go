@@ -21,7 +21,7 @@ type MixpanelEvent struct {
 func MakeBadEncodedEvent() *MixpanelEvent {
 	return &MixpanelEvent{
 		Pstart:     time.Now(),
-		EventTime:  json.Number(0),
+		EventTime:  json.Number("0"),
 		UUID:       "error",
 		ClientIp:   "",
 		Event:      "Unknown",
@@ -33,7 +33,7 @@ func MakeBadEncodedEvent() *MixpanelEvent {
 func MakePanicedEvent(line Parseable) *MixpanelEvent {
 	return &MixpanelEvent{
 		Pstart:     line.StartTime(),
-		EventTime:  json.Number(0),
+		EventTime:  json.Number("0"),
 		UUID:       "error",
 		ClientIp:   "",
 		Event:      "Unknown",
@@ -49,13 +49,12 @@ func MakeErrorEvent(line Parseable, uuid string, when string) *MixpanelEvent {
 	if when == "" {
 		when = "0"
 	}
-	t, ok := strconv.Atoi(when)
-	if ok != nil {
-		t = 0
+	if _, err := strconv.Atoi(when); err != nil {
+		when = "0"
 	}
 	return &MixpanelEvent{
 		Pstart:     line.StartTime(),
-		EventTime:  json.Number(t),
+		EventTime:  json.Number(when),
 		UUID:       uuid,
 		ClientIp:   "",
 		Event:      "Unknown",
