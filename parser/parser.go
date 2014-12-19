@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/twitchscience/spade/reporter"
@@ -20,13 +21,22 @@ func Register(name string, p Parser) {
 	parsers[name] = p
 }
 
+func clearAll() {
+	parsers = make(map[string]Parser)
+}
+
 type fanoutParser struct {
 	reporter reporter.Reporter
 }
 
-func (f *fanoutParser) Parse(p Parseable) (events []MixpanelEvent, err error) {
-	if nginx, ok := parsers["server_log"]; ok {
-		events, err = nginx.Parse(p)
+func (f *fanoutParser) Parse(line Parseable) (events []MixpanelEvent, err error) {
+	numParsers := len(parsers)
+	if numParsers == 0 {
+		return nil, fmt.Errorf("parser: no parsers registered")
+	}
+
+	for _, p := range parsers {
+		events, err = p.Parse(line)
 		if err != nil {
 			return
 		}
@@ -35,7 +45,7 @@ func (f *fanoutParser) Parse(p Parseable) (events []MixpanelEvent, err error) {
 		}
 		return
 	}
-	panic("parser: server_log parser not found")
+	return nil, nil
 }
 
 func BuildSpadeParser(r reporter.Reporter) Parser {
