@@ -52,9 +52,9 @@ func (j *jsonLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, err
 		m[i].ClientIp = rawEvent.ClientIp.String()
 		m[i].Pstart = raw.StartTime()
 		if len(events) > 1 {
-			m[i].UUID = fmt.Sprintf("%s-%d", rawEvent.Uuid, i)
+			m[i].UUID = fmt.Sprintf("%s-%d", parsedEvent.UUID(), i)
 		} else {
-			m[i].UUID = rawEvent.Uuid
+			m[i].UUID = parsedEvent.UUID()
 		}
 	}
 	return m, nil
