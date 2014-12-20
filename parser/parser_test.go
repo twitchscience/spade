@@ -51,6 +51,8 @@ func (t *testReporter) Finalize() map[string]int {
 	return make(map[string]int, 1)
 }
 
+var receivedAt = time.Now()
+
 type logLine struct{}
 
 func (l *logLine) Data() []byte {
@@ -58,7 +60,7 @@ func (l *logLine) Data() []byte {
 }
 
 func (l *logLine) StartTime() time.Time {
-	return time.Now()
+	return receivedAt
 }
 
 func TestNoParserCall(t *testing.T) {
