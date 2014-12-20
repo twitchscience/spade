@@ -27,14 +27,30 @@ func (_ *multiEventParser) Parse(_ Parseable) ([]MixpanelEvent, error) {
 	return make([]MixpanelEvent, 2), nil
 }
 
+func checkForParser(name string) bool {
+	for _, p := range parsers {
+		if p.name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRegisterAndClearing(t *testing.T) {
-	Register("test_parser", &singleEventParser{})
-	if _, ok := parsers["test_parser"]; !ok {
-		t.Fatalf("register: test_parser not present, expected it to be. Current parsers: %v", parsers)
+	parserName := "test_parser"
+	Register(parserName, &singleEventParser{})
+	if !checkForParser(parserName) {
+		t.Fatalf("register: %s not present, expected it to be. Current parsers: %v", parserName, parsers)
+	}
+	if err := Register(parserName, &singleEventParser{}); err == nil {
+		t.Fatal("register: expected error when registering duplicate named parser, didn't get one")
 	}
 	clearAll()
-	if _, ok := parsers["test_parser"]; ok {
-		t.Fatalf("register: test_parser present, expected it not to be. Current parsers: %v", parsers)
+	if checkForParser(parserName) {
+		t.Fatalf("register: %s present, expected it not to be. Current parsers: %v", parserName, parsers)
+	}
+	if err := Register("", nil); err == nil {
+		t.Fatal("register: expected error when setting nil parser, didn't get one")
 	}
 }
 
@@ -111,5 +127,35 @@ func TestParseCall(t *testing.T) {
 				tr.cnt,
 			)
 		}
+	}
+}
+
+func setupParsers(ps ...Parser) Parser {
+	clearAll()
+	fop := BuildSpadeParser(&testReporter{})
+	for i, p := range ps {
+		Register(fmt.Sprintf("parser%d", i), p)
+	}
+	return fop
+}
+
+func TestMultiParserCall(t *testing.T) {
+	p := setupParsers(&errorParser{}, &singleEventParser{})
+	if _, err := p.Parse(&logLine{}); err != nil {
+		t.Fatalf("multi parser: unexpected error %v", err)
+	}
+
+	p = setupParsers(&singleEventParser{}, &errorParser{})
+	if _, err := p.Parse(&logLine{}); err != nil {
+		t.Fatalf("multi parser: unexpected error %v", err)
+	}
+
+	p = setupParsers(&multiEventParser{}, &singleEventParser{}, &errorParser{})
+	mes, err := p.Parse(&logLine{})
+	if err != nil {
+		t.Fatalf("multi parser: unexpected error %v", err)
+	}
+	if len(mes) != 2 {
+		t.Fatalf("multi parser: incorrect event count returned. Expected %d, got %d", 2, len(mes))
 	}
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/log_manager"
+	jsonLog "github.com/twitchscience/spade/parser/json_log"
 	nginx "github.com/twitchscience/spade/parser/server_log"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/uploader"
@@ -118,6 +119,7 @@ func init() {
 	}
 
 	nginx.Register()
+	jsonLog.Register()
 }
 
 func main() {

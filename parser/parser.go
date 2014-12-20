@@ -7,22 +7,33 @@ import (
 	"github.com/twitchscience/spade/reporter"
 )
 
-var parsers = make(map[string]Parser)
+type parserEntry struct {
+	name string
+	p    Parser
+}
+
+var parsers = []parserEntry{}
 
 // Register makes Parsers available to parse lines. Each Parser should
 // provide a mechanism to register themselves with this Registry.
-func Register(name string, p Parser) {
+func Register(name string, p Parser) error {
 	if p == nil {
-		panic("parser: Register parser is nil")
+		return fmt.Errorf("parser: Register parser is nil")
 	}
-	if _, dup := parsers[name]; dup {
-		panic("parser: Register called twice for parser: " + name)
+	for _, k := range parsers {
+		if k.name == name {
+			return fmt.Errorf("parser: Register called twice for parser: %s", name)
+		}
 	}
-	parsers[name] = p
+	parsers = append(parsers, parserEntry{
+		name: name,
+		p:    p,
+	})
+	return nil
 }
 
 func clearAll() {
-	parsers = make(map[string]Parser)
+	parsers = []parserEntry{}
 }
 
 type fanoutParser struct {
@@ -35,17 +46,23 @@ func (f *fanoutParser) Parse(line Parseable) (events []MixpanelEvent, err error)
 		return nil, fmt.Errorf("parser: no parsers registered")
 	}
 
-	for _, p := range parsers {
-		events, err = p.Parse(line)
-		if err != nil {
-			return
+	for _, entry := range parsers {
+		if mes, e := entry.p.Parse(line); e != nil {
+			if events == nil {
+				events = mes
+				err = e
+			}
+		} else {
+			events = mes
+			err = e
+			if len(events) > 1 {
+				f.reporter.IncrementExpected(len(events) - 1)
+			}
+			// return the first successful parse
+			break
 		}
-		if len(events) > 1 {
-			f.reporter.IncrementExpected(len(events) - 1)
-		}
-		return
 	}
-	return nil, nil
+	return
 }
 
 func BuildSpadeParser(r reporter.Reporter) Parser {
