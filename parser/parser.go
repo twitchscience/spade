@@ -15,7 +15,9 @@ type parserEntry struct {
 var parsers = []parserEntry{}
 
 // Register makes Parsers available to parse lines. Each Parser should
-// provide a mechanism to register themselves with this Registry.
+// provide a mechanism to register themselves with this Registry. The
+// order in which parsers are registered are the order in which
+// they'll be called when attempting to parse a Parseable
 func Register(name string, p Parser) error {
 	if p == nil {
 		return fmt.Errorf("parser: Register parser is nil")
@@ -47,11 +49,9 @@ func (f *fanoutParser) Parse(line Parseable) (events []MixpanelEvent, err error)
 	}
 
 	for _, entry := range parsers {
-		if mes, e := entry.p.Parse(line); e != nil {
-			if events == nil {
-				events = mes
-				err = e
-			}
+		if mes, e := entry.p.Parse(line); e != nil && events == nil {
+			events = mes
+			err = e
 		} else {
 			events = mes
 			err = e

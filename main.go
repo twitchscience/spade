@@ -118,6 +118,8 @@ func init() {
 		log.Fatalf("Got Error while building audit: %s\n", err)
 	}
 
+	// First try the nginx/space-delimited parser, if that fails try the
+	// json log parser
 	nginx.Register()
 	jsonLog.Register()
 }
