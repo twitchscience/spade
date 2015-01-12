@@ -3,19 +3,21 @@ package request_handler
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"mime"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/twitchscience/aws_utils/environment"
-
 	"github.com/cactus/go-statsd-client/statsd"
+	"github.com/twitchscience/aws_utils/environment"
 	"github.com/twitchscience/gologging/gologging"
+	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade_edge/uuid"
 )
 
@@ -42,7 +44,7 @@ var (
 )
 
 type SpadeEdgeLogger interface {
-	Log(EventRecord)
+	Log(event *spade.Event) error
 	Close()
 }
 
@@ -62,29 +64,36 @@ func (a *FileAuditLogger) Close() {
 	a.SpadeLogger.Close()
 }
 
-func (a *FileAuditLogger) Log(log EventRecord) {
-	a.AuditLogger.Log("%s", log.AuditTrail())
-	a.SpadeLogger.Log("%s", log.HttpRequest())
+func (a *FileAuditLogger) Log(event *spade.Event) error {
+	a.AuditLogger.Log("%s", auditTrail(event))
+
+	logLine, err := spade.Marshal(event)
+	if err != nil {
+		return err
+	}
+	a.SpadeLogger.Log("%s", logLine)
+	return nil
 }
 
-func getIpFromHeader(headerKey string, header http.Header) string {
+func auditTrail(e *spade.Event) string {
+	return fmt.Sprintf("[%d] %s", e.ReceivedAt.Unix(), e.Uuid)
+}
+
+func getIpFromHeader(headerKey string, header http.Header) net.IP {
 	clientIp := header.Get(headerKey)
-	if clientIp == "" {
-		return clientIp
-	}
 	comma := strings.Index(clientIp, ",")
 	if comma > -1 {
 		clientIp = clientIp[:comma]
 	}
 
-	return clientIp
+	return net.ParseIP(clientIp)
 }
 
 func (s *SpadeHandler) HandleSpadeRequests(r *http.Request, context *requestContext) int {
 	statTimer := newTimerInstance()
 
 	clientIp := getIpFromHeader(context.IpHeader, r.Header)
-	if clientIp == "" {
+	if clientIp == nil {
 		return http.StatusBadRequest
 	}
 	context.Timers["ip"] = statTimer.stopTiming()
@@ -121,15 +130,17 @@ func (s *SpadeHandler) HandleSpadeRequests(r *http.Request, context *requestCont
 	uuid := s.Assigner.Assign()
 	context.Timers["uuid"] = statTimer.stopTiming()
 
-	record := &Event{
-		ReceivedAt: context.Now,
-		ClientIp:   clientIp,
-		UUID:       uuid,
-		Data:       data,
-		Version:    EVENT_VERSION,
-	}
+	event := spade.NewEvent(
+		context.Now,
+		clientIp,
+		uuid,
+		data,
+	)
 
-	s.EdgeLogger.Log(record)
+	// Note, Log() has a side effect of writing to the log
+	if err = s.EdgeLogger.Log(event); err != nil {
+		return http.StatusBadRequest
+	}
 	context.Timers["write"] = statTimer.stopTiming()
 
 	return http.StatusNoContent
@@ -149,11 +160,11 @@ func getTimeStampFromHeader(r *http.Request) (time.Time, error) {
 		if splitIdx > -1 {
 			secs, err := strconv.ParseInt(timeStamp[:splitIdx], 10, 64)
 			if err == nil {
-				return time.Unix(secs, 0), nil
+				return time.Unix(secs, 0).UTC(), nil
 			}
 		}
 	}
-	return time.Time{}, errors.New("could not process timestamp from header")
+	return time.Time{}.UTC(), errors.New("could not process timestamp from header")
 }
 
 var allowedMethods = map[string]bool{
@@ -166,7 +177,7 @@ func (s *SpadeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 	var ts time.Time
 	var err error
 	ts = now

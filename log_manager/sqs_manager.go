@@ -17,7 +17,6 @@ import (
 	"github.com/twitchscience/aws_utils/environment"
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/gologging/gologging"
-
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"

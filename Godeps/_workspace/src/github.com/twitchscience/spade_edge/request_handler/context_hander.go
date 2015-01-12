@@ -15,13 +15,13 @@ type timerInstance struct {
 
 func newTimerInstance() *timerInstance {
 	return &timerInstance{
-		start: time.Now(),
+		start: time.Now().UTC(),
 	}
 }
 
 func (t *timerInstance) stopTiming() (r time.Duration) {
 	r = time.Now().Sub(t.start)
-	t.start = time.Now()
+	t.start = time.Now().UTC()
 	return
 }
 

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/reporter"
-	"github.com/cactus/go-statsd-client/statsd"
 )
 
 var (

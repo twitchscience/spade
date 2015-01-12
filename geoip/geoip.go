@@ -2,6 +2,7 @@ package geoip
 
 import (
 	"fmt"
+
 	geo "github.com/abh/geoip"
 )
 

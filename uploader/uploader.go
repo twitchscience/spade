@@ -8,13 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/crowdmob/goamz/s3"
 	"github.com/twitchscience/aws_utils/environment"
 	"github.com/twitchscience/aws_utils/notifier"
 	"github.com/twitchscience/aws_utils/uploader"
-
 	gen "github.com/twitchscience/gologging/key_name_generator"
-
-	"github.com/crowdmob/goamz/s3"
 )
 
 var (

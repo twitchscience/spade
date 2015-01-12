@@ -6,12 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/table_config"
 	"github.com/twitchscience/spade/transformer"
-	"github.com/twitchscience/spade_edge/request_handler"
-
 	"github.com/twitchscience/spade/writer"
 )
 
@@ -108,17 +107,26 @@ func (s *StdoutSpadeWriter) Close() error {
 	return nil
 }
 
-func (e *EZSpadeEdgeLogger) Log(r request_handler.EventRecord) {
-	for _, request := range e.p.Process(e.edgeEventToParseRequest(r)) {
+func (e *EZSpadeEdgeLogger) Log(r *spade.Event) error {
+	parseable, err := e.edgeEventToParseRequest(r)
+	if err != nil {
+		return err
+	}
+	for _, request := range e.p.Process(parseable) {
 		e.w.Write(&request)
 	}
+	return nil
 }
 
 func (e *EZSpadeEdgeLogger) Close() {}
 
-func (e *EZSpadeEdgeLogger) edgeEventToParseRequest(r request_handler.EventRecord) parser.Parseable {
-	return &parseRequest{
-		data:  []byte(fmt.Sprintf("%v\n", r.HttpRequest())),
-		start: time.Now(),
+func (e *EZSpadeEdgeLogger) edgeEventToParseRequest(r *spade.Event) (parser.Parseable, error) {
+	b, err := spade.Marshal(r)
+	if err != nil {
+		return nil, err
 	}
+	return &parseRequest{
+		data:  b,
+		start: time.Now(),
+	}, nil
 }
