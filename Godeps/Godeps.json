@@ -60,15 +60,15 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
-			"Rev": "4baa3fcb0a790749eb0130bb15aabad66fadc1ce"
+			"Rev": "b233f27b53051f2f8636fe9f48c0feaa63ad9532"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/scoop_protocol",
-			"Rev": "4baa3fcb0a790749eb0130bb15aabad66fadc1ce"
+			"Rev": "b233f27b53051f2f8636fe9f48c0feaa63ad9532"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/spade",
-			"Rev": "4baa3fcb0a790749eb0130bb15aabad66fadc1ce"
+			"Rev": "b233f27b53051f2f8636fe9f48c0feaa63ad9532"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/spade_edge/request_handler",
