@@ -72,7 +72,6 @@ var (
 	transformMap = map[string]ColumnTranformer{
 		"int":          intFormat(32),
 		"bigint":       intFormat(64),
-		"int8":         intFormat(8),
 		"float":        floatFormat,
 		"varchar":      varcharFormat,
 		"bool":         boolFormat,
