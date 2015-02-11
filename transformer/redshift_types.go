@@ -1,6 +1,8 @@
 package transformer
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -68,9 +70,9 @@ func GetTransform(t_type string) ColumnTranformer {
 // New types should register here
 var (
 	transformMap = map[string]ColumnTranformer{
-		"int":          intFormat,
-		"bigint":       intFormat,
-		"int8":         intFormat,
+		"int":          intFormat(32),
+		"bigint":       intFormat(64),
+		"int8":         intFormat(8),
 		"float":        floatFormat,
 		"varchar":      varcharFormat,
 		"bool":         boolFormat,
@@ -104,6 +106,7 @@ var (
 	UnknownTransformError                 = errors.New("Unrecognized transform")
 	ColumnNotFoundError                   = errors.New("Property Not Found")
 	geoIpDB               geoip.GeoLookup = loadDB()
+	md5Hasher                             = md5.New()
 )
 
 func loadDB() geoip.GeoLookup {
@@ -130,27 +133,33 @@ const (
 	RedshiftDatetimeIngestString = "2006-01-02 15:04:05.999"
 	fiveDigitYearCutoff          = 13140000000
 	timeLowerBound               = 1000000000
+	FloatLowerBound              = 0.0000000001
 )
 
-func intFormat(target interface{}) (string, error) {
-	// Note that the json decoder we are using outputs as json.Number
-	t, ok := target.(json.Number)
-	var i int64
-	var err error
-	if !ok { // we should try parsing it from string
-		strTarget, ok := target.(string)
-		if !ok {
-			err = errors.New("nil target")
+func intFormat(bitsAllowed uint) func(interface{}) (string, error) {
+	return func(target interface{}) (string, error) {
+		// Note that the json decoder we are using outputs as json.Number
+		t, ok := target.(json.Number)
+		var i int64
+		var err error
+		if !ok { // we should try parsing it from string
+			strTarget, ok := target.(string)
+			if !ok {
+				err = errors.New("nil target")
+			} else {
+				i, err = strconv.ParseInt(strTarget, 10, 64)
+			}
 		} else {
-			i, err = strconv.ParseInt(strTarget, 10, 64)
+			i, err = t.Int64()
 		}
-	} else {
-		i, err = t.Int64()
+		if err != nil {
+			return "", err
+		}
+		if i > 1<<(bitsAllowed-1)-1 {
+			return "", err
+		}
+		return strconv.FormatInt(i, 10), nil
 	}
-	if err != nil {
-		return "", err
-	}
-	return strconv.FormatInt(i, 10), nil
 }
 
 func floatFormat(target interface{}) (string, error) {
@@ -170,7 +179,11 @@ func floatFormat(target interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strconv.FormatFloat(f, 'f', -1, 64), nil
+	integer, frac := math.Modf(f)
+	if frac < FloatLowerBound {
+		frac = 0.0
+	}
+	return strconv.FormatFloat(integer+frac, 'f', -1, 64), nil
 }
 
 func unixTimeFormat(target interface{}) (string, error) {
@@ -272,4 +285,16 @@ func ipAsnIntFormat(target interface{}) (string, error) {
 		return "", genError(target, "Ip Asn")
 	}
 	return strconv.Itoa(asnInt), nil
+}
+
+func hashTransformer(target interface{}) (string, error) {
+	str, ok := target.(string)
+	if !ok {
+		return "", genError(target, "Hash transformer")
+	}
+	hashedInt, err := strconv.ParseInt(hex.EncodeToString(md5Hasher.Sum([]byte(str)))[:10], 16, 64)
+	if err != nil {
+		return "", genError(target, "Hash transformer")
+	}
+	return strconv.FormatInt(hashedInt, 10), nil
 }
