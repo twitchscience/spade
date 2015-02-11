@@ -24,7 +24,7 @@ import (
 // for time transformers. Transform generators allow the user to define how
 // the transformer should parse a inbound property.
 
-// Note: all times are in PST.
+// All times are in PST.
 var PST = getPST()
 
 func getPST() *time.Location {
@@ -132,15 +132,15 @@ const (
 	RedshiftDatetimeIngestString = "2006-01-02 15:04:05.999"
 	fiveDigitYearCutoff          = 13140000000
 	timeLowerBound               = 1000000000
-	// Note that Redshift and Go appear to differ on floating point representation
-	// We use 10^-300 here as a stop gap estimation.
+	// Redshift and Go appear to differ on floating point representation
+	// we use 10^-300 here as a stop gap estimation.
 	FloatLowerBound = 10e-300
 )
 
 func intFormat(bitsAllowed uint) func(interface{}) (string, error) {
 	maxIntAllowed := int64(1<<(bitsAllowed-1) - 1)
 	return func(target interface{}) (string, error) {
-		// Note that the json decoder we are using outputs as json.Number
+		// The json decoder we are using outputs as json.Number
 		t, ok := target.(json.Number)
 		var i int64
 		var err error
