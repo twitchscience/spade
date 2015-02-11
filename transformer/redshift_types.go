@@ -132,11 +132,13 @@ const (
 	RedshiftDatetimeIngestString = "2006-01-02 15:04:05.999"
 	fiveDigitYearCutoff          = 13140000000
 	timeLowerBound               = 1000000000
-	FloatLowerBound              = 0.0000000001
+	// Note that Redshift and Go appear to differ on floating point representation
+	// We use 10^-300 here as a stop gap estimation.
+	FloatLowerBound = 10e-300
 )
 
 func intFormat(bitsAllowed uint) func(interface{}) (string, error) {
-	maxIntAllowed := 1<<(bitsAllowed-1) - 1
+	maxIntAllowed := int64(1<<(bitsAllowed-1) - 1)
 	return func(target interface{}) (string, error) {
 		// Note that the json decoder we are using outputs as json.Number
 		t, ok := target.(json.Number)
@@ -179,11 +181,10 @@ func floatFormat(target interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	integer, frac := math.Modf(f)
-	if frac < FloatLowerBound {
-		frac = 0.0
+	if f < FloatLowerBound {
+		f = 0.0
 	}
-	return strconv.FormatFloat(integer+frac, 'f', -1, 64), nil
+	return strconv.FormatFloat(f, 'f', -1, 64), nil
 }
 
 func unixTimeFormat(target interface{}) (string, error) {
