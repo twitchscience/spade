@@ -102,9 +102,7 @@ func TestIpConversion(t *testing.T) {
 	_type_runner(t, "222.22.24.22", ipAsnIntConverter, "4538", false)
 }
 
-// Note that the MD5 hasher appends to the current hash state. So
-// this implemenation will not be consistent, but it will be random.
 func TestHashTransformer(t *testing.T) {
 	hashTransformerConverter := RedshiftType{hashTransformer, "_"}
-	_type_runner(t, "asd", hashTransformerConverter, "418547815453", false)
+	_type_runner(t, "asd", hashTransformerConverter, "2014669166", false)
 }

@@ -70,16 +70,17 @@ func GetTransform(t_type string) ColumnTranformer {
 // New types should register here
 var (
 	transformMap = map[string]ColumnTranformer{
-		"int":          intFormat(32),
-		"bigint":       intFormat(64),
-		"float":        floatFormat,
-		"varchar":      varcharFormat,
-		"bool":         boolFormat,
-		"ipCity":       ipCityFormat,
-		"ipCountry":    ipCountryFormat,
-		"ipRegion":     ipRegionFormat,
-		"ipAsn":        ipAsnFormat,
-		"ipAsnInteger": ipAsnIntFormat,
+		"int":                intFormat(32),
+		"bigint":             intFormat(64),
+		"float":              floatFormat,
+		"varchar":            varcharFormat,
+		"bool":               boolFormat,
+		"ipCity":             ipCityFormat,
+		"ipCountry":          ipCountryFormat,
+		"ipRegion":           ipRegionFormat,
+		"ipAsn":              ipAsnFormat,
+		"ipAsnInteger":       ipAsnIntFormat,
+		"stringToIntegerMD5": hashTransformer,
 	}
 	transformGeneratorMap = map[string]func(string) ColumnTranformer{
 		"timestamp": genTimeFormat,
@@ -105,7 +106,6 @@ var (
 	UnknownTransformError                 = errors.New("Unrecognized transform")
 	ColumnNotFoundError                   = errors.New("Property Not Found")
 	geoIpDB               geoip.GeoLookup = loadDB()
-	md5Hasher                             = md5.New()
 )
 
 func loadDB() geoip.GeoLookup {
@@ -293,7 +293,8 @@ func hashTransformer(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Hash transformer")
 	}
-	hashedInt, err := strconv.ParseInt(hex.EncodeToString(md5Hasher.Sum([]byte(str)))[:10], 16, 64)
+	bytedString := md5.Sum([]byte(str))
+	hashedInt, err := strconv.ParseInt(hex.EncodeToString(bytedString[:])[:8], 16, 64)
 	if err != nil {
 		return "", genError(target, "Hash transformer")
 	}
