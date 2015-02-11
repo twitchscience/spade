@@ -43,7 +43,7 @@ func _transformer_runner(t *testing.T, input *parser.MixpanelEvent, expected *wr
 	var _config = &testLoader{
 		Configs: map[string][]RedshiftType{
 			"login": []RedshiftType{
-				RedshiftType{intFormat, "times"},
+				RedshiftType{intFormat(64), "times"},
 				RedshiftType{floatFormat, "fraction"},
 				RedshiftType{varcharFormat, "name"},
 				RedshiftType{unixTimeFormat, "now"},
