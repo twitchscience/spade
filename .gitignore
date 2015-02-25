@@ -7,7 +7,6 @@ libexec
 .aws
 .vagrant
 Vagrantfile
-build/packer.json
 *.prof
 .DS_STORE
 

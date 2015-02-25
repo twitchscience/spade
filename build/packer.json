@@ -1,0 +1,74 @@
+{
+  "variables":{
+    "project": null,
+    "aws_access_key": "{{env `AWS_ACCESS_KEY`}}",
+    "aws_secret_key": "{{env `AWS_SECRET_KEY`}}",
+    "binary_dir": null,
+    "scripts_dir": null,
+    "security_group_id": null,
+    "branch": null,
+    "source_ami": null,
+    "use_private_ip": null,
+    "seeker_debian": null
+  },
+  "builders": [{
+    "type": "amazon-ebs",
+    "ami_name": "{{user `project`}}-{{user `branch`}}-{{timestamp}}",
+    "access_key": "{{user `aws_access_key`}}",
+    "secret_key": "{{user `aws_secret_key`}}",
+    "region": "us-west-2",
+    "ssh_username": "ubuntu",
+    "source_ami": "{{user `source_ami`}}",
+    "instance_type": "m1.medium",
+    "ssh_private_ip": "{{user `use_private_ip`}}",
+    "security_group_id": "{{user `security_group_id`}}",
+     "run_tags": {
+      "type": "builder"
+    },
+    "tags": {
+      "type": "{{user `project`}}",
+      "description": "{{user `branch`}}"
+    }
+
+  }],
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": [
+        "mkdir -p /tmp/{{user `project`}}/bin",
+        "mkdir -p /tmp/{{user `project`}}/config",
+        "sudo mkdir -p /opt/science",
+        "sudo mv /tmp/{{user `project`}} /opt/science/{{user `project`}}"
+      ]
+    },
+    {
+      "type": "file",
+      "source": "{{user `binary_dir`}}/spade",
+      "destination": "/opt/science/{{user `project`}}/bin/spade"
+    },
+    {
+      "type": "file",
+      "source": "{{user `binary_dir`}}/transformer_dumper",
+      "destination": "/opt/science/{{user `project`}}/bin/transformer_dumper"
+    },
+    {
+      "type": "file",
+      "source": "build/scripts/",
+      "destination": "/opt/science/{{user `project`}}/bin"
+    },
+    {
+      "type": "file",
+      "source": "build/config/",
+      "destination": "/opt/science/{{user `project`}}/config"
+    },
+    {
+      "type": "shell",
+      "inline":
+      [
+        "sudo chmod +x /opt/science/{{user `project`}}/bin/*",
+        "/opt/science/{{user `project`}}/bin/transformer_dumper -outFile=/opt/science/{{user `project`}}/config/transforms_available.json",
+        "for f in /opt/science/{{user `project`}}/config/upstart/*.conf; do sudo ln -s $f /etc/init/$(basename $f); done"
+      ]
+    }
+  ]
+}
