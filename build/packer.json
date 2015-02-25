@@ -8,8 +8,7 @@
     "security_group_id": null,
     "branch": null,
     "source_ami": null,
-    "use_private_ip": null,
-    "seeker_debian": null
+    "use_private_ip": null
   },
   "builders": [{
     "type": "amazon-ebs",
