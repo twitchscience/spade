@@ -23,7 +23,10 @@ func getTypes(definitions []scoop_protocol.ColumnDefinition) ([]transformer.Reds
 			log.Printf("Critical error while parsing config %v\n", transformer.UnknownTransformError)
 			return nil, transformer.UnknownTransformError
 		}
-		_type := transformer.RedshiftType{t, definition.InboundName}
+		_type := transformer.RedshiftType{
+			Transformer:  t,
+			EventPropery: definition.InboundName,
+		}
 		types[i] = _type
 	}
 	return types, nil

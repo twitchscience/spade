@@ -57,7 +57,9 @@ func (s *StaticLoader) GetColumnsForEvent(eventName string) ([]transformer.Redsh
 	if transformArray, exists := s.configs[eventName]; exists {
 		return transformArray, nil
 	}
-	return nil, transformer.NotTrackedError{fmt.Sprintf("%s is not being tracked", eventName)}
+	return nil, transformer.NotTrackedError{
+		What: fmt.Sprintf("%s is not being tracked", eventName),
+	}
 }
 
 func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) (map[string][]transformer.RedshiftType, error) {
@@ -127,5 +129,7 @@ func (d *DynamicLoader) GetColumnsForEvent(eventName string) ([]transformer.Reds
 	if transformArray, exists := d.configs[eventName]; exists {
 		return transformArray, nil
 	}
-	return nil, transformer.NotTrackedError{fmt.Sprintf("%s is not being tracked", eventName)}
+	return nil, transformer.NotTrackedError{
+		What: fmt.Sprintf("%s is not being tracked", eventName),
+	}
 }

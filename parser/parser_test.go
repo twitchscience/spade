@@ -88,7 +88,7 @@ func TestNoParserCall(t *testing.T) {
 		t.Fatalf("parser: expected error, didn't get one")
 	}
 	if mes != nil {
-		t.Fatal("parser: expected events to be nil, got %v", mes)
+		t.Fatalf("parser: expected events to be nil, got %v", mes)
 	}
 }
 
