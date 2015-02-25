@@ -1,6 +1,8 @@
 package transformer
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +24,7 @@ import (
 // for time transformers. Transform generators allow the user to define how
 // the transformer should parse a inbound property.
 
-// Note: all times are in PST.
+// All times are in PST.
 var PST = getPST()
 
 func getPST() *time.Location {
@@ -68,17 +70,17 @@ func GetTransform(t_type string) ColumnTranformer {
 // New types should register here
 var (
 	transformMap = map[string]ColumnTranformer{
-		"int":          intFormat,
-		"bigint":       intFormat,
-		"int8":         intFormat,
-		"float":        floatFormat,
-		"varchar":      varcharFormat,
-		"bool":         boolFormat,
-		"ipCity":       ipCityFormat,
-		"ipCountry":    ipCountryFormat,
-		"ipRegion":     ipRegionFormat,
-		"ipAsn":        ipAsnFormat,
-		"ipAsnInteger": ipAsnIntFormat,
+		"int":                intFormat(32),
+		"bigint":             intFormat(64),
+		"float":              floatFormat,
+		"varchar":            varcharFormat,
+		"bool":               boolFormat,
+		"ipCity":             ipCityFormat,
+		"ipCountry":          ipCountryFormat,
+		"ipRegion":           ipRegionFormat,
+		"ipAsn":              ipAsnFormat,
+		"ipAsnInteger":       ipAsnIntFormat,
+		"stringToIntegerMD5": hashTransformer,
 	}
 	transformGeneratorMap = map[string]func(string) ColumnTranformer{
 		"timestamp": genTimeFormat,
@@ -130,27 +132,36 @@ const (
 	RedshiftDatetimeIngestString = "2006-01-02 15:04:05.999"
 	fiveDigitYearCutoff          = 13140000000
 	timeLowerBound               = 1000000000
+	// Redshift and Go appear to differ on floating point representation
+	// we use 10^-300 here as a stop gap estimation.
+	FloatLowerBound = 10e-300
 )
 
-func intFormat(target interface{}) (string, error) {
-	// Note that the json decoder we are using outputs as json.Number
-	t, ok := target.(json.Number)
-	var i int64
-	var err error
-	if !ok { // we should try parsing it from string
-		strTarget, ok := target.(string)
-		if !ok {
-			err = errors.New("nil target")
+func intFormat(bitsAllowed uint) func(interface{}) (string, error) {
+	maxIntAllowed := int64(1<<(bitsAllowed-1) - 1)
+	return func(target interface{}) (string, error) {
+		// The json decoder we are using outputs as json.Number
+		t, ok := target.(json.Number)
+		var i int64
+		var err error
+		if !ok { // we should try parsing it from string
+			strTarget, ok := target.(string)
+			if !ok {
+				err = errors.New("nil target")
+			} else {
+				i, err = strconv.ParseInt(strTarget, 10, 64)
+			}
 		} else {
-			i, err = strconv.ParseInt(strTarget, 10, 64)
+			i, err = t.Int64()
 		}
-	} else {
-		i, err = t.Int64()
+		if err != nil {
+			return "", err
+		}
+		if i > maxIntAllowed {
+			return "", err
+		}
+		return strconv.FormatInt(i, 10), nil
 	}
-	if err != nil {
-		return "", err
-	}
-	return strconv.FormatInt(i, 10), nil
 }
 
 func floatFormat(target interface{}) (string, error) {
@@ -169,6 +180,9 @@ func floatFormat(target interface{}) (string, error) {
 	}
 	if err != nil {
 		return "", err
+	}
+	if f < FloatLowerBound {
+		f = 0.0
 	}
 	return strconv.FormatFloat(f, 'f', -1, 64), nil
 }
@@ -272,4 +286,17 @@ func ipAsnIntFormat(target interface{}) (string, error) {
 		return "", genError(target, "Ip Asn")
 	}
 	return strconv.Itoa(asnInt), nil
+}
+
+func hashTransformer(target interface{}) (string, error) {
+	str, ok := target.(string)
+	if !ok {
+		return "", genError(target, "Hash transformer")
+	}
+	bytedString := md5.Sum([]byte(str))
+	hashedInt, err := strconv.ParseInt(hex.EncodeToString(bytedString[:])[:8], 16, 64)
+	if err != nil {
+		return "", genError(target, "Hash transformer")
+	}
+	return strconv.FormatInt(hashedInt, 10), nil
 }

@@ -21,7 +21,7 @@ func _type_runner(t *testing.T, input interface{}, _type RedshiftType,
 }
 
 func TestIntConversion(t *testing.T) {
-	normalInteger := RedshiftType{intFormat, "_"}
+	normalInteger := RedshiftType{intFormat(64), "_"}
 	_type_runner(t, json.Number("42"), normalInteger, "42", false)
 	_type_runner(t, "42", normalInteger, "42", false)
 
@@ -33,12 +33,20 @@ func TestIntConversion(t *testing.T) {
 	_type_runner(t, "12hs", normalInteger, "", true)
 }
 
+func TestSmallIntConversion(t *testing.T) {
+	smallInteger := RedshiftType{intFormat(8), "_"}
+	_type_runner(t, json.Number("128"), smallInteger, "", true)
+	_type_runner(t, "127", smallInteger, "127", false)
+}
+
 func TestFloatConversion(t *testing.T) {
 	normalFloat := RedshiftType{floatFormat, "_"}
 	_type_runner(t, json.Number("1.234"), normalFloat, "1.234", false)
 	_type_runner(t, json.Number("1234.0"), normalFloat, "1234", false)
 	_type_runner(t, json.Number("1234"), normalFloat, "1234", false)
 	_type_runner(t, "1234.0", normalFloat, "1234", false)
+	_type_runner(t, "1234.0000000000000000000000000000000000000000000000000000000000001",
+		normalFloat, "1234", false)
 	_type_runner(t, nil, normalFloat, "", true)
 
 }
@@ -92,4 +100,9 @@ func TestIpConversion(t *testing.T) {
 
 	ipAsnIntConverter := RedshiftType{ipAsnIntFormat, "_"}
 	_type_runner(t, "222.22.24.22", ipAsnIntConverter, "4538", false)
+}
+
+func TestHashTransformer(t *testing.T) {
+	hashTransformerConverter := RedshiftType{hashTransformer, "_"}
+	_type_runner(t, "asd", hashTransformerConverter, "2014669166", false)
 }
