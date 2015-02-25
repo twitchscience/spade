@@ -164,7 +164,7 @@ func TestMixpanelEvent(t *testing.T) {
 			t.Fatalf("mixpanelevent: Expected Properties of %v, got %v", tt.rawProps, me.Properties)
 		}
 		if tt.failMode != me.Failure {
-			t.Fatalf("mixpanelevent: Expected Failure of %t, got %t", tt.failMode, me.Failure)
+			t.Fatalf("mixpanelevent: Expected Failure of %s, got %s", tt.failMode, me.Failure)
 		}
 	}
 }

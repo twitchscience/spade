@@ -27,10 +27,22 @@ var (
 	_config = table_config.NewStaticLoader(
 		map[string][]transformer.RedshiftType{
 			"login": []transformer.RedshiftType{
-				transformer.RedshiftType{transformer.GetTransform("float"), "sampling_factor"},
-				transformer.RedshiftType{transformer.GetTransform("varchar"), "distinct_id"},
-				transformer.RedshiftType{transformer.GetTransform("f@timestamp@unix"), "time"},
-				transformer.RedshiftType{transformer.GetTransform("f@timestamp@unix"), "client_time"},
+				transformer.RedshiftType{
+					Transformer:   transformer.GetTransform("float"),
+					EventProperty: "sampling_factor",
+				},
+				transformer.RedshiftType{
+					Transformer:   transformer.GetTransform("varchar"),
+					EventProperty: "distinct_id",
+				},
+				transformer.RedshiftType{
+					Transformer:   transformer.GetTransform("f@timestamp@unix"),
+					EventProperty: "time",
+				},
+				transformer.RedshiftType{
+					Transformer:   transformer.GetTransform("f@timestamp@unix"),
+					EventProperty: "client_time",
+				},
 			},
 		},
 	)

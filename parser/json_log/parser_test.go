@@ -36,7 +36,7 @@ func loadFile(path string, t *testing.T) []byte {
 	}
 	b, err := ioutil.ReadAll(fd)
 	if err != nil {
-		t.Fatalf("loadFile: %v", path, err)
+		t.Fatalf("loadFile: %s, %v", path, err)
 	}
 	return b
 }
@@ -100,7 +100,7 @@ func TestSuccessfulJsonLogParser(t *testing.T) {
 		}
 		if me.EventTime != json.Number(fmt.Sprintf("%d", receivedAt.Unix())) {
 			t.Fatalf(
-				"mixpanel event: incorrect event times. Expected %t got %t",
+				"mixpanel event: incorrect event times. Expected %s got %s",
 				json.Number(fmt.Sprintf("%d", receivedAt.Unix())),
 				me.EventTime,
 			)
@@ -151,13 +151,13 @@ func TestFailurePaths(t *testing.T) {
 			t.Fatalf("parsing: expected mixpanel events")
 		}
 		if mes[0].Failure != tt.expectedFailure {
-			t.Fatalf("mixpanel event: incorrect failure mode. Expected %t got %t", tt.expectedFailure, mes[0].Failure)
+			t.Fatalf("mixpanel event: incorrect failure mode. Expected %s got %s", tt.expectedFailure, mes[0].Failure)
 		}
 		if mes[0].UUID != tt.expectedUuid {
 			t.Fatalf("mixpanel event: incorrect uuid. Expected %s got %s", tt.expectedUuid, mes[0].UUID)
 		}
 		if mes[0].EventTime != tt.expectedTime {
-			t.Fatalf("mixpanel event: incorrect time. Expected %t got %t", tt.expectedTime, mes[0].EventTime)
+			t.Fatalf("mixpanel event: incorrect time. Expected %s got %s", tt.expectedTime, mes[0].EventTime)
 		}
 	}
 }
