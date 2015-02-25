@@ -9,6 +9,5 @@ libexec
 Vagrantfile
 build/packer.json
 *.prof
-spade
 .DS_STORE
 
