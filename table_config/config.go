@@ -24,8 +24,8 @@ func getTypes(definitions []scoop_protocol.ColumnDefinition) ([]transformer.Reds
 			return nil, transformer.UnknownTransformError
 		}
 		_type := transformer.RedshiftType{
-			Transformer:  t,
-			EventPropery: definition.InboundName,
+			Transformer:   t,
+			EventProperty: definition.InboundName,
 		}
 		types[i] = _type
 	}
