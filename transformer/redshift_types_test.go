@@ -78,6 +78,10 @@ func TestBooleanConversion(t *testing.T) {
 	_type_runner(t, true, booleanConverter, "true", false)
 	_type_runner(t, "true", booleanConverter, "", true)
 	_type_runner(t, "asd", booleanConverter, "", true)
+	_type_runner(t, json.Number("1"), booleanConverter, "true", false)
+	_type_runner(t, json.Number("0"), booleanConverter, "false", false)
+	_type_runner(t, "1", booleanConverter, "true", true)
+	_type_runner(t, "0", booleanConverter, "false", true)
 }
 
 func TestIpConversion(t *testing.T) {

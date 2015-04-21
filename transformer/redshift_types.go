@@ -233,10 +233,18 @@ func varcharFormat(target interface{}) (string, error) {
 
 func boolFormat(target interface{}) (string, error) {
 	b, ok := target.(bool)
-	if !ok {
-		return "", genError(target, "bool")
+	if ok {
+		return fmt.Sprintf("%t", b), nil
+	} // else we should try parsing it as a number
+	i, ok := target.(json.Number)
+	if ok {
+		if i == json.Number("1") {
+			return "true", nil
+		} else if i == json.Number("0") {
+			return "false", nil
+		}
 	}
-	return fmt.Sprintf("%t", b), nil
+	return "", genError(target, "Bool")
 }
 
 func ipCityFormat(target interface{}) (string, error) {
