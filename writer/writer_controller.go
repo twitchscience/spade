@@ -16,17 +16,17 @@ const (
 )
 
 var (
-	MaxLogSize     = loadFromEnv("MAX_LOG_SIZE", 1<<32)                                     // default 4GB
-	MaxTimeAllowed = time.Duration(loadFromEnv("MAX_LOG_LIFETIME_MINS", 300)) * time.Minute // default 5 hours
+	maxLogSize        = getInt64FromEnv("MAX_LOG_BYTES", 1<<32)                                  // default 4GB
+	maxLogTimeAllowed = time.Duration(getInt64FromEnv("MAX_LOG_AGE_SECS", 300*60)) * time.Second // default 5 hours
 
-	MaxNonTrackedLogSize     = loadFromEnv("MAX_UNTRACKED_LOG_SIZE", 1<<29)                                    // default 500MB
-	MaxNonTrackedTimeAllowed = time.Duration(loadFromEnv("MAX_UNTRACKED_LOG_LIFETIME_MINS", 10)) * time.Minute // default 10 mins
+	maxNonTrackedLogSize        = getInt64FromEnv("MAX_UNTRACKED_LOG_BYTES", 1<<29)                                 // default 500MB
+	maxNonTrackedLogTimeAllowed = time.Duration(getInt64FromEnv("MAX_UNTRACKED_LOG_AGE_SECS", 10*60)) * time.Second // default 10 mins
 
 	EventsDir     = "events"
 	NonTrackedDir = "nontracked"
 )
 
-func loadFromEnv(target string, def int64) int64 {
+func getInt64FromEnv(target string, def int64) int64 {
 	env := os.Getenv(target)
 	if env == "" {
 		return def
@@ -128,8 +128,8 @@ func (controller *writerController) route(request *WriteRequest) error {
 				controller.Reporter,
 				controller.redshiftUploader,
 				RotateConditions{
-					MaxLogSize:     MaxLogSize,
-					MaxTimeAllowed: MaxTimeAllowed,
+					MaxLogSize:     maxLogSize,
+					MaxTimeAllowed: maxLogTimeAllowed,
 				},
 			)
 			if err != nil {
@@ -158,8 +158,8 @@ func (c *writerController) initNonTrackedWriter() error {
 		c.Reporter,
 		c.blueprintUploader,
 		RotateConditions{
-			MaxLogSize:     MaxNonTrackedLogSize,
-			MaxTimeAllowed: MaxNonTrackedTimeAllowed,
+			MaxLogSize:     maxNonTrackedLogSize,
+			MaxTimeAllowed: maxNonTrackedLogTimeAllowed,
 		},
 	)
 	if err != nil {
