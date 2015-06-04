@@ -46,16 +46,6 @@ var (
 	auditLogger  *gologging.UploadLogger
 )
 
-func InitLogger(logDir string) (*os.File, error) {
-	file, err := os.Create(
-		fmt.Sprintf("%v/%v.%v.log", logDir, "Parser", time.Now().Format("2006-01-02.15:04:00")))
-	if err != nil {
-		return nil, err
-	}
-	log.SetOutput(file)
-	return file, nil
-}
-
 type DummyNotifierHarness struct{}
 
 // TODO: DRY this up with spade-edge.2014-06-02 16:38
@@ -132,17 +122,6 @@ func main() {
 		auth,
 		aws.USWest2,
 	)
-
-	logF, logErr := InitLogger(*_dir + "/spade_logging")
-	defer func() {
-		if logErr == nil {
-			logF.Close()
-		}
-	}()
-
-	if logErr != nil {
-		log.Printf("Unable to open file in %v using for logging STDERR instead\n", *_dir+"/spade_logging")
-	}
 
 	// Set up statsd monitoring
 	// - If the env is not set up we wil use a noop connection
