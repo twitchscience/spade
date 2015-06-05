@@ -39,11 +39,12 @@ var (
 	_dir        = flag.String("spade_dir", ".", "where does spade_log live?")
 	logging_dir = flag.String("audit_log_dir", ".", "where does audit_log live?")
 
-	stats_prefix = flag.String("stat_prefix", "edge", "statsd prefix")
-	configUrl    = flag.String("config_url", "http://blueprint.twitch.tv/schemas", "the location of blueprint")
-	_gzipped     = flag.Bool("gzipped", false, "use to mark if input is gzipped")
-	CLOUD_ENV    = environment.GetCloudEnv()
-	auditLogger  *gologging.UploadLogger
+	sqsPollInterval = flag.Duration("sqs_poll_interval", 60*time.Second, "how often should we poll SQS?")
+	stats_prefix    = flag.String("stat_prefix", "processor", "statsd prefix")
+	configUrl       = flag.String("config_url", "http://blueprint.twitch.tv/schemas", "the location of blueprint")
+	_gzipped        = flag.Bool("gzipped", false, "use to mark if input is gzipped")
+	CLOUD_ENV       = environment.GetCloudEnv()
+	auditLogger     *gologging.UploadLogger
 )
 
 type DummyNotifierHarness struct{}
@@ -151,7 +152,7 @@ func main() {
 		blueprintUploaderPool,
 		auditLogger,
 		fetcher.New(*configUrl),
-	), time.Second*60)
+	), *sqsPollInterval)
 
 	wait := make(chan bool)
 

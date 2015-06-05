@@ -31,4 +31,5 @@ source "$SPADE_DIR/config/conf.sh"
 exec ${SPADE_DIR}/bin/spade -gzipped -spade_dir ${SPADE_DATA_DIR} \
   -config_url ${BLUEPRINT_URL} \
   -audit_log_dir ${SPADE_LOG_DIR} \
-  -stat_prefix ${STATSD_PREFIX}
+  -stat_prefix ${STATSD_PREFIX} \
+  -sqs_poll_interval "5s"
