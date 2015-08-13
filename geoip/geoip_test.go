@@ -25,8 +25,8 @@ func TestGeoIp(t *testing.T) {
 		t.Error("Got the wrong ASN!", g.GetAsn(anIp))
 		t.Fail()
 	}
-	testIp := "62.238.59.232"
-	if "\"'s-heerenhoek\"" != g.GetCity(testIp) {
+	testIp := "62.238.12.232"
+	if "\"Terneuzen\"" != g.GetCity(testIp) {
 		t.Error("Got the wrong city!")
 		t.Fail()
 	}
