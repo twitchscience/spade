@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/textproto"
 	"reflect"
 	"strings"
 	"testing"
@@ -59,33 +58,24 @@ func (t *testUUIDAssigner) Assign() string {
 	return fmt.Sprintf("%d", t.i)
 }
 
-func TestGetIpAndTimeStamp(t *testing.T) {
-	testIp := net.ParseIP("222.222.222.222")
-	testTime := time.Unix(1397768380, 0)
-
-	headers := map[string][]string{
-		textproto.CanonicalMIMEHeaderKey("X-ORIGINAL-MSEC"): []string{fmt.Sprintf("%d.000", testTime.Unix())},
-		textproto.CanonicalMIMEHeaderKey("X-Forwarded-For"): []string{testIp.String()},
+func TestParseLastForwarder(t *testing.T) {
+	var testHeaders = []struct {
+		input    string
+		expected net.IP
+	}{
+		{"a, b, 192.168.1.1", net.ParseIP("192.168.1.1")},
+		{"a, b,192.168.1.1 ", net.ParseIP("192.168.1.1")},
+		{"a, 10.1.1.1,", nil},
+		{" 192.168.1.1", net.ParseIP("192.168.1.1")},
 	}
-	ip := getIpFromHeader("X-Forwarded-For", headers)
 
-	if testIp.String() != ip.String() {
-		t.Errorf("Expecting %s for ip got %s\n", testIp, ip)
+	for _, h := range testHeaders {
+		output := parseLastForwarder(h.input)
+		if !h.expected.Equal(output) {
+			t.Fatalf("%s -> %s instead of expected %s", h.input, output, h.expected)
+		}
 	}
-}
 
-func TestGetForwardedIpAndTimeStamp(t *testing.T) {
-	testIp := net.ParseIP("222.222.222.222")
-	testTime := time.Unix(1397768380, 0)
-
-	headers := map[string][]string{
-		textproto.CanonicalMIMEHeaderKey("X-ORIGINAL-MSEC"): []string{fmt.Sprintf("%d.000", testTime.Unix())},
-		textproto.CanonicalMIMEHeaderKey("X-Forwarded-For"): []string{"222.222.222.222, 123.123.123.123, 123.123.123.124"},
-	}
-	ip := getIpFromHeader("X-Forwarded-For", headers)
-	if testIp.String() != ip.String() {
-		t.Errorf("Expecting %s for ip got %s\n", testIp, ip)
-	}
 }
 
 func TestEndPoints(t *testing.T) {
@@ -127,11 +117,12 @@ func TestEndPoints(t *testing.T) {
 
 		if tt.Expectation != "" {
 			expectedEvents = append(expectedEvents, spade.Event{
-				ReceivedAt: fixedTime.UTC(),
-				ClientIp:   fixedIP,
-				Uuid:       fmt.Sprintf("%d", uuidCounter),
-				Data:       tt.Expectation,
-				Version:    2,
+				ReceivedAt:    fixedTime.UTC(),
+				ClientIp:      fixedIP,
+				XForwardedFor: fixedIP.String(),
+				Uuid:          fmt.Sprintf("%d", uuidCounter),
+				Data:          tt.Expectation,
+				Version:       spade.PROTOCOL_VERSION,
 			})
 			uuidCounter++
 		}
@@ -143,7 +134,7 @@ func TestEndPoints(t *testing.T) {
 			t.Errorf("Expected Unmarshal to work, input: %s, err:%s", byteLog, err)
 		}
 		if !reflect.DeepEqual(ev, expectedEvents[idx]) {
-			t.Errorf("Event processed incorrectly: expected:%s got:%s", expectedEvents[idx], ev)
+			t.Errorf("Event processed incorrectly: expected:%v got:%v", expectedEvents[idx], ev)
 		}
 	}
 }

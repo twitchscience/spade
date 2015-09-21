@@ -43,6 +43,11 @@ type LoadCheckResponse struct {
 	ManifestURL string
 }
 
+type ScoopHealthCheck struct {
+	RedshiftDBConnError *string
+	IngesterDBConnError *string
+}
+
 type LoadStatus string
 
 const (
