@@ -109,7 +109,7 @@ func init() {
 	// First try the nginx/space-delimited parser, if that fails try the
 	// json log parser
 	nginx.Register()
-	jsonLog.Register()
+	jsonLog.Register(os.Getenv("ENABLE_IP_BUG") != "")
 }
 
 func main() {
