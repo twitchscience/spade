@@ -22,6 +22,7 @@ func randomString(n int) string {
 var exEvent = NewEvent(
 	time.Unix(1397768380, 0),
 	net.ParseIP("222.222.222.222"),
+	"192.168.0.1, 222.222.222.222",
 	"1",
 	randomString(2048),
 )

@@ -60,23 +60,23 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
-			"Rev": "b233f27b53051f2f8636fe9f48c0feaa63ad9532"
+			"Rev": "faec7ac1ec4c171bfd77506bdda891eccac2e312"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/scoop_protocol",
-			"Rev": "b233f27b53051f2f8636fe9f48c0feaa63ad9532"
+			"Rev": "faec7ac1ec4c171bfd77506bdda891eccac2e312"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/spade",
-			"Rev": "b233f27b53051f2f8636fe9f48c0feaa63ad9532"
+			"Rev": "faec7ac1ec4c171bfd77506bdda891eccac2e312"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/spade_edge/request_handler",
-			"Rev": "7989b2e79bee9b235389a06b89729950b822c81a"
+			"Rev": "7bbdf709117c56f7f75a2dd7a0ab01d65286a627"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/spade_edge/uuid",
-			"Rev": "7989b2e79bee9b235389a06b89729950b822c81a"
+			"Rev": "7bbdf709117c56f7f75a2dd7a0ab01d65286a627"
 		}
 	]
 }

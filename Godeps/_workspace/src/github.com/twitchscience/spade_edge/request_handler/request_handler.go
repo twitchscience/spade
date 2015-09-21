@@ -14,8 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/environment"
+
+	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/gologging/gologging"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade_edge/uuid"
@@ -48,23 +49,32 @@ type SpadeEdgeLogger interface {
 	Close()
 }
 
+type NoopLogger struct{}
+
+func (n *NoopLogger) Log(e *spade.Event) error { return nil }
+func (n *NoopLogger) Close()                   {}
+
 type SpadeHandler struct {
 	StatLogger statsd.Statter
 	EdgeLogger SpadeEdgeLogger
 	Assigner   uuid.UUIDAssigner
 }
 
-type FileAuditLogger struct {
+type EventLoggers struct {
 	AuditLogger *gologging.UploadLogger
 	SpadeLogger *gologging.UploadLogger
+	KLogger     SpadeEdgeLogger
 }
 
-func (a *FileAuditLogger) Close() {
+func (a *EventLoggers) Init() {}
+
+func (a *EventLoggers) Close() {
 	a.AuditLogger.Close()
 	a.SpadeLogger.Close()
+	a.KLogger.Close()
 }
 
-func (a *FileAuditLogger) Log(event *spade.Event) error {
+func (a *EventLoggers) Log(event *spade.Event) error {
 	a.AuditLogger.Log("%s", auditTrail(event))
 
 	logLine, err := spade.Marshal(event)
@@ -72,6 +82,7 @@ func (a *FileAuditLogger) Log(event *spade.Event) error {
 		return err
 	}
 	a.SpadeLogger.Log("%s", logLine)
+	a.KLogger.Log(event)
 	return nil
 }
 
@@ -79,23 +90,24 @@ func auditTrail(e *spade.Event) string {
 	return fmt.Sprintf("[%d] %s", e.ReceivedAt.Unix(), e.Uuid)
 }
 
-func getIpFromHeader(headerKey string, header http.Header) net.IP {
-	clientIp := header.Get(headerKey)
-	comma := strings.Index(clientIp, ",")
-	if comma > -1 {
-		clientIp = clientIp[:comma]
+func parseLastForwarder(header string) net.IP {
+	var clientIp string
+	comma := strings.LastIndex(header, ",")
+	if comma > -1 && comma < len(header)+1 {
+		clientIp = header[comma+1:]
+	} else {
+		clientIp = header
 	}
 
-	return net.ParseIP(clientIp)
+	return net.ParseIP(strings.TrimSpace(clientIp))
 }
 
 func (s *SpadeHandler) HandleSpadeRequests(r *http.Request, context *requestContext) int {
 	statTimer := newTimerInstance()
 
-	clientIp := getIpFromHeader(context.IpHeader, r.Header)
-	if clientIp == nil {
-		return http.StatusBadRequest
-	}
+	xForwardedFor := r.Header.Get(context.IpHeader)
+	clientIp := parseLastForwarder(xForwardedFor)
+
 	context.Timers["ip"] = statTimer.stopTiming()
 
 	err := r.ParseForm()
@@ -109,6 +121,7 @@ func (s *SpadeHandler) HandleSpadeRequests(r *http.Request, context *requestCont
 		// for example, something that maybe
 		// application/x-www-form-urlencoded but with the Content-Type
 		// header set incorrectly... best effort here on out
+
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			return http.StatusBadRequest
@@ -133,6 +146,7 @@ func (s *SpadeHandler) HandleSpadeRequests(r *http.Request, context *requestCont
 	event := spade.NewEvent(
 		context.Now,
 		clientIp,
+		xForwardedFor,
 		uuid,
 		data,
 	)
@@ -211,12 +225,12 @@ func (s *SpadeHandler) serve(w http.ResponseWriter, r *http.Request, context *re
 	case "/crossdomain.xml":
 		w.Header().Add("Content-Type", xmlApplicationType)
 		w.Write(xDomainContents)
-		status = http.StatusOK
+		return http.StatusOK
 	case "/healthcheck":
 		status = http.StatusOK
 	case "/xarth":
 		w.Write(xarth)
-		status = http.StatusOK
+		return http.StatusOK
 	// Accepted tracking endpoints.
 	case "/":
 		status = s.HandleSpadeRequests(r, context)

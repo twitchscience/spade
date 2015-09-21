@@ -13,8 +13,8 @@ type UUIDAssigner interface {
 }
 
 type SpadeUUIDAssigner struct {
-	Host         string
-	Cluster      string
+	host         string
+	cluster      string
 	secondTicker <-chan time.Time
 	assign       chan string
 	count        uint64
@@ -31,14 +31,14 @@ func StartUUIDAssigner(host string, cluster string) UUIDAssigner {
 	cluster = fmt.Sprintf("%08x", h.Sum(nil)[:4])
 
 	a := &SpadeUUIDAssigner{
-		Host:         host,
-		Cluster:      cluster,
+		host:         host,
+		cluster:      cluster,
 		secondTicker: time.Tick(1 * time.Second),
 		assign:       make(chan string),
 		count:        0,
 		fixedString:  fmt.Sprintf("%s-%s-", host, cluster),
 	}
-	go a.Crank()
+	go a.crank()
 	return a
 }
 
@@ -50,7 +50,7 @@ func (a *SpadeUUIDAssigner) makeId(currentTimeHex, countHex string, buf *bytes.B
 	buf.WriteString(countHex)
 }
 
-func (a *SpadeUUIDAssigner) Crank() {
+func (a *SpadeUUIDAssigner) crank() {
 	currentTimeHex := strconv.FormatInt(time.Now().Unix(), 16)
 	countHex := strconv.FormatUint(a.count, 16)
 	buf := bytes.NewBuffer(make([]byte, 0, 34))
