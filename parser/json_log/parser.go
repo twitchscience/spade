@@ -3,6 +3,10 @@ package json_log
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"net"
+	"strconv"
+	"strings"
 
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/parser"
@@ -24,10 +28,29 @@ func (j *jsonLogEvent) Time() string {
 	return fmt.Sprintf("%d", j.event.ReceivedAt.Unix())
 }
 
-type jsonLogParser struct{}
+type jsonLogParser struct {
+	enableIPBug bool // Test for whether the previous edge would've rejected the event and replicate that behavior
+}
 
-func Register() {
-	parser.Register("json_log", &jsonLogParser{})
+func Register(enableIPBug bool) {
+	parser.Register("json_log", &jsonLogParser{
+		enableIPBug: enableIPBug,
+	})
+	if enableIPBug == true {
+		log.Println("Warning: Enabling the IP bug behavior originally in the edge")
+	}
+}
+
+// Return true if this would have passed the original IP test on the edge (for version 3 events)
+func wasValidEdgeIp(xForwardedFor string) bool {
+	var clientIp string
+	comma := strings.Index(xForwardedFor, ",")
+	if comma > -1 {
+		clientIp = xForwardedFor[:comma]
+	} else {
+		clientIp = xForwardedFor
+	}
+	return net.ParseIP(clientIp) != nil
 }
 
 func (j *jsonLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, error) {
@@ -35,6 +58,11 @@ func (j *jsonLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, err
 	err := spade.Unmarshal(raw.Data(), &rawEvent)
 	if err != nil {
 		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, "", "")}, err
+	}
+
+	if j.enableIPBug && rawEvent.Version == 3 && !wasValidEdgeIp(rawEvent.XForwardedFor) {
+		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, rawEvent.Uuid, strconv.FormatInt(rawEvent.ReceivedAt.Unix(), 10))},
+			fmt.Errorf("Event uuid %s had invalid base client IP and ENABLE_IP_BUG mode is on!", rawEvent.Uuid)
 	}
 
 	parsedEvent := &jsonLogEvent{event: rawEvent}

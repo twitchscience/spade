@@ -80,7 +80,7 @@ func TestSuccessfulJsonLogParser(t *testing.T) {
 	jsonParser := &jsonLogParser{}
 	uuid := "123abc"
 	for _, tt := range tests {
-		b, err := spade.Marshal(spade.NewEvent(receivedAt, net.IPv4(10, 0, 0, 1), uuid, tt.logLine))
+		b, err := spade.Marshal(spade.NewEvent(receivedAt, net.IPv4(10, 0, 0, 1), "10.0.0.1", uuid, tt.logLine))
 		if err != nil {
 			t.Fatalf("create event: unexpected error %v", err)
 		}
@@ -122,19 +122,22 @@ func TestSuccessfulJsonLogParser(t *testing.T) {
 
 func TestFailurePaths(t *testing.T) {
 	tests := []struct {
+		errorName       string
 		logLine         []byte
 		expectedUuid    string
 		expectedTime    json.Number
 		expectedFailure reporter.FailMode
 	}{
-		{ // Incomplete Json
+		{
+			errorName:       "Incomplete Json",
 			logLine:         []byte(`{`),
 			expectedUuid:    "error",
 			expectedTime:    json.Number("0"),
 			expectedFailure: reporter.UNABLE_TO_PARSE_DATA,
 		},
-		{ // Incorrect base64 data
-			logLine:         loadFile("test_resources/brokendata.json", t),
+		{
+			errorName:       "Incorrect base64 data",
+			logLine:         loadFile("test_resources/broken_b64_data.json", t),
 			expectedUuid:    "123abc",
 			expectedTime:    json.Number("1418172623"),
 			expectedFailure: reporter.UNABLE_TO_PARSE_DATA,
@@ -145,19 +148,68 @@ func TestFailurePaths(t *testing.T) {
 	for _, tt := range tests {
 		mes, err := jsonParser.Parse(&line{tt.logLine})
 		if err == nil {
-			t.Fatalf("parsing: expected failure")
+			t.Fatalf("parsing: expected failure. Failing test name: %s", tt.errorName)
 		}
 		if len(mes) == 0 {
-			t.Fatalf("parsing: expected mixpanel events")
+			t.Fatalf("parsing: expected mixpanel events. Failing test name: %s", tt.errorName)
 		}
 		if mes[0].Failure != tt.expectedFailure {
-			t.Fatalf("mixpanel event: incorrect failure mode. Expected %s got %s", tt.expectedFailure, mes[0].Failure)
+			t.Fatalf("mixpanel event: incorrect failure mode. Expected %s got %s. Failing test name: %s", tt.expectedFailure, mes[0].Failure, tt.errorName)
 		}
 		if mes[0].UUID != tt.expectedUuid {
-			t.Fatalf("mixpanel event: incorrect uuid. Expected %s got %s", tt.expectedUuid, mes[0].UUID)
+			t.Fatalf("mixpanel event: incorrect uuid. Expected %s got %s. Failing test name: %s", tt.expectedUuid, mes[0].UUID, tt.errorName)
 		}
 		if mes[0].EventTime != tt.expectedTime {
-			t.Fatalf("mixpanel event: incorrect time. Expected %s got %s", tt.expectedTime, mes[0].EventTime)
+			t.Fatalf("mixpanel event: incorrect time. Expected %s got %s. Failing test name: %s", tt.expectedTime, mes[0].EventTime, tt.errorName)
+		}
+	}
+}
+
+func TestIPFailures(t *testing.T) {
+	tests := []struct {
+		errorName       string
+		logLine         []byte
+		expectedUuid    string
+		expectedTime    json.Number
+		expectedFailure reporter.FailMode
+		enableIpBug     bool
+		noFail          bool
+	}{
+		{
+			errorName:       "Reject row for bad IP under previous definition",
+			logLine:         loadFile("test_resources/broken_ip_data.json", t),
+			expectedUuid:    "123abc",
+			expectedTime:    json.Number("1418172623"),
+			expectedFailure: reporter.UNABLE_TO_PARSE_DATA,
+			enableIpBug:     true,
+		},
+		{
+			errorName:       "Don't reject a row for a bad IP when the bug is disabled",
+			logLine:         loadFile("test_resources/broken_ip_data.json", t),
+			expectedUuid:    "123abc",
+			expectedTime:    json.Number("1418172623"),
+			expectedFailure: reporter.NONE,
+			noFail:          true,
+		},
+	}
+
+	for _, tt := range tests {
+		jsonParser := &jsonLogParser{tt.enableIpBug}
+		mes, err := jsonParser.Parse(&line{tt.logLine})
+		if err == nil && !tt.noFail {
+			t.Fatalf("parsing: expected failure. Failing test name: %s", tt.errorName)
+		}
+		if len(mes) == 0 {
+			t.Fatalf("parsing: expected mixpanel events. Failing test name: %s", tt.errorName)
+		}
+		if mes[0].Failure != tt.expectedFailure {
+			t.Fatalf("mixpanel event: incorrect failure mode. Expected %s got %s. Failing test name: %s", tt.expectedFailure, mes[0].Failure, tt.errorName)
+		}
+		if mes[0].UUID != tt.expectedUuid {
+			t.Fatalf("mixpanel event: incorrect uuid. Expected %s got %s. Failing test name: %s", tt.expectedUuid, mes[0].UUID, tt.errorName)
+		}
+		if mes[0].EventTime != tt.expectedTime {
+			t.Fatalf("mixpanel event: incorrect time. Expected %s got %s. Failing test name: %s", tt.expectedTime, mes[0].EventTime, tt.errorName)
 		}
 	}
 }
