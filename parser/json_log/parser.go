@@ -29,15 +29,15 @@ func (j *jsonLogEvent) Time() string {
 }
 
 type jsonLogParser struct {
-	enableIPBug bool // Test for whether the previous edge would've rejected the event and replicate that behavior
+	rejectIfBadFirstIp bool // Test for whether the previous edge would've rejected the event and replicate that behavior
 }
 
-func Register(enableIPBug bool) {
+func Register(rejectIfBadFirstIp bool) {
 	parser.Register("json_log", &jsonLogParser{
-		enableIPBug: enableIPBug,
+		rejectIfBadFirstIp: rejectIfBadFirstIp,
 	})
-	if enableIPBug == true {
-		log.Println("Warning: Enabling the IP bug behavior originally in the edge")
+	if rejectIfBadFirstIp == true {
+		log.Println("Warning: Rejecting any event with a bad first ip in the x-forwarded chain")
 	}
 }
 
@@ -60,9 +60,9 @@ func (j *jsonLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, err
 		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, "", "")}, err
 	}
 
-	if j.enableIPBug && rawEvent.Version == 3 && !wasValidEdgeIp(rawEvent.XForwardedFor) {
+	if j.rejectIfBadFirstIp && rawEvent.Version == 3 && !wasValidEdgeIp(rawEvent.XForwardedFor) {
 		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, rawEvent.Uuid, strconv.FormatInt(rawEvent.ReceivedAt.Unix(), 10))},
-			fmt.Errorf("Event uuid %s had invalid base client IP and ENABLE_IP_BUG mode is on!", rawEvent.Uuid)
+			fmt.Errorf("Event uuid %s had invalid first client IP", rawEvent.Uuid)
 	}
 
 	parsedEvent := &jsonLogEvent{event: rawEvent}

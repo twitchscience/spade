@@ -14,7 +14,6 @@ import (
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/log_manager"
 	jsonLog "github.com/twitchscience/spade/parser/json_log"
-	nginx "github.com/twitchscience/spade/parser/server_log"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/uploader"
 	"github.com/twitchscience/spade/writer"
@@ -106,10 +105,7 @@ func init() {
 		log.Fatalf("Got Error while building audit: %s\n", err)
 	}
 
-	// First try the nginx/space-delimited parser, if that fails try the
-	// json log parser
-	nginx.Register()
-	jsonLog.Register(os.Getenv("ENABLE_IP_BUG") != "")
+	jsonLog.Register(os.Getenv("REJECT_ON_BAD_FIRST_IP") != "")
 }
 
 func main() {
