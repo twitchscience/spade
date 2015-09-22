@@ -167,21 +167,21 @@ func TestFailurePaths(t *testing.T) {
 
 func TestIPFailures(t *testing.T) {
 	tests := []struct {
-		errorName       string
-		logLine         []byte
-		expectedUuid    string
-		expectedTime    json.Number
-		expectedFailure reporter.FailMode
-		enableIpBug     bool
-		noFail          bool
+		errorName          string
+		logLine            []byte
+		expectedUuid       string
+		expectedTime       json.Number
+		expectedFailure    reporter.FailMode
+		rejectIfBadFirstIp bool
+		noFail             bool
 	}{
 		{
-			errorName:       "Reject row for bad IP under previous definition",
-			logLine:         loadFile("test_resources/broken_ip_data.json", t),
-			expectedUuid:    "123abc",
-			expectedTime:    json.Number("1418172623"),
-			expectedFailure: reporter.UNABLE_TO_PARSE_DATA,
-			enableIpBug:     true,
+			errorName:          "Reject row for bad IP under previous definition",
+			logLine:            loadFile("test_resources/broken_ip_data.json", t),
+			expectedUuid:       "123abc",
+			expectedTime:       json.Number("1418172623"),
+			expectedFailure:    reporter.UNABLE_TO_PARSE_DATA,
+			rejectIfBadFirstIp: true,
 		},
 		{
 			errorName:       "Don't reject a row for a bad IP when the bug is disabled",
@@ -194,7 +194,7 @@ func TestIPFailures(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		jsonParser := &jsonLogParser{tt.enableIpBug}
+		jsonParser := &jsonLogParser{tt.rejectIfBadFirstIp}
 		mes, err := jsonParser.Parse(&line{tt.logLine})
 		if err == nil && !tt.noFail {
 			t.Fatalf("parsing: expected failure. Failing test name: %s", tt.errorName)
