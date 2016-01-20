@@ -12,12 +12,6 @@ import (
 
 const maxLineLength = 512 * 1024 * 1024
 
-type SkipLongLine struct {}
-func (e SkipLongLine) Error() string {
-	return "Line longer than max, skipping"
-}
-
-
 type LogReader interface {
 	ProvideLine() (parser.Parseable, error)
 	Close() error
@@ -113,6 +107,10 @@ func (reader *FileLogReader) ProvideLine() (parser.Parseable, error) {
 	if err == io.EOF {
 		reader.endOfFile = true
 		err = nil
+	}
+
+	if len(line) > 0 && line[len(line)-1] == '\n' {
+		line = line[:len(line)-1]
 	}
 	return &parseRequest{line, time.Now()}, err
 }

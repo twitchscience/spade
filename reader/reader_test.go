@@ -1,10 +1,10 @@
 package reader
 
 import (
-	"io/ioutil"
-	"testing"
 	"compress/gzip"
+	"io/ioutil"
 	"os"
+	"testing"
 )
 
 const validLine = "Success!"
@@ -14,13 +14,13 @@ func TestOversizeToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func () {
+	defer func() {
 		f.Close()
 		os.Remove(f.Name())
 	}()
 	gzWriter := gzip.NewWriter(f)
 	var longLine string
-	for i:=0; i < 12800; i++ {
+	for i := 0; i < 12800; i++ {
 		longLine += "abcde12345"
 	}
 
@@ -42,12 +42,16 @@ func TestOversizeToken(t *testing.T) {
 	}
 
 	if string(p.Data()) != validLine {
-		t.Fatal("Unexpected data:", string(p.Data()))
+		t.Fatal("Unexpected data:", string(p.Data()), "expected:", validLine)
 	}
 
-	_, err = r.ProvideLine()
-	if (err != SkipLongLine{}) {
+	p, err = r.ProvideLine()
+	if err != nil {
 		t.Fatal(err)
+	}
+
+	if len(p.Data()) != len(longLine) {
+		t.Fatal("Unexpected length:", len(p.Data()), "expected:", len(longLine))
 	}
 
 	p, err = r.ProvideLine()
