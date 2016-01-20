@@ -34,6 +34,7 @@ func (p *LogParser) parse(reader reader.LogReader) (map[string]int, error) {
 			p.Reporter.IncrementExpected(1)
 			p.Processor.Process(request)
 		} else {
+			log.Printf("Aborted because of %v: %s", reflect.TypeOf(err), err)
 			break
 		}
 	}
