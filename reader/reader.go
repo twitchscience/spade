@@ -27,6 +27,7 @@ type FileLogReader struct {
 	reader       *bufio.Reader
 	decompressor io.ReadCloser
 	file         io.Closer
+	endOfFile    bool
 }
 
 type DummyLogReader struct {
@@ -102,7 +103,17 @@ func (reader *FileLogReader) Close() error {
 }
 
 func (reader *FileLogReader) ProvideLine() (parser.Parseable, error) {
+	if reader.endOfFile {
+		return nil, io.EOF
+	}
 	line, err := reader.reader.ReadBytes('\n')
+
+	// Emulate the scanner behavior of only returning EndOfFile after
+	// getting the last line
+	if err == io.EOF {
+		reader.endOfFile = true
+		err = nil
+	}
 	return &parseRequest{line, time.Now()}, err
 }
 

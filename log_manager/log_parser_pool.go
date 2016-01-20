@@ -30,15 +30,21 @@ func (p *LogParser) parse(reader reader.LogReader) (map[string]int, error) {
 	}()
 
 	var err error
+
+ReadLoop:
 	for {
 		var request parser.Parseable
 		request, err = reader.ProvideLine()
-		if err == nil || (err == io.EOF && len(request.Data()) > 0) {
+		switch err {
+		case nil:
 			p.Reporter.IncrementExpected(1)
 			p.Processor.Process(request)
-		} else {
+		case io.EOF:
+			err = nil
+			break ReadLoop
+		default:
 			log.Printf("Aborted because of %v: %s", reflect.TypeOf(err), err)
-			break
+			break ReadLoop
 		}
 	}
 
