@@ -1,6 +1,7 @@
 package log_manager
 
 import (
+	"io"
 	"io/ioutil"
 	"reflect"
 	"sync"
@@ -8,7 +9,6 @@ import (
 	"github.com/twitchscience/spade/parser"
 	nginx "github.com/twitchscience/spade/parser/server_log"
 	"github.com/twitchscience/spade/processor"
-	"github.com/twitchscience/spade/reader"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/table_config"
 	"github.com/twitchscience/spade/transformer"
@@ -99,7 +99,7 @@ func (r *testReader) ProvideLine() (parser.Parseable, error) {
 	defer r.lock.Unlock()
 	defer func() { r.pos++ }()
 	if r.pos >= len(r.lines) {
-		return nil, reader.EOF{}
+		return nil, io.EOF
 	}
 	r.lines[r.pos].(*parseRequest).start = time.Now()
 	return r.lines[r.pos], nil

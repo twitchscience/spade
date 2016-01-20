@@ -3,17 +3,14 @@ package reader
 import (
 	"bufio"
 	"compress/gzip"
+	"io"
 	"os"
 	"time"
 
 	"github.com/twitchscience/spade/parser"
 )
 
-type EOF struct{}
-
-func (e EOF) Error() string {
-	return "Encountered an EOF"
-}
+const maxLineLength = 512 * 1024 * 1024
 
 type LogReader interface {
 	ProvideLine() (parser.Parseable, error)
@@ -21,9 +18,10 @@ type LogReader interface {
 }
 
 type FileLogReader struct {
-	scanner *bufio.Scanner
-	file    *os.File
-	gzip    *gzip.Reader
+	reader       *bufio.Reader
+	decompressor io.ReadCloser
+	file         io.Closer
+	endOfFile    bool
 }
 
 type DummyLogReader struct {
@@ -46,59 +44,82 @@ func (p *parseRequest) StartTime() time.Time {
 }
 
 func GetFileLogReader(filename string, useGzip bool) (*FileLogReader, error) {
-	scanner, file, gzFile, err := getScanner(filename, useGzip)
+	file, err := os.Open(filename)
 	if err != nil {
-		return &FileLogReader{scanner, file, gzFile}, err
+		return nil, err
 	}
-	return &FileLogReader{scanner, file, gzFile}, nil
+
+	var decompressor *gzip.Reader
+	var reader *bufio.Reader
+
+	if useGzip {
+		decompressor, err = gzip.NewReader(file)
+		if err == nil {
+			reader = bufio.NewReader(decompressor)
+		}
+	} else {
+		reader = bufio.NewReader(file)
+	}
+
+	if err != nil {
+		if file != nil {
+			file.Close()
+		}
+		if decompressor != nil {
+			decompressor.Close()
+		}
+		return nil, err
+	}
+
+	return &FileLogReader{
+		reader:       reader,
+		file:         file,
+		decompressor: decompressor}, nil
 }
 
-func (reader *FileLogReader) Close() (err error) {
-	if reader.gzip != nil {
-		err = reader.gzip.Close()
+func (reader *FileLogReader) Close() error {
+	var err error
+
+	// It's possible to lose errors here, we will return
+	// the first we find but still keep closing to
+	// reduce leakage
+	if reader.decompressor != nil {
+		err = reader.decompressor.Close()
 	}
+
 	if reader.file != nil {
-		err = reader.file.Close()
+		internalErr := reader.file.Close()
+		if internalErr != nil && err == nil {
+			err = internalErr
+		}
 	}
-	return
+	return err
 }
 
 func (reader *FileLogReader) ProvideLine() (parser.Parseable, error) {
-	if reader.scanner.Scan() {
-		return &parseRequest{[]byte(reader.scanner.Text()), time.Now()}, nil
+	if reader.endOfFile {
+		return nil, io.EOF
 	}
-	err := reader.scanner.Err()
-	if err != nil {
-		return &parseRequest{nil, time.Now()}, err
+	line, err := reader.reader.ReadBytes('\n')
+
+	// Emulate the scanner behavior of only returning EndOfFile after
+	// getting the last line
+	if err == io.EOF {
+		reader.endOfFile = true
+		err = nil
 	}
-	return &parseRequest{nil, time.Now()}, EOF{}
+
+	if len(line) > 0 && line[len(line)-1] == '\n' {
+		line = line[:len(line)-1]
+	}
+	return &parseRequest{line, time.Now()}, err
 }
 
 func (reader *DummyLogReader) ProvideLine() (parser.Parseable, error) {
 	if reader.timesRepeated <= reader.timesToRepeat {
 		return &parseRequest{reader.logLine, time.Now()}, nil
 	}
-	return &parseRequest{nil, time.Now()}, EOF{}
+	return &parseRequest{nil, time.Now()}, io.EOF
 }
 
 func (reader *DummyLogReader) Close() error { return nil }
-
-func getScanner(filename string, useGzip bool) (*bufio.Scanner, *os.File, *gzip.Reader, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	var scanner *bufio.Scanner
-	if useGzip {
-		gzFile, gzErr := gzip.NewReader(file)
-		if gzErr != nil {
-			return nil, file, nil, gzErr
-		}
-
-		scanner = bufio.NewScanner(gzFile)
-		return scanner, file, gzFile, nil
-	}
-	scanner = bufio.NewScanner(file)
-	return scanner, file, nil, nil
-}
