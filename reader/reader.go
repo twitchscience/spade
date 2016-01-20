@@ -15,6 +15,12 @@ func (e EOF) Error() string {
 	return "Encountered an EOF"
 }
 
+type SkipLongLine struct {}
+func (e SkipLongLine) Error() string {
+	return "Line longer than max, skipping"
+}
+
+
 type LogReader interface {
 	ProvideLine() (parser.Parseable, error)
 	Close() error
