@@ -2,9 +2,11 @@ package log_manager
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"reflect"
 
+	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reader"
 	"github.com/twitchscience/spade/reporter"
@@ -28,13 +30,21 @@ func (p *LogParser) parse(reader reader.LogReader) (map[string]int, error) {
 	}()
 
 	var err error
+
+ReadLoop:
 	for {
-		request, err := reader.ProvideLine()
-		if err == nil {
+		var request parser.Parseable
+		request, err = reader.ProvideLine()
+		switch err {
+		case nil:
 			p.Reporter.IncrementExpected(1)
 			p.Processor.Process(request)
-		} else {
-			break
+		case io.EOF:
+			err = nil
+			break ReadLoop
+		default:
+			log.Printf("Aborted because of %v: %s", reflect.TypeOf(err), err)
+			break ReadLoop
 		}
 	}
 
