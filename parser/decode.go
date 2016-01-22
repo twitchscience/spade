@@ -15,11 +15,19 @@ func DecodeBase64(matches ParseResult, escaper URLEscaper) ([]MixpanelEvent, err
 	if err != nil {
 		return nil, err
 	}
+
+	var n int
 	// We dont have to allocate a new byte array here because the len(dst) < len(src)
-	n, err := base64.StdEncoding.Decode(data, data)
+	if bytes.IndexAny(data, "-_") == -1 {
+		n, err = base64.StdEncoding.Decode(data, data)
+	} else {
+		n, err = base64.URLEncoding.Decode(data, data)
+	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	var events []MixpanelEvent
 	if n > 1 && bytes.Equal(data[:2], multiEventEscape) {
 		err = json.Unmarshal(data[:n], &events)
