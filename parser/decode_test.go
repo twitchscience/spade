@@ -42,6 +42,17 @@ func TestDecodeData(t *testing.T) {
 	}
 }
 
+
+func TestURLSafeDecodeData(t *testing.T) {
+	_, err := DecodeBase64(&testShim{
+		data: loadFile("test_resources/urlsafeb64payload.txt"),
+		uuid: "39bffff7-4ffff880-539775b5-0",
+	}, &ByteQueryUnescaper{})
+	if err != nil {
+		t.Fatalf("got error: %v\n", err)
+	}
+}
+
 func TestBadUUIDDecodeData(t *testing.T) {
 	_, err := DecodeBase64(&testShim{
 		data: []byte("ip=1"),
