@@ -99,8 +99,8 @@ func (s *StdoutSpadeWriter) Write(req *writer.WriteRequest) error {
 	return nil
 }
 
-func (s *StdoutSpadeWriter) Reset() error {
-	return nil
+func (s *StdoutSpadeWriter) Rotate() (bool, error) {
+	return true, nil
 }
 
 func (s *StdoutSpadeWriter) Close() error {

@@ -8,7 +8,7 @@
 	"Deps": [
 		{
 			"ImportPath": "github.com/abh/geoip",
-			"Rev": "da130741c8ed2052f5f455d56e552f2e997e1ce9"
+			"Rev": "e5f8ea00f476d60a1e539d74211ce24881347d9e"
 		},
 		{
 			"ImportPath": "github.com/cactus/go-statsd-client/statsd",

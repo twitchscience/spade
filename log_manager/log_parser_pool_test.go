@@ -62,8 +62,8 @@ func (w *testWriter) Close() error {
 	return nil
 }
 
-func (w *testWriter) Reset() error {
-	return nil
+func (w *testWriter) Rotate() (bool, error) {
+	return true, nil
 }
 
 func buildTestWriter(r reporter.Reporter) writer.SpadeWriter {

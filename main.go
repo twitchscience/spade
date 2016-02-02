@@ -136,11 +136,7 @@ func main() {
 	spadeUploaderPool := uploader.BuildUploaderForRedshift(3, awsConnection)
 	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(1, awsConnection)
 
-	sqsListener := listener.BuildSQSListener(&listener.SQSAddr{
-		QueueName: "spade-edge-" + CLOUD_ENV,
-		Region:    aws.USWest2,
-		Auth:      auth,
-	}, log_manager.New(
+	lm := log_manager.New(
 		*_dir,
 		reporter.WrapCactusStatter(stats, 0.1),
 		awsConnection,
@@ -148,7 +144,13 @@ func main() {
 		blueprintUploaderPool,
 		auditLogger,
 		fetcher.New(*configUrl),
-	), *sqsPollInterval)
+	)
+
+	sqsListener := listener.BuildSQSListener(&listener.SQSAddr{
+		QueueName: "spade-edge-" + CLOUD_ENV,
+		Region:    aws.USWest2,
+		Auth:      auth,
+	}, lm, *sqsPollInterval)
 
 	wait := make(chan bool)
 
@@ -160,6 +162,7 @@ func main() {
 		// Cause flush
 		sqsListener.Close()
 		auditLogger.Close()
+		lm.Close()
 		// TODO: rethink the auditlogger logic...
 		wait <- true
 	}()

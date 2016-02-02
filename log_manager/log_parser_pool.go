@@ -23,7 +23,7 @@ type LogParser struct {
 func (p *LogParser) parse(reader reader.LogReader) (map[string]int, error) {
 	defer func() {
 		p.Reporter.Reset()
-		ferr := p.Writer.Reset()
+		_, ferr := p.Writer.Rotate()
 		if ferr != nil {
 			log.Println(ferr)
 		}

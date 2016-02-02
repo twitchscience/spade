@@ -34,6 +34,7 @@ func (r *WriteRequest) GetResult() *reporter.Result {
 		Failure:    r.Failure,
 		UUID:       r.UUID,
 		Line:       r.Line,
+		Category:   r.Category,
 		FinishedAt: time.Now(),
 		Duration:   time.Now().Sub(r.Pstart),
 	}
