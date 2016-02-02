@@ -41,7 +41,7 @@ func getInt64FromEnv(target string, def int64) int64 {
 type SpadeWriter interface {
 	Write(*WriteRequest) error
 	Close() error
-	Reset() error
+	Rotate() (bool, error)
 }
 
 type writerController struct {
@@ -53,9 +53,9 @@ type writerController struct {
 	// The writer for the untracked events.
 	NonTrackedWriter SpadeWriter
 
-	inbound   chan *WriteRequest
-	closeChan chan chan error
-	resetChan chan chan error
+	inbound    chan *WriteRequest
+	closeChan  chan chan error
+	rotateChan chan chan error
 }
 
 // The WriterController handles logic to distribute writes across a number of workers.
@@ -75,9 +75,9 @@ func NewWriterController(
 		redshiftUploader:  spadeUploaderPool,
 		blueprintUploader: blueprintUploaderPool,
 
-		inbound:   make(chan *WriteRequest, inboundChannelBuffer),
-		closeChan: make(chan chan error),
-		resetChan: make(chan chan error),
+		inbound:    make(chan *WriteRequest, inboundChannelBuffer),
+		closeChan:  make(chan chan error),
+		rotateChan: make(chan chan error),
 	}
 	err := c.initNonTrackedWriter()
 	if err != nil {
@@ -105,28 +105,26 @@ func (c *writerController) Listen() {
 		select {
 		case send := <-c.closeChan:
 			send <- c.close()
-		case send := <-c.resetChan:
-			err := c.close()
-			c.reset()
-			send <- err
+		case send := <-c.rotateChan:
+			send <- c.rotate()
 		case req := <-c.inbound:
 			c.route(req)
 		}
 	}
 }
 
-func (controller *writerController) route(request *WriteRequest) error {
+func (c *writerController) route(request *WriteRequest) error {
 	switch request.Failure {
 	// Success case
 	case reporter.NONE, reporter.SKIPPED_COLUMN:
 		category := request.GetCategory()
-		if _, hasWriter := controller.Routes[category]; !hasWriter {
+		if _, hasWriter := c.Routes[category]; !hasWriter {
 			newWriter, err := NewGzipWriter(
-				controller.SpadeFolder,
+				c.SpadeFolder,
 				EventsDir,
 				category,
-				controller.Reporter,
-				controller.redshiftUploader,
+				c.Reporter,
+				c.redshiftUploader,
 				RotateConditions{
 					MaxLogSize:     maxLogSize,
 					MaxTimeAllowed: maxLogTimeAllowed,
@@ -135,17 +133,17 @@ func (controller *writerController) route(request *WriteRequest) error {
 			if err != nil {
 				return err
 			}
-			controller.Routes[category] = newWriter
+			c.Routes[category] = newWriter
 		}
-		controller.Routes[category].Write(request)
+		c.Routes[category].Write(request)
 
 	// Log non tracking events for blueprint
 	case reporter.NON_TRACKING_EVENT:
-		controller.NonTrackedWriter.Write(request)
+		c.NonTrackedWriter.Write(request)
 
 	// Otherwise tell the reporter that we got the event but it failed somewhere.
 	default:
-		controller.Reporter.Record(request.GetResult())
+		c.Reporter.Record(request.GetResult())
 	}
 	return nil
 }
@@ -176,33 +174,50 @@ func (c *writerController) Close() error {
 	return <-recieve
 }
 
-func (controller *writerController) close() error {
-	for _, w := range controller.Routes {
+func (c *writerController) close() error {
+	for _, w := range c.Routes {
 		err := w.Close()
 		if err != nil {
 			return err
 		}
 	}
 
-	err := controller.NonTrackedWriter.Close()
+	err := c.NonTrackedWriter.Close()
 	if err != nil {
 		return err
 	}
 
-	return controller.initNonTrackedWriter()
+	return c.initNonTrackedWriter()
 }
 
-func (c *writerController) Reset() error {
+func (c *writerController) Rotate() (bool, error) {
 	recieve := make(chan error)
 	defer close(recieve)
-	c.resetChan <- recieve
-	return <-recieve
+	c.rotateChan <- recieve
+	return len(c.Routes) == 0, <-recieve
 }
 
-func (c *writerController) reset() {
-	for k, _ := range c.Routes {
-		delete(c.Routes, k)
+func (c *writerController) rotate() error {
+	for k, w := range c.Routes {
+		rotated, err := w.Rotate()
+		if err != nil {
+			return err
+		}
+		if rotated {
+			delete(c.Routes, k)
+		}
 	}
+
+	rotated, err := c.NonTrackedWriter.Rotate()
+	if err != nil {
+		return err
+	}
+
+	if rotated {
+		c.initNonTrackedWriter()
+	}
+
+	return nil
 }
 
 func MakeErrorRequest(e *parser.MixpanelEvent, err interface{}) *WriteRequest {

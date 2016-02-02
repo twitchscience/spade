@@ -67,6 +67,24 @@ type gzipFileWriter struct {
 	in chan *WriteRequest
 }
 
+// Rotate the logs if necessary.
+func (w *gzipFileWriter) Rotate() (bool, error) {
+	inode, err := w.File.Stat()
+	if err != nil {
+		return false, err
+	}
+
+	if ok, _ := isRotateNeeded(inode, w.FullName, w.RotateConditions); ok {
+		err = w.Close()
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	return false, nil
+}
+
 func (w *gzipFileWriter) Close() error {
 	defer gzPool.Put(w.GzWriter)
 	close(w.in)
@@ -85,26 +103,21 @@ func (w *gzipFileWriter) Close() error {
 	if closeErr := w.File.Close(); closeErr != nil {
 		return closeErr
 	}
-	// Rotate the logs if necessary.
-	if ok, _ := isRotateNeeded(inode, w.FullName, w.RotateConditions); ok {
-		dirErr := os.MkdirAll(w.ParentFolder+"/upload/", 0766)
-		if dirErr != nil {
-			return dirErr
-		}
-		// We have to move the file so that we are free to
-		// overwrite this file next log processed.
-		rotatedFileName := fmt.Sprintf("%s/upload/%s.gz",
-			w.ParentFolder, inode.Name())
-		os.Rename(w.FullName, rotatedFileName)
-		w.uploader.Upload(&uploader.UploadRequest{
-			Filename: rotatedFileName,
-			FileType: uploader.Gzip,
-		})
+	dirErr := os.MkdirAll(w.ParentFolder+"/upload/", 0766)
+	if dirErr != nil {
+		return dirErr
 	}
-	return nil
-}
 
-func (w *gzipFileWriter) Reset() error {
+	// We have to move the file so that we are free to
+	// overwrite this file next log processed.
+	rotatedFileName := fmt.Sprintf("%s/upload/%s.gz",
+		w.ParentFolder, inode.Name())
+
+	os.Rename(w.FullName, rotatedFileName)
+	w.uploader.Upload(&uploader.UploadRequest{
+		Filename: rotatedFileName,
+		FileType: uploader.Gzip,
+	})
 	return nil
 }
 
@@ -127,6 +140,7 @@ func (w *gzipFileWriter) Listen() {
 				Failure:    reporter.FAILED_WRITE,
 				UUID:       req.UUID,
 				Line:       req.Line,
+				Category:   req.Category,
 				FinishedAt: time.Now(),
 				Duration:   time.Now().Sub(req.Pstart),
 			})

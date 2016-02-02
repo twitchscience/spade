@@ -132,6 +132,11 @@ func (s *SpadeEdgeLogManager) Handle(msg *sqs.Message) error {
 	return err
 }
 
+func (s *SpadeEdgeLogManager) Close() {
+	s.Writer.Close()
+	s.Processor.Close()
+}
+
 func (s *SpadeEdgeLogManager) handle(msg *sqs.Message) error {
 	var edgeMessage EdgeMessage
 

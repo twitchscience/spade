@@ -109,9 +109,9 @@ func (w *testWriter) Close() error {
 	return nil
 }
 
-func (w *testWriter) Reset() error {
+func (w *testWriter) Rotate() (bool, error) {
 	w.requests = make([]*writer.WriteRequest, 0, 1)
-	return nil
+	return true, nil
 }
 
 type benchTestWriter struct {
@@ -128,8 +128,8 @@ func (w *benchTestWriter) Close() error {
 	return nil
 }
 
-func (w *benchTestWriter) Reset() error {
-	return nil
+func (w *benchTestWriter) Rotate() (bool, error) {
+	return true, nil
 }
 
 type dummyReporter struct{}

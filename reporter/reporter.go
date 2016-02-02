@@ -32,6 +32,7 @@ type Result struct {
 	Failure    FailMode
 	UUID       string
 	Line       string
+	Category   string
 }
 
 // For now NOT thread safe.
@@ -115,6 +116,11 @@ func (r *SpadeReporter) Reset() {
 }
 
 func (s *SpadeStatsdTracker) Track(result *Result) {
+	if result.Failure == NONE || result.Failure == SKIPPED_COLUMN {
+		s.Stats.IncrBy(fmt.Sprintf("%s.success", result.Category), 1)
+	} else {
+		s.Stats.IncrBy(fmt.Sprintf("%s.fail", result.Category), 1)
+	}
 	s.Stats.Timing(fmt.Sprintf("%d", result.Failure), result.Duration)
 }
 
