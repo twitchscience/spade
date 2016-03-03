@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crowdmob/goamz/aws"
-	"github.com/crowdmob/goamz/sqs"
+	"github.com/AdRoll/goamz/aws"
+	"github.com/AdRoll/goamz/sqs"
 )
 
 func TestMessageRegister(t *testing.T) {

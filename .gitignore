@@ -9,4 +9,4 @@ libexec
 Vagrantfile
 *.prof
 .DS_STORE
-
+.arcconfig

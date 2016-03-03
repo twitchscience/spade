@@ -25,8 +25,9 @@ type Config struct {
 }
 
 type RowCopyRequest struct {
-	KeyName   string
-	TableName string
+	KeyName      string
+	TableName    string
+	TableVersion int
 }
 
 type ManifestRowCopyRequest struct {

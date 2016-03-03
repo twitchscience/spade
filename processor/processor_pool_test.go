@@ -45,6 +45,9 @@ var (
 				},
 			},
 		},
+		map[string]int{
+			"login": 42,
+		},
 	)
 	_transformer transformer.Transformer = transformer.NewRedshiftTransformer(_config)
 	_parser                              = parser.BuildSpadeParser(&dummyReporter{})
@@ -215,6 +218,7 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 	}
 	expectedPP := writer.WriteRequest{
 		Category: "Unknown",
+		Version:  0,
 		Line:     "",
 		UUID:     "error",
 		Source:   []byte(rawLine),
@@ -223,6 +227,7 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 	}
 	expectedPT := writer.WriteRequest{
 		Category: "Unknown",
+		Version:  0,
 		Line:     "",
 		UUID:     "error",
 		Source:   []byte{},
@@ -242,12 +247,12 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 	pT.Listen(w)
 	pT.Process(_exampleRequest)
 
-	time.Sleep(100 * time.Millisecond) // Hopefully enough wait time...
+	time.Sleep(time.Second) // Hopefully enough wait time...
 	w.m.Lock()
 	defer w.m.Unlock()
 
 	if len(w.requests) != 2 {
-		t.Logf("expeceted 2 results got", len(w.requests))
+		t.Logf("expeceted 2 results got %d", len(w.requests))
 		t.Fail()
 	}
 	if !requestEqual(&expectedPP, w.requests[0]) {
@@ -270,6 +275,7 @@ func TestEmptyPropertyProcessing(t *testing.T) {
 	logTime := time.Unix(1382033155, 0)
 	expected := writer.WriteRequest{
 		Category: "login",
+		Version:  42,
 		Line:     "\t\t" + logTime.In(PST).Format(transformer.RedshiftDatetimeIngestString) + "\t",
 		UUID:     "uuid1",
 		Source:   nil,
@@ -310,6 +316,7 @@ func TestRequestProcessing(t *testing.T) {
 	}
 	expected := writer.WriteRequest{
 		Category: "login",
+		Version:  42,
 		Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
 		UUID:     "uuid1",
 		Source:   []byte(expectedJSONBytes),
@@ -384,6 +391,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 	expected := []*writer.WriteRequest{
 		&writer.WriteRequest{
 			Category: "login",
+			Version:  42,
 			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
 			UUID:     "uuid1-0",
 			Source:   []byte(expectedJSONBytes),
@@ -391,6 +399,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 		},
 		&writer.WriteRequest{
 			Category: "login",
+			Version:  42,
 			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
 			UUID:     "uuid1-1",
 			Source:   []byte(expectedJSONBytes),
@@ -398,6 +407,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 		},
 		&writer.WriteRequest{
 			Category: "login",
+			Version:  42,
 			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
 			UUID:     "uuid1-2",
 			Source:   []byte(expectedJSONBytes),
@@ -405,6 +415,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 		},
 		&writer.WriteRequest{
 			Category: "login",
+			Version:  42,
 			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
 			UUID:     "uuid1-3",
 			Source:   []byte(expectedJSONBytes),
@@ -420,7 +431,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 	p.Listen(w)
 	p.Process(_exampleRequest)
 
-	time.Sleep(500 * time.Millisecond) // Hopefully enough wait time...
+	time.Sleep(time.Second) // Hopefully enough wait time...
 	w.m.Lock()
 	defer w.m.Unlock()
 	if len(w.requests) != len(expected) {

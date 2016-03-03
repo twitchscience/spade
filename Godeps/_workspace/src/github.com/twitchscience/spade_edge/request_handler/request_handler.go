@@ -2,7 +2,6 @@ package request_handler
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -10,11 +9,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
-
-	"github.com/twitchscience/aws_utils/environment"
 
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/gologging/gologging"
@@ -41,8 +37,9 @@ var (
 	xarth              []byte = []byte("XARTH")
 	xmlApplicationType        = mime.TypeByExtension(".xml")
 	DataFlag           []byte = []byte("data=")
-	isProd                    = environment.IsProd()
 )
+
+const corsMaxAge = "86400" // One day
 
 type SpadeEdgeLogger interface {
 	Log(event *spade.Event) error
@@ -55,15 +52,36 @@ func (n *NoopLogger) Log(e *spade.Event) error { return nil }
 func (n *NoopLogger) Close()                   {}
 
 type SpadeHandler struct {
-	StatLogger statsd.Statter
-	EdgeLogger SpadeEdgeLogger
-	Assigner   uuid.UUIDAssigner
+	StatLogger  statsd.Statter
+	EdgeLogger  SpadeEdgeLogger
+	Assigner    uuid.UUIDAssigner
+	Time        func() time.Time // Defaults to time.Now
+	corsOrigins map[string]bool
 }
 
 type EventLoggers struct {
 	AuditLogger *gologging.UploadLogger
 	SpadeLogger *gologging.UploadLogger
 	KLogger     SpadeEdgeLogger
+}
+
+func NewSpadeHandler(stats statsd.Statter, logger SpadeEdgeLogger, assigner uuid.UUIDAssigner, CORSOrigins string) *SpadeHandler {
+	h := &SpadeHandler{
+		StatLogger:  stats,
+		EdgeLogger:  logger,
+		Assigner:    assigner,
+		Time:        time.Now,
+		corsOrigins: make(map[string]bool),
+	}
+
+	origins := strings.Split(strings.TrimSpace(CORSOrigins), " ")
+	for _, origin := range origins {
+		trimmedOrigin := strings.TrimSpace(origin)
+		if trimmedOrigin != "" {
+			h.corsOrigins[trimmedOrigin] = true
+		}
+	}
+	return h
 }
 
 func (a *EventLoggers) Init() {}
@@ -167,45 +185,34 @@ const (
 	nTimers          = 5
 )
 
-func getTimeStampFromHeader(r *http.Request) (time.Time, error) {
-	timeStamp := r.Header.Get("X-ORIGINAL-MSEC")
-	if timeStamp != "" {
-		splitIdx := strings.Index(timeStamp, ".")
-		if splitIdx > -1 {
-			secs, err := strconv.ParseInt(timeStamp[:splitIdx], 10, 64)
-			if err == nil {
-				return time.Unix(secs, 0).UTC(), nil
-			}
-		}
-	}
-	return time.Time{}.UTC(), errors.New("could not process timestamp from header")
-}
-
 var allowedMethods = map[string]bool{
-	"GET":  true,
-	"POST": true,
+	"GET":     true,
+	"POST":    true,
+	"OPTIONS": true,
 }
+var allowedMethodsHeader string // Comma-separated version of allowedMethods
 
 func (s *SpadeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !allowedMethods[r.Method] {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	now := time.Now().UTC()
-	var ts time.Time
-	var err error
-	ts = now
-	// For integration time correction
-	if !isProd {
-		ts, err = getTimeStampFromHeader(r)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
+	w.Header().Set("Vary", "Origin")
+
+	origin := r.Header.Get("Origin")
+	if s.corsOrigins[origin] {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", allowedMethodsHeader)
 	}
-	//
+
+	if r.Method == "OPTIONS" {
+		w.Header().Set("Access-Control-Max-Age", corsMaxAge)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	context := &requestContext{
-		Now:       ts,
+		Now:       s.Time(),
 		Method:    r.Method,
 		Endpoint:  r.URL.Path,
 		IpHeader:  ipForwardHeader,
@@ -245,4 +252,12 @@ func (s *SpadeHandler) serve(w http.ResponseWriter, r *http.Request, context *re
 	}
 	w.WriteHeader(status)
 	return status
+}
+
+func init() {
+	var allowedMethodsList []string
+	for k := range allowedMethods {
+		allowedMethodsList = append(allowedMethodsList, k)
+	}
+	allowedMethodsHeader = strings.Join(allowedMethodsList, ", ")
 }

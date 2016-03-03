@@ -1,18 +1,21 @@
 package uploader
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
-	"github.com/crowdmob/goamz/s3"
+	"github.com/AdRoll/goamz/s3"
 	"github.com/twitchscience/aws_utils/environment"
 	"github.com/twitchscience/aws_utils/notifier"
 	"github.com/twitchscience/aws_utils/uploader"
 	gen "github.com/twitchscience/gologging/key_name_generator"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
 var (
@@ -45,10 +48,20 @@ func (p *ProcessorErrorHandler) SendError(err error) {
 func BuildSQSNotifierHarness(qName string) *SQSNotifierHarness {
 	client := notifier.DefaultClient
 	client.Signer.RegisterMessageType("uploadNotify", func(args ...interface{}) (string, error) {
-		if len(args) < 2 {
-			return "", errors.New("Missing correct number of args ")
+		if len(args) != 3 {
+			return "", errors.New("Missing correct number of args")
 		}
-		return fmt.Sprintf("{\"tablename\":\"%s\",\"keyname\":\"%s\"}", args...), nil
+		message := scoop_protocol.RowCopyRequest{
+			TableName:    args[0].(string),
+			KeyName:      args[1].(string),
+			TableVersion: args[2].(int),
+		}
+
+		jsonMessage, err := json.Marshal(message)
+		if err != nil {
+			return "", err
+		}
+		return string(jsonMessage), nil
 	})
 	return &SQSNotifierHarness{
 		qName:    qName,
@@ -65,8 +78,18 @@ func extractEventName(filename string) string {
 	return filename[path:ext]
 }
 
+func extractEventVersion(filename string) int {
+	path := strings.LastIndex(filename, ".v") + 2
+	ext := strings.Index(filename, ".gz")
+	if ext < 0 {
+		ext = len(filename)
+	}
+	val, _ := strconv.Atoi(filename[path:ext])
+	return val
+}
+
 func (s *SQSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
-	return s.notifier.SendMessage("uploadNotify", s.qName, extractEventName(message.Path), message.KeyName)
+	return s.notifier.SendMessage("uploadNotify", s.qName, extractEventName(message.Path), message.KeyName, extractEventVersion(message.Path))
 }
 
 func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) error {

@@ -45,9 +45,17 @@ func (gen *ProcessorKeyNameGenerator) GetKeyName(filename string) string {
 	if ext < 0 {
 		ext = len(filename)
 	}
-	return fmt.Sprintf("%s/%s/%s/%s.%d.log.gz",
+
+	pathv := strings.LastIndex(filename, ".v") + 1
+	extv := strings.Index(filename, ".gz")
+	if extv < 0 {
+		extv = len(filename)
+	}
+
+	return fmt.Sprintf("%s/%s/%s/%s/%s.%d.log.gz",
 		now.Format("20060102"),
 		filename[path:ext],
+		filename[pathv:extv],
 		gen.Info.AutoScaleGroup,
 		gen.Info.Node,
 		now.Unix(),

@@ -7,15 +7,15 @@ import (
 	"log"
 	"os"
 
-	"github.com/twitchscience/scoop_protocol/scoop_protocol"
+	"github.com/twitchscience/scoop_protocol/schema"
 	"github.com/twitchscience/spade/transformer"
 )
 
 type Tables struct {
-	Configs []scoop_protocol.Config
+	Configs []schema.Event
 }
 
-func getTypes(definitions []scoop_protocol.ColumnDefinition) ([]transformer.RedshiftType, error) {
+func getTypes(definitions []schema.ColumnDefinition) ([]transformer.RedshiftType, error) {
 	types := make([]transformer.RedshiftType, len(definitions))
 	for i, definition := range definitions {
 		t := transformer.GetTransform(definition.Transformer)
@@ -46,7 +46,7 @@ func LoadConfig(file io.Reader) (Tables, error) {
 	if err != nil {
 		return Tables{nil}, err
 	}
-	var cfgs []scoop_protocol.Config
+	var cfgs []schema.Event
 	err = json.Unmarshal(b, &cfgs)
 	if err != nil {
 		return Tables{nil}, err
@@ -54,19 +54,21 @@ func LoadConfig(file io.Reader) (Tables, error) {
 	return Tables{cfgs}, nil
 }
 
-func (c *Tables) CompileForParsing() (map[string][]transformer.RedshiftType, error) {
+func (c *Tables) CompileForParsing() (map[string][]transformer.RedshiftType, map[string]int, error) {
 	configs := make(map[string][]transformer.RedshiftType)
+	versions := make(map[string]int)
 	for _, config := range c.Configs {
 		typedConfig, typeErr := getTypes(config.Columns)
 		if typeErr == nil {
 			configs[config.EventName] = typedConfig
+			versions[config.EventName] = config.Version
 		}
 	}
-	return configs, nil
+	return configs, versions, nil
 }
 
-func (c *Tables) CompileForMaintenance() map[string]scoop_protocol.Config {
-	creationStrings := make(map[string]scoop_protocol.Config)
+func (c *Tables) CompileForMaintenance() map[string]schema.Event {
+	creationStrings := make(map[string]schema.Event)
 	for _, config := range c.Configs {
 		creationStrings[config.EventName] = config
 	}

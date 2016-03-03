@@ -6,6 +6,10 @@ import (
 )
 
 func TestRetrier(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Takes 14 seconds, so don't run during short mode")
+	}
+
 	retrier := &Retrier{
 		Times:         3,
 		BackoffFactor: 2,
@@ -42,4 +46,13 @@ func TestRetrier(t *testing.T) {
 		t.Errorf("expected %s to call %d\n", "retier.Retry(failOnce)", 2)
 	}
 
+}
+
+func TestNormalizeS3URL(t *testing.T) {
+	if "s3://foo" != NormalizeS3URL("s3://foo") {
+		t.Fatal("Failed to handle url with s3:// prefix")
+	}
+	if "s3://foo" != NormalizeS3URL("foo") {
+		t.Fatal("Failed to handle url without s3:// prefix")
+	}
 }

@@ -125,5 +125,5 @@ func (s *SpadeStatsdTracker) Track(result *Result) {
 }
 
 func (s *SpadeUUIDTracker) Track(result *Result) {
-	s.Logger.Log("[%d] %s %d", result.FinishedAt.Unix(), result.UUID, int(result.Failure))
+	s.Logger.Log(fmt.Sprintf("[%d] %s %d", result.FinishedAt.Unix(), result.UUID, int(result.Failure)))
 }

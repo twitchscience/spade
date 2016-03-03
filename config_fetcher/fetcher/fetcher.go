@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/twitchscience/scoop_protocol/scoop_protocol"
+	"github.com/twitchscience/scoop_protocol/schema"
 )
 
 type ConfigFetcher interface {
@@ -65,7 +65,7 @@ func validate(b []byte) bool {
 	if len(b) == 0 {
 		return false
 	}
-	var cfgs []scoop_protocol.Config
+	var cfgs []schema.Event
 	err := json.Unmarshal(b, &cfgs)
 	return (err == nil)
 }
@@ -77,7 +77,7 @@ func (f *fetcher) FetchAndWrite(src io.ReadCloser, dst io.WriteCloser) error {
 	}
 
 	if ok := validate(b); !ok {
-		return fmt.Errorf("Result not a valid []scoop_protocol.Config: %s", string(b))
+		return fmt.Errorf("Result not a valid []schema.Event: %s", string(b))
 	}
 
 	_, err = dst.Write(b)

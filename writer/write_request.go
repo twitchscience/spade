@@ -2,6 +2,7 @@ package writer
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/twitchscience/spade/reporter"
@@ -9,6 +10,7 @@ import (
 
 type WriteRequest struct {
 	Category string
+	Version  int
 	Line     string
 	UUID     string
 	// Keep the source around for logging
@@ -22,7 +24,7 @@ func (r *WriteRequest) GetStartTime() time.Time {
 }
 
 func (r *WriteRequest) GetCategory() string {
-	return r.Category
+	return fmt.Sprintf("%s.v%d", r.Category, r.Version)
 }
 
 func (r *WriteRequest) GetMessage() string {
