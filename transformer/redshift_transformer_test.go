@@ -24,7 +24,8 @@ import (
 //  - Transform error: Event contains a column that does not convert.
 //  - Bad Parse event: Event already contains an error
 type testLoader struct {
-	Configs map[string][]RedshiftType
+	Configs  map[string][]RedshiftType
+	Versions map[string]int
 }
 
 func (s *testLoader) Refresh() error {
@@ -37,6 +38,12 @@ func (s *testLoader) GetColumnsForEvent(eventName string) ([]RedshiftType, error
 	}
 	return nil, NotTrackedError{fmt.Sprintf("%s is not being tracked", eventName)}
 }
+func (s *testLoader) GetVersionForEvent(eventName string) int {
+	if version, exists := s.Versions[eventName]; exists {
+		return version
+	}
+	return 0
+}
 
 func _transformer_runner(t *testing.T, input *parser.MixpanelEvent, expected *writer.WriteRequest) {
 	log.SetOutput(bytes.NewBuffer(make([]byte, 0, 256))) // silence log output
@@ -48,6 +55,9 @@ func _transformer_runner(t *testing.T, input *parser.MixpanelEvent, expected *wr
 				RedshiftType{varcharFormat, "name"},
 				RedshiftType{unixTimeFormat, "now"},
 			},
+		},
+		Versions: map[string]int{
+			"login": 42,
 		},
 	}
 	var _transformer Transformer = NewRedshiftTransformer(_config)
@@ -72,6 +82,7 @@ func TestBadParseEventConsume(t *testing.T) {
 	}
 	_transformer_runner(t, _badParseEvent, &writer.WriteRequest{
 		Category: _badParseEvent.Event,
+		Version:  42,
 		Line:     "",
 		UUID:     "uuid1",
 		Source:   _badParseEvent.Properties,
@@ -95,6 +106,7 @@ func TestTransformBadColumnEventConsume(t *testing.T) {
 	}
 	expected := writer.WriteRequest{
 		Category: "login",
+		Version:  42,
 		Line:     "\t0.1234\t\"kai.hayashi\"\t2013-10-17 11:05:55",
 		Source: []byte(`{
 			"times":    "sda",
@@ -145,6 +157,7 @@ func TestMissingPropertyEventConsume(t *testing.T) {
 	}
 	expected := writer.WriteRequest{
 		Category: "login",
+		Version:  42,
 		Line:     "42\t0.1234\t\"kai.hayashi\"\t",
 		Source: []byte(`{
 			"times":    42,
@@ -197,6 +210,7 @@ func TestNormalEventConsume(t *testing.T) {
 	}
 	expected := writer.WriteRequest{
 		Category: "login",
+		Version:  42,
 		Line:     "42\t0.1234\t\"kai.hayashi\"\t2013-10-17 11:05:55",
 		Source: []byte(`{
 			"times":    42,

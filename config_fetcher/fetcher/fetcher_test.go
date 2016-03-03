@@ -9,14 +9,14 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/twitchscience/scoop_protocol/scoop_protocol"
+	"github.com/twitchscience/scoop_protocol/schema"
 )
 
-var knownScoopProtocolConfig = []scoop_protocol.Config{
-	scoop_protocol.Config{
+var knownScoopProtocolSchemaEvents = []schema.Event{
+	schema.Event{
 		EventName: "foo",
-		Columns: []scoop_protocol.ColumnDefinition{
-			scoop_protocol.ColumnDefinition{
+		Columns: []schema.ColumnDefinition{
+			schema.ColumnDefinition{
 				InboundName:           "in",
 				OutboundName:          "out",
 				Transformer:           "foo",
@@ -52,12 +52,12 @@ func TestValidate(t *testing.T) {
 
 	b := []byte("this wont work")
 	if validate(b) {
-		t.Error("Expected validate() to return false when given non-scoop_protocol.Config array, got true")
+		t.Error("Expected validate() to return false when given non-schema.Event array, got true")
 	}
 
-	b, err := json.Marshal(knownScoopProtocolConfig)
+	b, err := json.Marshal(knownScoopProtocolSchemaEvents)
 	if err != nil {
-		t.Errorf("Unexpected error serializing scoop_protocol.Config: %s", err)
+		t.Errorf("Unexpected error serializing schema.Event: %s", err)
 	}
 	if !validate(b) {
 		t.Errorf("Expected validate() to return true, got false")
@@ -85,7 +85,7 @@ func (trwc *testReadWriteCloser) Read(p []byte) (int, error) {
 	} else if trwc.failRead {
 		return 1, errors.New("Intentional error while reading")
 	} else {
-		b, _ = json.Marshal(knownScoopProtocolConfig)
+		b, _ = json.Marshal(knownScoopProtocolSchemaEvents)
 	}
 	return copy(p, b), io.EOF
 }

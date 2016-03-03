@@ -29,9 +29,12 @@ func NewRedshiftTransformer(configs ConfigLoader) Transformer {
 
 // MixpanelEvent -> WriteRequest
 func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.WriteRequest {
+	version := t.Configs.GetVersionForEvent(event.Event)
+
 	if event.Failure != reporter.NONE {
 		return &writer.WriteRequest{
 			Category: event.Event,
+			Version:  version,
 			Line:     "",
 			UUID:     event.UUID,
 			Source:   event.Properties,
@@ -44,6 +47,7 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 	if err == nil {
 		return &writer.WriteRequest{
 			Category: event.Event,
+			Version:  version,
 			Line:     line,
 			UUID:     event.UUID,
 			Source:   event.Properties,
@@ -55,6 +59,7 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 	case TransformError:
 		return &writer.WriteRequest{
 			Category: event.Event,
+			Version:  version,
 			Line:     err.Error(),
 			UUID:     event.UUID,
 			Source:   event.Properties,
@@ -71,6 +76,7 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 		}
 		return &writer.WriteRequest{
 			Category: event.Event,
+			Version:  version,
 			Line:     string(dump),
 			UUID:     event.UUID,
 			Source:   event.Properties,
@@ -80,6 +86,7 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 	case SkippedColumnError: // Non critical error
 		return &writer.WriteRequest{
 			Category: event.Event,
+			Version:  version,
 			Line:     line,
 			UUID:     event.UUID,
 			Source:   event.Properties,
@@ -89,6 +96,7 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 	default:
 		return &writer.WriteRequest{
 			Category: "Unknown",
+			Version:  version,
 			Line:     "",
 			UUID:     event.UUID,
 			Source:   event.Properties,

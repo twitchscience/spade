@@ -51,10 +51,10 @@ func (p *parseRequest) StartTime() time.Time {
 }
 
 // This is for simple applications of the parser.
-func BuildProcessor(configs map[string][]transformer.RedshiftType) *RequestParser {
+func BuildProcessor(configs map[string][]transformer.RedshiftType, versions map[string]int) *RequestParser {
 	return &RequestParser{
 		t: transformer.NewRedshiftTransformer(
-			table_config.NewStaticLoader(configs),
+			table_config.NewStaticLoader(configs, versions),
 		),
 		parser: parser.BuildSpadeParser(&dummyReporter{}),
 	}

@@ -40,6 +40,9 @@ var (
 				},
 			},
 		},
+		map[string]int{
+			"login": 42,
+		},
 	)
 	_transformer transformer.Transformer = transformer.NewRedshiftTransformer(_config)
 )

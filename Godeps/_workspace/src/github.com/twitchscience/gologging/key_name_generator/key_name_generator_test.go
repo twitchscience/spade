@@ -35,38 +35,38 @@ func TestProcessorKeyNameGenerator(t *testing.T) {
 			LoggingDir:     "",
 		},
 	}
-	test1 := gen.GetKeyName("blah")
+	test1 := gen.GetKeyName("blah.v0")
 	start := strings.Index(test1, "/")
-	if !strings.Contains(test1[start:], "blah/testCluster/testNode.") {
+	if !strings.Contains(test1[start:], "blah/v0/testCluster/testNode.") {
 		t.Errorf("expected %s but got %s\n",
-			"blah/testCluster/testNode.",
+			"blah/v0/testCluster/testNode.",
 			test1,
 		)
 	}
 
-	test2 := gen.GetKeyName("/extra/blah")
+	test2 := gen.GetKeyName("/extra/blah.v0")
 	start2 := strings.Index(test2, "/")
-	if !strings.Contains(test2[start2:], "blah/testCluster/testNode.") {
+	if !strings.Contains(test2[start2:], "blah/v0/testCluster/testNode.") {
 		t.Errorf("expected %s but got %s\n",
-			"blah/testCluster/testNode.",
+			"blah/v0/testCluster/testNode.",
 			test2,
 		)
 	}
 
-	test3 := gen.GetKeyName("/extra/blah.gz")
+	test3 := gen.GetKeyName("/extra/blah.v0.gz")
 	start3 := strings.Index(test3, "/")
-	if !strings.Contains(test3[start3:], "blah/testCluster/testNode.") {
+	if !strings.Contains(test3[start3:], "blah/v0/testCluster/testNode.") {
 		t.Errorf("expected %s but got %s\n",
-			"blah/testCluster/testNode.",
+			"blah/v0/testCluster/testNode.",
 			test3,
 		)
 	}
 
-	test4 := gen.GetKeyName("/extra/blah.gz")
+	test4 := gen.GetKeyName("/extra/blah.v0.gz")
 	start4 := strings.Index(test4, "/")
-	if !strings.Contains(test4[start4:], "blah/testCluster/testNode.") {
+	if !strings.Contains(test4[start4:], "blah/v0/testCluster/testNode.") {
 		t.Errorf("expected %s but got %s\n",
-			"blah/testCluster/testNode.",
+			"blah/v0/testCluster/testNode.",
 			test4,
 		)
 	}

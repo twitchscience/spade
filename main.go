@@ -23,9 +23,9 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/AdRoll/goamz/aws"
+	"github.com/AdRoll/goamz/s3"
 	"github.com/cactus/go-statsd-client/statsd"
-	"github.com/crowdmob/goamz/aws"
-	"github.com/crowdmob/goamz/s3"
 )
 
 const (

@@ -1,11 +1,22 @@
 {
 	"ImportPath": "github.com/twitchscience/spade",
-	"GoVersion": "go1.3",
+	"GoVersion": "go1.5.1",
 	"Packages": [
-		"./...",
-		"./spade_parse"
+		"./..."
 	],
 	"Deps": [
+		{
+			"ImportPath": "github.com/AdRoll/goamz/aws",
+			"Rev": "0c4b4ec49d2da696b3df5cca52cac2302c461db9"
+		},
+		{
+			"ImportPath": "github.com/AdRoll/goamz/s3",
+			"Rev": "0c4b4ec49d2da696b3df5cca52cac2302c461db9"
+		},
+		{
+			"ImportPath": "github.com/AdRoll/goamz/sqs",
+			"Rev": "0c4b4ec49d2da696b3df5cca52cac2302c461db9"
+		},
 		{
 			"ImportPath": "github.com/abh/geoip",
 			"Rev": "e5f8ea00f476d60a1e539d74211ce24881347d9e"
@@ -15,68 +26,60 @@
 			"Rev": "5b5607a786a6be31226ca2063e49695712aebc6d"
 		},
 		{
-			"ImportPath": "github.com/crowdmob/goamz/aws",
-			"Rev": "2973a6ba9e3be51be437eaeb0a9c54154259f6f8"
-		},
-		{
-			"ImportPath": "github.com/crowdmob/goamz/s3",
-			"Rev": "2973a6ba9e3be51be437eaeb0a9c54154259f6f8"
-		},
-		{
-			"ImportPath": "github.com/crowdmob/goamz/sqs",
-			"Rev": "2973a6ba9e3be51be437eaeb0a9c54154259f6f8"
-		},
-		{
 			"ImportPath": "github.com/twitchscience/aws_utils/common",
-			"Rev": "1e4391b1a75844fda9620d7ad5613ad787e407f2"
+			"Rev": "4dd0264cc3d1c4eebcb2712e5034acd91630318a"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/aws_utils/environment",
-			"Rev": "1e4391b1a75844fda9620d7ad5613ad787e407f2"
+			"Rev": "4dd0264cc3d1c4eebcb2712e5034acd91630318a"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/aws_utils/listener",
-			"Rev": "1e4391b1a75844fda9620d7ad5613ad787e407f2"
+			"Rev": "4dd0264cc3d1c4eebcb2712e5034acd91630318a"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/aws_utils/notifier",
-			"Rev": "1e4391b1a75844fda9620d7ad5613ad787e407f2"
+			"Rev": "4dd0264cc3d1c4eebcb2712e5034acd91630318a"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/aws_utils/uploader",
-			"Rev": "1e4391b1a75844fda9620d7ad5613ad787e407f2"
+			"Rev": "4dd0264cc3d1c4eebcb2712e5034acd91630318a"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/file_writer",
-			"Rev": "ce64fcfdd73113b2bfc2e21ead59d13371fc4551"
+			"Rev": "c01f543e79d915030dd41e8643ca8c38076218b1"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/gologging",
-			"Rev": "ce64fcfdd73113b2bfc2e21ead59d13371fc4551"
+			"Rev": "c01f543e79d915030dd41e8643ca8c38076218b1"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/key_name_generator",
-			"Rev": "ce64fcfdd73113b2bfc2e21ead59d13371fc4551"
+			"Rev": "c01f543e79d915030dd41e8643ca8c38076218b1"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
-			"Rev": "faec7ac1ec4c171bfd77506bdda891eccac2e312"
+			"Rev": "7060b2bfd901e3785a2516d728c1537209bb8e00"
+		},
+		{
+			"ImportPath": "github.com/twitchscience/scoop_protocol/schema",
+			"Rev": "7060b2bfd901e3785a2516d728c1537209bb8e00"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/scoop_protocol",
-			"Rev": "faec7ac1ec4c171bfd77506bdda891eccac2e312"
+			"Rev": "7060b2bfd901e3785a2516d728c1537209bb8e00"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/spade",
-			"Rev": "faec7ac1ec4c171bfd77506bdda891eccac2e312"
+			"Rev": "7060b2bfd901e3785a2516d728c1537209bb8e00"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/spade_edge/request_handler",
-			"Rev": "7bbdf709117c56f7f75a2dd7a0ab01d65286a627"
+			"Rev": "af22078b8c60d5bcf067675a4de144c623feeedb"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/spade_edge/uuid",
-			"Rev": "7bbdf709117c56f7f75a2dd7a0ab01d65286a627"
+			"Rev": "af22078b8c60d5bcf067675a4de144c623feeedb"
 		}
 	]
 }

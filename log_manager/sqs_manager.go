@@ -24,8 +24,8 @@ import (
 	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/writer"
 
-	"github.com/crowdmob/goamz/s3"
-	"github.com/crowdmob/goamz/sqs"
+	"github.com/AdRoll/goamz/s3"
+	"github.com/AdRoll/goamz/sqs"
 )
 
 var env = environment.GetCloudEnv()

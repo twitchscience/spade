@@ -11,4 +11,5 @@ type Transformer interface {
 
 type ConfigLoader interface {
 	GetColumnsForEvent(string) ([]RedshiftType, error)
+	GetVersionForEvent(string) int
 }

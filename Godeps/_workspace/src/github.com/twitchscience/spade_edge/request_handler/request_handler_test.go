@@ -75,20 +75,21 @@ func TestParseLastForwarder(t *testing.T) {
 			t.Fatalf("%s -> %s instead of expected %s", h.input, output, h.expected)
 		}
 	}
+}
 
+var fixedTime = time.Date(2014, 5, 2, 19, 34, 1, 0, time.UTC)
+
+func makeSpadeHandler() *SpadeHandler {
+	c, _ := statsd.NewNoop()
+	SpadeHandler := NewSpadeHandler(c, &testEdgeLogger{}, &testUUIDAssigner{}, "")
+	SpadeHandler.Time = func() time.Time { return fixedTime }
+	return SpadeHandler
 }
 
 func TestEndPoints(t *testing.T) {
-	c, _ := statsd.NewNoop()
-	SpadeHandler := &SpadeHandler{
-		EdgeLogger: &testEdgeLogger{},
-		Assigner:   &testUUIDAssigner{},
-		StatLogger: c,
-	}
-
+	SpadeHandler := makeSpadeHandler()
 	var expectedEvents []spade.Event
 	fixedIP := net.ParseIP("222.222.222.222")
-	fixedTime, _ := time.Parse(time.RFC3339, "2014-05-02T19:34:01+00:00")
 
 	uuidCounter := 1
 
@@ -103,7 +104,6 @@ func TestEndPoints(t *testing.T) {
 			t.Fatalf("Failed to build request: %s error: %s\n", tt.Request.Endpoint, err)
 		}
 		req.Header.Add("X-Forwarded-For", "222.222.222.222")
-		req.Header.Add("X-Original-Msec", "1399059241.000")
 		if tt.Request.ContentType != "" {
 			req.Header.Add("Content-Type", tt.Request.ContentType)
 		}
@@ -131,21 +131,16 @@ func TestEndPoints(t *testing.T) {
 		var ev spade.Event
 		err := spade.Unmarshal(byteLog, &ev)
 		if err != nil {
-			t.Errorf("Expected Unmarshal to work, input: %s, err:%s", byteLog, err)
+			t.Errorf("Expected Unmarshal to work, input: %s, err: %s", byteLog, err)
 		}
 		if !reflect.DeepEqual(ev, expectedEvents[idx]) {
-			t.Errorf("Event processed incorrectly: expected:%v got:%v", expectedEvents[idx], ev)
+			t.Errorf("Event processed incorrectly: expected: %v got: %v", expectedEvents[idx], ev)
 		}
 	}
 }
 
 func TestHandle(t *testing.T) {
-	c, _ := statsd.NewNoop()
-	SpadeHandler := &SpadeHandler{
-		EdgeLogger: &testEdgeLogger{},
-		Assigner:   &testUUIDAssigner{},
-		StatLogger: c,
-	}
+	SpadeHandler := makeSpadeHandler()
 	for _, tt := range testRequests {
 		testrecorder := httptest.NewRecorder()
 		req, err := http.NewRequest(
@@ -157,7 +152,6 @@ func TestHandle(t *testing.T) {
 			t.Fatalf("Failed to build request: %s error: %s\n", tt.Request.Endpoint, err)
 		}
 		req.Header.Add("X-Forwarded-For", "222.222.222.222")
-		req.Header.Add("X-Original-Msec", "1399059241.000")
 		if tt.Request.ContentType != "" {
 			req.Header.Add("Content-Type", tt.Request.ContentType)
 		}
@@ -199,12 +193,7 @@ func BenchmarkUUIDAssigner(b *testing.B) {
 }
 
 func BenchmarkRequests(b *testing.B) {
-	c, _ := statsd.NewNoop()
-	SpadeHandler := &SpadeHandler{
-		EdgeLogger: &testEdgeLogger{},
-		Assigner:   Assigner,
-		StatLogger: c,
-	}
+	SpadeHandler := makeSpadeHandler()
 	reqGet, err := http.NewRequest("GET", "http://spade.twitch.tv/?data=blah", nil)
 	if err != nil {
 		b.Fatalf("Failed to build request error: %s\n", err)
@@ -218,7 +207,6 @@ func BenchmarkRequests(b *testing.B) {
 	reqPost.Header.Add("X-Forwarded-For", "222.222.222.222")
 	testrecorder := httptest.NewRecorder()
 	b.ResetTimer()
-	isProd = true
 	for i := 0; i < b.N; i++ {
 		if i%2 == 0 {
 			SpadeHandler.ServeHTTP(testrecorder, reqPost)

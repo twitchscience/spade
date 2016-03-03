@@ -51,12 +51,12 @@ func main() {
 		log.Fatalf("Failed To Load Config: %v\n", err)
 	}
 
-	config, c_err := tables.CompileForParsing()
+	config, versions, c_err := tables.CompileForParsing()
 	if c_err != nil {
 		log.Fatalf("Failed To Load Config: %v\n", c_err)
 	}
 
-	p := BuildProcessor(config)
+	p := BuildProcessor(config, versions)
 	handler := &request_handler.SpadeHandler{
 		EdgeLogger: &EZSpadeEdgeLogger{p, &StdoutSpadeWriter{config}},
 		Assigner:   request_handler.Assigner,
