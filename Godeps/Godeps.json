@@ -47,15 +47,15 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/file_writer",
-			"Rev": "c01f543e79d915030dd41e8643ca8c38076218b1"
+			"Rev": "851422b94297a9604bb22f1801c3f0ddb5231f3e"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/gologging",
-			"Rev": "c01f543e79d915030dd41e8643ca8c38076218b1"
+			"Rev": "851422b94297a9604bb22f1801c3f0ddb5231f3e"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/key_name_generator",
-			"Rev": "c01f543e79d915030dd41e8643ca8c38076218b1"
+			"Rev": "851422b94297a9604bb22f1801c3f0ddb5231f3e"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
