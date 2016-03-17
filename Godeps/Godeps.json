@@ -73,14 +73,6 @@
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/spade",
 			"Rev": "d39d4b442646c54bd031a56cba82a94d62d9d91e"
-		},
-		{
-			"ImportPath": "github.com/twitchscience/spade_edge/request_handler",
-			"Rev": "af22078b8c60d5bcf067675a4de144c623feeedb"
-		},
-		{
-			"ImportPath": "github.com/twitchscience/spade_edge/uuid",
-			"Rev": "af22078b8c60d5bcf067675a4de144c623feeedb"
 		}
 	]
 }
