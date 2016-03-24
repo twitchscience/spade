@@ -85,7 +85,7 @@ func TestBooleanConversion(t *testing.T) {
 }
 
 func TestIpConversion(t *testing.T) {
-	err := SetGeoDB("../build/config/GeoLiteCity.dat", "../build/config/GeoIPASNum.dat")
+	err := SetGeoDB("../geoip/TestOldGeoIPCity.dat", "../geoip/TestOldGeoIPASNum.dat")
 	if err != nil {
 		t.Log(err)
 		t.Fail()

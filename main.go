@@ -29,9 +29,9 @@ import (
 )
 
 const (
-	auditBucketName   = "processor-audits"
-	MAX_LINES_PER_LOG = 10000000 // 10 million
-	ROTATE_TIME       = time.Minute * 10
+	auditBucketName = "processor-audits"
+	MaxLinesPerLog  = 10000000 // 10 million
+	RotateTime      = time.Minute * 10
 )
 
 var (
@@ -41,7 +41,7 @@ var (
 	sqsPollInterval = flag.Duration("sqs_poll_interval", 60*time.Second, "how often should we poll SQS?")
 	stats_prefix    = flag.String("stat_prefix", "processor", "statsd prefix")
 	configUrl       = flag.String("config_url", "http://blueprint.twitch.tv/schemas", "the location of blueprint")
-	_gzipped        = flag.Bool("gzipped", false, "use to mark if input is gzipped")
+	s3ConfigPrefix  = flag.String("s3_config_prefix", "", "S3 key to the config directory, with trailing slash")
 	CLOUD_ENV       = environment.GetCloudEnv()
 	auditLogger     *gologging.UploadLogger
 )
@@ -83,7 +83,7 @@ func init() {
 		aws.USWest2,
 	)
 
-	auditRotateCoordinator := gologging.NewRotateCoordinator(MAX_LINES_PER_LOG, ROTATE_TIME)
+	auditRotateCoordinator := gologging.NewRotateCoordinator(MaxLinesPerLog, RotateTime)
 
 	auditBucket := awsConnection.Bucket(auditBucketName + "-" + CLOUD_ENV)
 	auditBucket.PutBucket(s3.BucketOwnerFull)
@@ -144,6 +144,7 @@ func main() {
 		blueprintUploaderPool,
 		auditLogger,
 		fetcher.New(*configUrl),
+		*s3ConfigPrefix,
 	)
 
 	sqsListener := listener.BuildSQSListener(&listener.SQSAddr{

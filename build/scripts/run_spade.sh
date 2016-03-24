@@ -5,8 +5,8 @@ SPADE_DIR="/opt/science/spade"
 
 export GOMAXPROCS="3" # we need 3 or more for spade to run well..
 
-export GEO_IP_DB="${SPADE_DIR}/config/GeoLiteCity.dat"
-export ASN_IP_DB="${SPADE_DIR}/config/GeoIPASNum.dat"
+export GEO_IP_DB="${SPADE_DIR}/config/GeoIPCity.dat"
+export ASN_IP_DB="${SPADE_DIR}/config/GeoLiteASNum.dat"
 SPADE_DATA_DIR="${SPADE_DIR}/data"
 SPADE_LOG_DIR="${SPADE_DIR}/log"
 export STATSD_HOSTPORT="localhost:8125"
@@ -22,14 +22,18 @@ export CONFIG_PREFIX="s3://$S3_CONFIG_BUCKET/$VPC_SUBNET_TAG/$CLOUD_APP/$CLOUD_E
 aws s3 cp --region us-west-2 "$CONFIG_PREFIX/conf.sh" "$SPADE_DIR/config/conf.sh"
 source "$SPADE_DIR/config/conf.sh"
 
+aws s3 cp --region us-west-2 "$CONFIG_PREFIX/GeoIPCity.dat" "$SPADE_DIR/config/GeoIPCity.dat"
+aws s3 cp --region us-west-2 "$CONFIG_PREFIX/GeoLiteASNum.dat" "$SPADE_DIR/config/GeoLiteASNum.dat"
+
 # Optional config variables (often set in the s3 conf)
 # export MAX_LOG_BYTES=100000000 # 100 MB
 # export MAX_LOG_AGE_SECS=3600 # 1 hour
 # export MAX_UNTRACKED_LOG_BYTES=10000000 # 10 MB
 # export MAX_UNTRACKED_LOG_AGE_SECS=600 # 10 minutes
 
-exec ${SPADE_DIR}/bin/spade -gzipped -spade_dir ${SPADE_DATA_DIR} \
+exec ${SPADE_DIR}/bin/spade -spade_dir ${SPADE_DATA_DIR} \
   -config_url ${BLUEPRINT_URL} \
   -audit_log_dir ${SPADE_LOG_DIR} \
   -stat_prefix ${STATSD_PREFIX} \
-  -sqs_poll_interval "5s"
+  -sqs_poll_interval "5s" \
+  -s3_config_prefix $CONFIG_PREFIX

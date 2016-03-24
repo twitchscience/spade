@@ -18,6 +18,7 @@ import (
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/gologging/gologging"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
+	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/table_config"
@@ -58,6 +59,7 @@ func New(
 	blueprintUploaderPool *uploader.UploaderPool,
 	logger *gologging.UploadLogger,
 	fetcher fetcher.ConfigFetcher,
+	s3ConfigPrefix string,
 ) *SpadeEdgeLogManager {
 	reporter := reporter.BuildSpadeReporter(
 		&sync.WaitGroup{},
@@ -82,6 +84,10 @@ func New(
 		log.Panicf("Could not load config with fetcher %+v: %v\n", fetcher, err)
 	}
 	go loader.Crank()
+
+	geoUpdater := geoip.NewUpdater(time.Now(), 1*time.Hour, transformer.GeoIpDB, s3ConfigPrefix)
+	go geoUpdater.UpdateLoop()
+	defer geoUpdater.Close()
 
 	writerController, err := writer.NewWriterController(
 		outputDir,
