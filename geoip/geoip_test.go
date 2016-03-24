@@ -3,7 +3,7 @@ package geoip
 import "testing"
 
 func TestGeoIp(t *testing.T) {
-	g, err := LoadGeoIpDb("../build/config/GeoLiteCity.dat", "../build/config/GeoIPASNum.dat")
+	g, err := NewGeoMMIp("TestOldGeoIPCity.dat", "TestOldGeoIPASNum.dat")
 	if err != nil {
 		t.Error("Failed to load geo DB")
 		t.FailNow()
@@ -43,4 +43,17 @@ func TestGeoIp(t *testing.T) {
 		t.Fail()
 	}
 
+	testIp = "73.202.16.139"
+	if "\"\"" != g.GetCity(testIp) {
+		t.Error("Got the wrong City! got: ", g.GetRegion(testIp))
+		t.Fail()
+	}
+
+	g.geoLoc = "TestNewGeoIPCity.dat"
+	g.asnLoc = "TestNewGeoIPASNum.dat"
+	g.Reload()
+	if "\"Oakland\"" != g.GetCity(testIp) {
+		t.Error("Got the wrong City from the updated geoip db! got: ", g.GetRegion(testIp))
+		t.Fail()
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"strconv"
@@ -105,24 +106,26 @@ func genError(offender interface{}, t string) error {
 var (
 	UnknownTransformError                 = errors.New("Unrecognized transform")
 	ColumnNotFoundError                   = errors.New("Property Not Found")
-	geoIpDB               geoip.GeoLookup = loadDB()
+	GeoIpDB               geoip.GeoLookup = loadDB()
 )
 
 func loadDB() geoip.GeoLookup {
-	g, load_err := geoip.LoadGeoIpDb(os.Getenv("GEO_IP_DB"), os.Getenv("ASN_IP_DB"))
+	dbloc, asnloc := os.Getenv("GEO_IP_DB"), os.Getenv("ASN_IP_DB")
+	g, load_err := geoip.NewGeoMMIp(dbloc, asnloc)
 	if load_err != nil {
+		log.Printf("Error loading geoip db at %s and %s: (%s), using noop db instead", dbloc, asnloc, load_err)
 		return geoip.Noop()
 	}
 	return g
 }
 
 func SetGeoDB(geoloc string, asnloc string) error {
-	g, load_err := geoip.LoadGeoIpDb(geoloc, asnloc)
+	g, load_err := geoip.NewGeoMMIp(geoloc, asnloc)
 	if load_err != nil {
 		return errors.New(fmt.Sprintf("Could not find geoIP db at %s or %s, using noop db instead\n",
 			geoloc, asnloc))
 	}
-	geoIpDB = g
+	GeoIpDB = g
 	return nil
 }
 
@@ -252,7 +255,7 @@ func ipCityFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Ip City")
 	}
-	return geoIpDB.GetCity(str), nil
+	return GeoIpDB.GetCity(str), nil
 }
 
 func ipCountryFormat(target interface{}) (string, error) {
@@ -260,7 +263,7 @@ func ipCountryFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Ip Country")
 	}
-	return geoIpDB.GetCountry(str), nil
+	return GeoIpDB.GetCountry(str), nil
 }
 
 func ipRegionFormat(target interface{}) (string, error) {
@@ -268,7 +271,7 @@ func ipRegionFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Ip Region")
 	}
-	return geoIpDB.GetRegion(str), nil
+	return GeoIpDB.GetRegion(str), nil
 }
 
 func ipAsnFormat(target interface{}) (string, error) {
@@ -276,7 +279,7 @@ func ipAsnFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Ip Asn")
 	}
-	return geoIpDB.GetAsn(str), nil
+	return GeoIpDB.GetAsn(str), nil
 }
 
 func ipAsnIntFormat(target interface{}) (string, error) {
@@ -284,7 +287,7 @@ func ipAsnIntFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Ip Asn")
 	}
-	asnString := geoIpDB.GetAsn(str)
+	asnString := GeoIpDB.GetAsn(str)
 	index := strings.Index(asnString, " ")
 	if index < 0 || !strings.HasPrefix(asnString, "\"AS") {
 		return "", genError(target, "Ip Asn")
