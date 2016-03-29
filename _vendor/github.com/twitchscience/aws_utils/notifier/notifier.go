@@ -4,112 +4,75 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"log"
-	"net"
-	"net/http"
-	"os"
-	"time"
 
-	"github.com/AdRoll/goamz/aws"
-	"github.com/AdRoll/goamz/sqs"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
 	"github.com/twitchscience/aws_utils/common"
 )
 
-func TimeoutDialer(cTimeout time.Duration, rwTimeout time.Duration) func(net, addr string) (c net.Conn, err error) {
-	return func(netw, addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout(netw, addr, cTimeout)
-		if err != nil {
-			return nil, err
-		}
-		conn.SetDeadline(time.Now().Add(rwTimeout))
-		return conn, nil
-	}
-}
-
-func NewTimeoutClient(connectTimeout time.Duration, readWriteTimeout time.Duration) *http.Client {
-	http.DefaultClient.Transport = &http.Transport{
-		Dial: TimeoutDialer(connectTimeout, readWriteTimeout),
-	}
-	return http.DefaultClient
-}
-
 var (
-	client        = NewTimeoutClient(10*time.Second, 10*time.Second)
-	DefaultClient = BuildSQSClient(GetAuthFromEnv(), aws.USWest2)
-	Retrier       = &common.Retrier{
+	Retrier = &common.Retrier{
 		Times:         3,
 		BackoffFactor: 2,
 	}
 )
 
-func GetAuthFromEnv() aws.Auth {
-	auth, err := aws.GetAuth("", "", "", time.Now())
-	if err != nil && os.Getenv("CLOUD_ENVIRONMENT") == "PRODUCTION" {
-		log.Fatalln("Failed to recieve auth from env")
-	}
-	return auth
-}
-
 type MessageCreator map[string]func(...interface{}) (string, error)
 
 type SQSClient struct {
-	Signer *MessageCreator
-	SQS    *sqs.SQS
+	Signer    *MessageCreator
+	sqsClient sqsiface.SQSAPI
 }
 
-func BuildSQSClient(auth aws.Auth, region aws.Region) *SQSClient {
+func BuildSQSClient(client sqsiface.SQSAPI) *SQSClient {
 	m := make(MessageCreator)
 	m.RegisterMessageType("error", func(args ...interface{}) (string, error) {
 		return fmt.Sprintf("%v", args...), nil
 	})
 	return &SQSClient{
-		Signer: &m,
-		SQS:    sqs.New(auth, region),
+		Signer:    &m,
+		sqsClient: client,
 	}
-}
-
-func (s *SQSClient) GetAndCreateQIfNotExist(qName string, timeout int) (*sqs.Queue, error) {
-	var q *sqs.Queue
-	err := Retrier.Retry(func() error {
-		var e error
-		q, e = s.SQS.GetQueue(qName)
-		return e
-	})
-	if err != nil {
-		q, err = s.SQS.CreateQueueWithTimeout(qName, timeout)
-	}
-	return q, err
 }
 
 func (s *SQSClient) SendMessage(messageType, qName string, args ...interface{}) error {
-	q, err := s.GetAndCreateQIfNotExist(qName, 300)
+	out, err := s.sqsClient.GetQueueUrl(&sqs.GetQueueUrlInput{
+		QueueName: aws.String(qName),
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("Error getting URL for SQS queue %s: %v", qName, err)
 	}
+
 	message, err := s.Signer.SignBody(messageType, args...)
 	if err != nil {
 		return err
 	}
-	return s.handle(message, q)
+	return s.handle(message, aws.StringValue(out.QueueUrl))
 }
 
-func (s *SQSClient) handle(message string, q *sqs.Queue) error {
-	var res *sqs.SendMessageResponse
+func (s *SQSClient) handle(message, qURL string) error {
+	var res *sqs.SendMessageOutput
+
 	err := Retrier.Retry(func() error {
-		// Call sqs.Queue.SendMessage() - initiates a HTTP request.
 		var e error
-		res, e = q.SendMessage(message)
+		res, e = s.sqsClient.SendMessage(&sqs.SendMessageInput{
+			QueueUrl:    aws.String(qURL),
+			MessageBody: aws.String(message),
+		})
 		return e
 	})
+
 	if err != nil {
 		return err
 	}
+
 	// check md5
 	expectedHash := md5.New()
 	expectedHash.Write([]byte(message))
 	expected := fmt.Sprintf("%x", expectedHash.Sum(nil))
-	if expected != res.MD5 {
-		return errors.New(fmt.Sprintf("message %s Did Not match expected %s", res.MD5, expected))
+	if expected != aws.StringValue(res.MD5OfMessageBody) {
+		return fmt.Errorf("message %s did not match expected %s", res.MD5OfMessageBody, expected)
 	}
 	return nil
 }

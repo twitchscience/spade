@@ -40,6 +40,7 @@
       "inline": [
         "mkdir -p /tmp/{{user `project`}}/bin",
         "mkdir -p /tmp/{{user `project`}}/config",
+        "mkdir -p /tmp/{{user `project`}}/log",
         "sudo mkdir -p /opt/science",
         "sudo mv /tmp/{{user `project`}} /opt/science/{{user `project`}}"
       ]
