@@ -21,9 +21,11 @@ mkdir -p ${SPADE_DATA_DIR}/spade_logging ${SPADE_DATA_DIR}/events ${SPADE_DATA_D
 export CONFIG_PREFIX="s3://$S3_CONFIG_BUCKET/$VPC_SUBNET_TAG/$CLOUD_APP/$CLOUD_ENVIRONMENT"
 aws s3 cp --region us-west-2 "$CONFIG_PREFIX/conf.sh" "$SPADE_DIR/config/conf.sh"
 source "$SPADE_DIR/config/conf.sh"
+export AWS_REGION=us-west-2
+export AWS_DEFAULT_REGION=$AWS_REGION # aws-cli uses AWS_DEFAULT_REGION, aws-sdk-go uses AWS_REGION
 
-aws s3 cp --region us-west-2 "$CONFIG_PREFIX/GeoIPCity.dat" "$SPADE_DIR/config/GeoIPCity.dat"
-aws s3 cp --region us-west-2 "$CONFIG_PREFIX/GeoLiteASNum.dat" "$SPADE_DIR/config/GeoLiteASNum.dat"
+aws s3 cp "$CONFIG_PREFIX/GeoIPCity.dat" "$SPADE_DIR/config/GeoIPCity.dat"
+aws s3 cp "$CONFIG_PREFIX/GeoLiteASNum.dat" "$SPADE_DIR/config/GeoLiteASNum.dat"
 
 # Optional config variables (often set in the s3 conf)
 # export MAX_LOG_BYTES=100000000 # 100 MB

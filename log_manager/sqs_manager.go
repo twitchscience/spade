@@ -1,8 +1,6 @@
 package log_manager
 
 import (
-	"bufio"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,6 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
+	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/twitchscience/aws_utils/environment"
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/gologging/gologging"
@@ -24,9 +26,6 @@ import (
 	"github.com/twitchscience/spade/table_config"
 	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/writer"
-
-	"github.com/AdRoll/goamz/s3"
-	"github.com/AdRoll/goamz/sqs"
 )
 
 var env = environment.GetCloudEnv()
@@ -37,13 +36,12 @@ const (
 )
 
 type SpadeEdgeLogManager struct {
-	Reporter  reporter.Reporter
-	Processor *processor.SpadeProcessorPool
-	Writer    writer.SpadeWriter
-	Stats     reporter.StatsLogger
-	Loader    transformer.ConfigLoader
-
-	S3 *s3.S3
+	Reporter   reporter.Reporter
+	Processor  *processor.SpadeProcessorPool
+	Writer     writer.SpadeWriter
+	Stats      reporter.StatsLogger
+	Loader     transformer.ConfigLoader
+	Downloader s3manageriface.DownloaderAPI
 }
 
 type EdgeMessage struct {
@@ -54,7 +52,7 @@ type EdgeMessage struct {
 func New(
 	outputDir string,
 	stats reporter.StatsLogger,
-	s3 *s3.S3,
+	downloader s3manageriface.DownloaderAPI,
 	redshiftUploaderPool *uploader.UploaderPool,
 	blueprintUploaderPool *uploader.UploaderPool,
 	logger *gologging.UploadLogger,
@@ -106,12 +104,12 @@ func New(
 	)
 	processor.Listen(writerController)
 	return &SpadeEdgeLogManager{
-		Reporter:  reporter,
-		Writer:    writerController,
-		Processor: processor,
-		Loader:    loader,
-		Stats:     stats,
-		S3:        s3,
+		Reporter:   reporter,
+		Writer:     writerController,
+		Processor:  processor,
+		Loader:     loader,
+		Stats:      stats,
+		Downloader: downloader,
 	}
 }
 
@@ -153,36 +151,28 @@ func (s *SpadeEdgeLogManager) handle(msg *sqs.Message) error {
 		useGzip:   true,
 	}
 
-	err := json.Unmarshal([]byte(msg.Body), &edgeMessage)
+	err := json.Unmarshal([]byte(aws.StringValue(msg.Body)), &edgeMessage)
 	if err != nil {
 		return fmt.Errorf("Could not decode %s\n", msg.Body)
 	}
-	parts := strings.SplitN(edgeMessage.Keyname, "/", 2)
-	bucket := s.S3.Bucket(parts[0])
 
-	readCloser, err := bucket.GetReader(parts[1])
+	tmpFile, err := ioutil.TempFile("", "spade")
 	if err != nil {
-		return fmt.Errorf("Unable to get s3 reader %s on bucket %s with key %s\n",
-			err, "spade-edge-"+env, edgeMessage.Keyname)
-	}
-	defer readCloser.Close()
-
-	b := make([]byte, 8)
-	rand.Read(b)
-
-	tmpFile, err := ioutil.TempFile("", fmt.Sprintf("%08x", b))
-	log.Println("using ", edgeMessage.Keyname)
-	if err != nil {
-		return fmt.Errorf("cloud not open temp file for %s as %s:  %s\n",
-			edgeMessage.Keyname, fmt.Sprintf("%08x", b), err)
+		return fmt.Errorf("Failed to create a tempfile to download %s: %v", edgeMessage.Keyname, err)
 	}
 	defer os.Remove(tmpFile.Name())
-	writer := bufio.NewWriter(tmpFile)
-	n, err := writer.ReadFrom(readCloser)
+	log.Printf("Downloading %s into %s", edgeMessage.Keyname, tmpFile.Name())
+
+	parts := strings.SplitN(edgeMessage.Keyname, "/", 2)
+	n, err := s.Downloader.Download(tmpFile, &s3.GetObjectInput{
+		Bucket: aws.String(parts[0]),
+		Key:    aws.String(parts[1]),
+	})
+
 	if err != nil {
-		return fmt.Errorf("Encounted err while downloading %s: %s\n", edgeMessage.Keyname, err)
+		return fmt.Errorf("Error downloading %s into %s: %v", edgeMessage.Keyname, tmpFile.Name(), err)
 	}
-	writer.Flush()
+
 	log.Printf("Downloaded a %d byte file\n", n)
 
 	tmpStat, err := tmpFile.Stat()

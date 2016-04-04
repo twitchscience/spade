@@ -18,10 +18,6 @@ type NotifierHarness interface {
 	SendMessage(*UploadReceipt) error
 }
 
-type UploaderConstructor interface {
-	BuildUploader() Uploader
-}
-
 type UploadRequest struct {
 	Filename string
 	FileType FileTypeHeader
@@ -50,13 +46,13 @@ func StartUploaderPool(
 	numWorkers int,
 	errorNotifier ErrorNotifierHarness,
 	notifier NotifierHarness,
-	builder UploaderConstructor,
+	builder Factory,
 ) *UploaderPool {
 	workers := make([]Uploader, numWorkers)
 	in := make(chan *UploadRequest, UPLOAD_BUFFER_SIZE)
 	out := make(chan *UploadReceipt, UPLOAD_BUFFER_SIZE)
 	for i := 0; i < numWorkers; i++ {
-		workers[i] = builder.BuildUploader()
+		workers[i] = builder.NewUploader()
 	}
 	pool := &UploaderPool{
 		Pool:              workers,
