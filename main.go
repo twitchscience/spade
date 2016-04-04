@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"syscall"
 
+	gen "github.com/twitchscience/gologging/key_name_generator"
+
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
 	"github.com/twitchscience/aws_utils/environment"
 	"github.com/twitchscience/aws_utils/listener"
 	"github.com/twitchscience/aws_utils/notifier"
 	aws_upload "github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/gologging/gologging"
-	gen "github.com/twitchscience/gologging/key_name_generator"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/log_manager"
 	jsonLog "github.com/twitchscience/spade/parser/json_log"
@@ -23,8 +28,6 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/AdRoll/goamz/aws"
-	"github.com/AdRoll/goamz/s3"
 	"github.com/cactus/go-statsd-client/statsd"
 )
 
@@ -58,10 +61,10 @@ func (d *DummyNotifierHarness) SendMessage(r *aws_upload.UploadReceipt) error {
 	return nil
 }
 
-func BuildSQSErrorHarness() *SQSErrorHarness {
+func BuildSQSErrorHarness(sqs sqsiface.SQSAPI) *SQSErrorHarness {
 	return &SQSErrorHarness{
 		qName:    fmt.Sprintf("uploader-error-spade-processor-%s", CLOUD_ENV),
-		notifier: notifier.DefaultClient,
+		notifier: notifier.BuildSQSClient(sqs),
 	}
 }
 
@@ -73,52 +76,18 @@ func (s *SQSErrorHarness) SendError(er error) {
 }
 
 func init() {
-	var err error
-	auth, err := aws.GetAuth("", "", "", time.Now())
-	if err != nil {
-		log.Fatalln("Failed to recieve auth from env")
-	}
-	awsConnection := s3.New(
-		auth,
-		aws.USWest2,
-	)
-
-	auditRotateCoordinator := gologging.NewRotateCoordinator(MaxLinesPerLog, RotateTime)
-
-	auditBucket := awsConnection.Bucket(auditBucketName + "-" + CLOUD_ENV)
-	auditBucket.PutBucket(s3.BucketOwnerFull)
-
-	auditInfo := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor_audit", *logging_dir)
-
-	auditLogger, err = gologging.StartS3Logger(
-		auditRotateCoordinator,
-		auditInfo,
-		&DummyNotifierHarness{},
-		&aws_upload.S3UploaderBuilder{
-			Bucket:           auditBucket,
-			KeyNameGenerator: &gen.EdgeKeyNameGenerator{Info: auditInfo},
-		},
-		BuildSQSErrorHarness(),
-		2,
-	)
-	if err != nil {
-		log.Fatalf("Got Error while building audit: %s\n", err)
-	}
-
 	jsonLog.Register(os.Getenv("REJECT_ON_BAD_FIRST_IP") != "")
 }
 
 func main() {
 	flag.Parse()
 
-	auth, err := aws.GetAuth("", "", "", time.Now())
-	if err != nil {
-		log.Fatalf("Failed to recieve auth from env: %s\n", err)
-	}
-	awsConnection := s3.New(
-		auth,
-		aws.USWest2,
-	)
+	session := session.New()
+	sqs := sqs.New(session)
+	s3Uploader := s3manager.NewUploader(session)
+	s3Downloader := s3manager.NewDownloader(session)
+
+	var err error
 
 	// Set up statsd monitoring
 	// - If the env is not set up we wil use a noop connection
@@ -133,13 +102,30 @@ func main() {
 		log.Printf("Connected to statsd at %s\n", statsdHostport)
 	}
 
-	spadeUploaderPool := uploader.BuildUploaderForRedshift(3, awsConnection)
-	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(1, awsConnection)
+	auditRotateCoordinator := gologging.NewRotateCoordinator(MaxLinesPerLog, RotateTime)
+
+	auditBucket := auditBucketName + "-" + CLOUD_ENV
+	auditInfo := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor_audit", *logging_dir)
+
+	auditLogger, err = gologging.StartS3Logger(
+		auditRotateCoordinator,
+		auditInfo,
+		&DummyNotifierHarness{},
+		aws_upload.NewFactory(auditBucket, &gen.EdgeKeyNameGenerator{Info: auditInfo}, s3Uploader),
+		BuildSQSErrorHarness(sqs),
+		2,
+	)
+	if err != nil {
+		log.Fatalf("Got Error while building audit: %s\n", err)
+	}
+
+	spadeUploaderPool := uploader.BuildUploaderForRedshift(3, sqs, s3Uploader)
+	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(1, sqs, s3Uploader)
 
 	lm := log_manager.New(
 		*_dir,
 		reporter.WrapCactusStatter(stats, 0.1),
-		awsConnection,
+		s3Downloader,
 		spadeUploaderPool,
 		blueprintUploaderPool,
 		auditLogger,
@@ -147,11 +133,7 @@ func main() {
 		*s3ConfigPrefix,
 	)
 
-	sqsListener := listener.BuildSQSListener(&listener.SQSAddr{
-		QueueName: "spade-edge-" + CLOUD_ENV,
-		Region:    aws.USWest2,
-		Auth:      auth,
-	}, lm, *sqsPollInterval)
+	sqsListener := listener.BuildSQSListener(lm, *sqsPollInterval, sqs)
 
 	wait := make(chan bool)
 
@@ -169,7 +151,7 @@ func main() {
 	}()
 
 	// Start listener
-	sqsListener.Listen()
+	sqsListener.Listen("spade-edge-" + CLOUD_ENV)
 	<-wait
 
 	err = uploader.ClearEventsFolder(spadeUploaderPool, *_dir+"/"+writer.EventsDir+"/")
