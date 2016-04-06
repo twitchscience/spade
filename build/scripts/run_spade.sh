@@ -20,6 +20,7 @@ mkdir -p ${SPADE_DATA_DIR}/spade_logging ${SPADE_DATA_DIR}/events ${SPADE_DATA_D
 
 export CONFIG_PREFIX="s3://$S3_CONFIG_BUCKET/$VPC_SUBNET_TAG/$CLOUD_APP/$CLOUD_ENVIRONMENT"
 aws s3 cp --region us-west-2 "$CONFIG_PREFIX/conf.sh" "$SPADE_DIR/config/conf.sh"
+aws s3 cp --region us-west-2 "$CONFIG_PREFIX/conf.json" "$SPADE_DIR/config/conf.json"
 source "$SPADE_DIR/config/conf.sh"
 export AWS_REGION=us-west-2
 export AWS_DEFAULT_REGION=$AWS_REGION # aws-cli uses AWS_DEFAULT_REGION, aws-sdk-go uses AWS_REGION
@@ -33,9 +34,9 @@ aws s3 cp "$CONFIG_PREFIX/GeoLiteASNum.dat" "$SPADE_DIR/config/GeoLiteASNum.dat"
 # export MAX_UNTRACKED_LOG_BYTES=10000000 # 10 MB
 # export MAX_UNTRACKED_LOG_AGE_SECS=600 # 10 minutes
 
+
 exec ${SPADE_DIR}/bin/spade -spade_dir ${SPADE_DATA_DIR} \
-  -config_url ${BLUEPRINT_URL} \
+  -config "${SPADE_DIR}/config/conf.json" \
   -audit_log_dir ${SPADE_LOG_DIR} \
   -stat_prefix ${STATSD_PREFIX} \
-  -sqs_poll_interval "5s" \
   -s3_config_prefix $CONFIG_PREFIX
