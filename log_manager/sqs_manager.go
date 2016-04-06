@@ -6,8 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"runtime"
-	"runtime/pprof"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
 	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/twitchscience/aws_utils/environment"
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/gologging/gologging"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
@@ -27,8 +24,6 @@ import (
 	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/writer"
 )
-
-var env = environment.GetCloudEnv()
 
 const (
 	ParserPoolSize      = 10
@@ -58,6 +53,8 @@ func New(
 	logger *gologging.UploadLogger,
 	fetcher fetcher.ConfigFetcher,
 	s3ConfigPrefix string,
+	maxLogBytes int64,
+	maxLogAgeSecs int64,
 ) *SpadeEdgeLogManager {
 	reporter := reporter.BuildSpadeReporter(
 		&sync.WaitGroup{},
@@ -92,6 +89,8 @@ func New(
 		reporter,
 		redshiftUploaderPool,
 		blueprintUploaderPool,
+		maxLogBytes,
+		maxLogAgeSecs,
 	)
 	if err != nil {
 		log.Panicf("Could not create writer Controller %v\n", err)
@@ -117,22 +116,6 @@ func New(
 // we abort the handle before any messages are processed. This avoids double processing.
 func (s *SpadeEdgeLogManager) Handle(msg *sqs.Message) error {
 	err := s.handle(msg)
-
-	// Only run the heap dump on test boxes
-	if env == "test" {
-		runtime.GC()
-		now := time.Now()
-		f, e := os.Create(fmt.Sprintf("Profile.%s.prof", now.Format("2006-01-02.15-04-05")))
-		if e != nil {
-			fmt.Fprintln(os.Stderr, e)
-			return err
-		}
-		e = pprof.WriteHeapProfile(f)
-		if e != nil {
-			fmt.Fprintln(os.Stderr, e)
-			return err
-		}
-	}
 	return err
 }
 

@@ -3,7 +3,6 @@ package uploader
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -11,44 +10,33 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
-	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
-	"github.com/twitchscience/aws_utils/environment"
+	"github.com/aws/aws-sdk-go/service/sns/snsiface"
 	"github.com/twitchscience/aws_utils/notifier"
 	"github.com/twitchscience/aws_utils/uploader"
 	gen "github.com/twitchscience/gologging/key_name_generator"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
-var (
-	CLOUD_ENV = environment.GetCloudEnv()
-
-	redshiftQueue      = fmt.Sprintf("spade-compactor-%s", CLOUD_ENV)
-	redshiftBucketName = "spade-compacter"
-
-	nonTrackedQueue      = fmt.Sprintf("spade-nontracked-%s", CLOUD_ENV)
-	nonTrackedBucketName = "spade-nontracked"
-)
-
-type SQSNotifierHarness struct {
-	qName    string
-	notifier *notifier.SQSClient
+type SNSNotifierHarness struct {
+	topicARN string
+	notifier *notifier.SNSClient
 }
 
 type ProcessorErrorHandler struct {
-	qName    string
-	notifier *notifier.SQSClient
+	topicARN string
+	notifier *notifier.SNSClient
 }
 
 func (p *ProcessorErrorHandler) SendError(err error) {
 	log.Println(err)
-	e := p.notifier.SendMessage("error", "uploader-error-"+p.qName, err)
+	e := p.notifier.SendMessage("error", p.topicARN, err)
 	if e != nil {
 		log.Println(e)
 	}
 }
 
-func BuildSQSNotifierHarness(sqs sqsiface.SQSAPI, qName string) *SQSNotifierHarness {
-	client := notifier.BuildSQSClient(sqs)
+func BuildSNSNotifierHarness(sns snsiface.SNSAPI, topicARN string) *SNSNotifierHarness {
+	client := notifier.BuildSNSClient(sns)
 	client.Signer.RegisterMessageType("uploadNotify", func(args ...interface{}) (string, error) {
 		if len(args) != 3 {
 			return "", errors.New("Missing correct number of args")
@@ -65,8 +53,8 @@ func BuildSQSNotifierHarness(sqs sqsiface.SQSAPI, qName string) *SQSNotifierHarn
 		}
 		return string(jsonMessage), nil
 	})
-	return &SQSNotifierHarness{
-		qName:    qName,
+	return &SNSNotifierHarness{
+		topicARN: topicARN,
 		notifier: client,
 	}
 }
@@ -90,8 +78,8 @@ func extractEventVersion(filename string) int {
 	return val
 }
 
-func (s *SQSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
-	return s.notifier.SendMessage("uploadNotify", s.qName, extractEventName(message.Path), message.KeyName, extractEventVersion(message.Path))
+func (s *SNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
+	return s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, extractEventVersion(message.Path))
 }
 
 func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) error {
@@ -109,25 +97,47 @@ func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) er
 	})
 }
 
-func buildUploader(bucketName, queueName string, numWorkers int, sqs sqsiface.SQSAPI, s3Uploader s3manageriface.UploaderAPI) *uploader.UploaderPool {
+type buildUploaderInput struct {
+	bucketName    string
+	topicARN      string
+	errorTopicARN string
+	numWorkers    int
+	sns           snsiface.SNSAPI
+	s3Uploader    s3manageriface.UploaderAPI
+}
+
+func buildUploader(input *buildUploaderInput) *uploader.UploaderPool {
 	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
-	bucket := bucketName + "-" + CLOUD_ENV
 
 	return uploader.StartUploaderPool(
-		numWorkers,
+		input.numWorkers,
 		&ProcessorErrorHandler{
-			notifier: notifier.BuildSQSClient(sqs),
-			qName:    queueName,
+			notifier: notifier.BuildSNSClient(input.sns),
+			topicARN: input.errorTopicARN,
 		},
-		BuildSQSNotifierHarness(sqs, queueName),
-		uploader.NewFactory(bucket, &gen.ProcessorKeyNameGenerator{Info: info}, s3Uploader),
+		BuildSNSNotifierHarness(input.sns, input.topicARN),
+		uploader.NewFactory(input.bucketName, &gen.ProcessorKeyNameGenerator{Info: info}, input.s3Uploader),
 	)
 }
 
-func BuildUploaderForRedshift(numWorkers int, sqs sqsiface.SQSAPI, s3Uploader s3manageriface.UploaderAPI) *uploader.UploaderPool {
-	return buildUploader(redshiftBucketName, redshiftQueue, numWorkers, sqs, s3Uploader)
+func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI, aceBucketName, aceTopicARN, aceErrorTopicARN string) *uploader.UploaderPool {
+	return buildUploader(&buildUploaderInput{
+		bucketName:    aceBucketName,
+		topicARN:      aceTopicARN,
+		errorTopicARN: aceErrorTopicARN,
+		numWorkers:    numWorkers,
+		sns:           sns,
+		s3Uploader:    s3Uploader,
+	})
 }
 
-func BuildUploaderForBlueprint(numWorkers int, sqs sqsiface.SQSAPI, s3Uploader s3manageriface.UploaderAPI) *uploader.UploaderPool {
-	return buildUploader(nonTrackedBucketName, nonTrackedQueue, numWorkers, sqs, s3Uploader)
+func BuildUploaderForBlueprint(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI, nonTrackedBucketName, nonTrackedTopicARN, nonTrackedErrorTopicARN string) *uploader.UploaderPool {
+	return buildUploader(&buildUploaderInput{
+		bucketName:    nonTrackedBucketName,
+		topicARN:      nonTrackedTopicARN,
+		errorTopicARN: nonTrackedErrorTopicARN,
+		numWorkers:    numWorkers,
+		sns:           sns,
+		s3Uploader:    s3Uploader,
+	})
 }

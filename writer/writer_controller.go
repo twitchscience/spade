@@ -16,9 +16,6 @@ const (
 )
 
 var (
-	maxLogSize        = getInt64FromEnv("MAX_LOG_BYTES", 1<<32)                                  // default 4GB
-	maxLogTimeAllowed = time.Duration(getInt64FromEnv("MAX_LOG_AGE_SECS", 300*60)) * time.Second // default 5 hours
-
 	maxNonTrackedLogSize        = getInt64FromEnv("MAX_UNTRACKED_LOG_BYTES", 1<<29)                                 // default 500MB
 	maxNonTrackedLogTimeAllowed = time.Duration(getInt64FromEnv("MAX_UNTRACKED_LOG_AGE_SECS", 10*60)) * time.Second // default 10 mins
 
@@ -56,6 +53,9 @@ type writerController struct {
 	inbound    chan *WriteRequest
 	closeChan  chan chan error
 	rotateChan chan chan error
+
+	maxLogBytes   int64
+	maxLogAgeSecs int64
 }
 
 // The WriterController handles logic to distribute writes across a number of workers.
@@ -67,6 +67,8 @@ func NewWriterController(
 	reporter reporter.Reporter,
 	spadeUploaderPool *uploader.UploaderPool,
 	blueprintUploaderPool *uploader.UploaderPool,
+	maxLogBytes int64,
+	maxLogAgeSecs int64,
 ) (SpadeWriter, error) {
 	c := &writerController{
 		SpadeFolder:       folder,
@@ -78,6 +80,9 @@ func NewWriterController(
 		inbound:    make(chan *WriteRequest, inboundChannelBuffer),
 		closeChan:  make(chan chan error),
 		rotateChan: make(chan chan error),
+
+		maxLogBytes:   maxLogBytes,
+		maxLogAgeSecs: maxLogAgeSecs,
 	}
 	err := c.initNonTrackedWriter()
 	if err != nil {
@@ -126,8 +131,8 @@ func (c *writerController) route(request *WriteRequest) error {
 				c.Reporter,
 				c.redshiftUploader,
 				RotateConditions{
-					MaxLogSize:     maxLogSize,
-					MaxTimeAllowed: maxLogTimeAllowed,
+					MaxLogSize:     c.maxLogBytes,
+					MaxTimeAllowed: time.Duration(c.maxLogAgeSecs) * time.Second,
 				},
 			)
 			if err != nil {

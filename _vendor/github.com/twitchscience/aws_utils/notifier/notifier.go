@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/sns"
+	"github.com/aws/aws-sdk-go/service/sns/snsiface"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
 	"github.com/twitchscience/aws_utils/common"
@@ -75,6 +77,38 @@ func (s *SQSClient) handle(message, qURL string) error {
 		return fmt.Errorf("message %s did not match expected %s", res.MD5OfMessageBody, expected)
 	}
 	return nil
+}
+
+type SNSClient struct {
+	Signer    *MessageCreator
+	snsClient snsiface.SNSAPI
+}
+
+func BuildSNSClient(client snsiface.SNSAPI) *SNSClient {
+	m := make(MessageCreator)
+	m.RegisterMessageType("error", func(args ...interface{}) (string, error) {
+		return fmt.Sprintf("%v", args...), nil
+	})
+	return &SNSClient{
+		Signer:    &m,
+		snsClient: client,
+	}
+}
+
+func (s *SNSClient) SendMessage(messageType, topicARN string, args ...interface{}) error {
+	message, err := s.Signer.SignBody(messageType, args...)
+	if err != nil {
+		return err
+	}
+
+	err = Retrier.Retry(func() error {
+		_, err := s.snsClient.Publish(&sns.PublishInput{
+			Message:  &message,
+			TopicArn: &topicARN,
+		})
+		return err
+	})
+	return err
 }
 
 func (m *MessageCreator) RegisterMessageType(name string, messageType func(...interface{}) (string, error)) {
