@@ -98,17 +98,16 @@ func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) er
 }
 
 type buildUploaderInput struct {
-	bucketName    string
-	topicARN      string
-	errorTopicARN string
-	numWorkers    int
-	sns           snsiface.SNSAPI
-	s3Uploader    s3manageriface.UploaderAPI
+	bucketName       string
+	topicARN         string
+	errorTopicARN    string
+	numWorkers       int
+	sns              snsiface.SNSAPI
+	s3Uploader       s3manageriface.UploaderAPI
+	keyNameGenerator uploader.S3KeyNameGenerator
 }
 
 func buildUploader(input *buildUploaderInput) *uploader.UploaderPool {
-	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
-
 	return uploader.StartUploaderPool(
 		input.numWorkers,
 		&ProcessorErrorHandler{
@@ -116,28 +115,34 @@ func buildUploader(input *buildUploaderInput) *uploader.UploaderPool {
 			topicARN: input.errorTopicARN,
 		},
 		BuildSNSNotifierHarness(input.sns, input.topicARN),
-		uploader.NewFactory(input.bucketName, &gen.ProcessorKeyNameGenerator{Info: info}, input.s3Uploader),
+		uploader.NewFactory(input.bucketName, input.keyNameGenerator, input.s3Uploader),
 	)
 }
 
 func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI, aceBucketName, aceTopicARN, aceErrorTopicARN string) *uploader.UploaderPool {
+	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
+
 	return buildUploader(&buildUploaderInput{
-		bucketName:    aceBucketName,
-		topicARN:      aceTopicARN,
-		errorTopicARN: aceErrorTopicARN,
-		numWorkers:    numWorkers,
-		sns:           sns,
-		s3Uploader:    s3Uploader,
+		bucketName:       aceBucketName,
+		topicARN:         aceTopicARN,
+		errorTopicARN:    aceErrorTopicARN,
+		numWorkers:       numWorkers,
+		sns:              sns,
+		s3Uploader:       s3Uploader,
+		keyNameGenerator: &gen.ProcessorKeyNameGenerator{Info: info},
 	})
 }
 
 func BuildUploaderForBlueprint(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI, nonTrackedBucketName, nonTrackedTopicARN, nonTrackedErrorTopicARN string) *uploader.UploaderPool {
+	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
+
 	return buildUploader(&buildUploaderInput{
-		bucketName:    nonTrackedBucketName,
-		topicARN:      nonTrackedTopicARN,
-		errorTopicARN: nonTrackedErrorTopicARN,
-		numWorkers:    numWorkers,
-		sns:           sns,
-		s3Uploader:    s3Uploader,
+		bucketName:       nonTrackedBucketName,
+		topicARN:         nonTrackedTopicARN,
+		errorTopicARN:    nonTrackedErrorTopicARN,
+		numWorkers:       numWorkers,
+		sns:              sns,
+		s3Uploader:       s3Uploader,
+		keyNameGenerator: &gen.EdgeKeyNameGenerator{Info: info},
 	})
 }
