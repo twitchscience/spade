@@ -1,6 +1,7 @@
 package reporter
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -51,6 +52,17 @@ type SpadeStatsdTracker struct {
 
 type SpadeUUIDTracker struct {
 	Logger *gologging.UploadLogger
+}
+
+// spadeAuditLog defines a struct of spade audit log to output as json
+// any change to this struct, please make relevant changes to
+// func (s *SpadeUUIDTracker) Track(result *Result) and
+// update the explicit string printing given marshall error
+type spadeAuditLog struct {
+	UUID       string
+	FinishedAt time.Time
+	Duration   float64
+	Failure    string
 }
 
 func BuildSpadeReporter(wait *sync.WaitGroup, trackers []Tracker) Reporter {
@@ -125,5 +137,16 @@ func (s *SpadeStatsdTracker) Track(result *Result) {
 }
 
 func (s *SpadeUUIDTracker) Track(result *Result) {
-	s.Logger.Log(fmt.Sprintf("[%d] %s %d", result.FinishedAt.Unix(), result.UUID, int(result.Failure)))
+	newAuditLog := spadeAuditLog{
+		UUID:       result.UUID,
+		FinishedAt: result.FinishedAt,
+		Duration:   result.Duration.Seconds(),
+		Failure:    result.Failure.String(),
+	}
+	jsonBytes, err := json.Marshal(newAuditLog)
+	if err != nil { //write json string explicitlt given any marshal error
+		s.Logger.Log(fmt.Sprintf("{\"UUID\":\"%s\", \"FinishedAt\":\"%v\", \"Duration\":%f, \"Failure\":\"%s\"}",
+			result.UUID, result.FinishedAt, result.Duration.Seconds(), result.Failure.String()))
+	}
+	s.Logger.Log(string(jsonBytes))
 }
