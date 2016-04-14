@@ -61,7 +61,7 @@ func BuildSNSNotifierHarness(sns snsiface.SNSAPI, topicARN string) *SNSNotifierH
 
 func extractEventName(filename string) string {
 	path := strings.LastIndex(filename, "/") + 1
-	ext := strings.Index(filename, ".")
+	ext := path + strings.Index(filename[path:], ".")
 	if ext < 0 {
 		ext = len(filename)
 	}
@@ -84,6 +84,9 @@ func (s *SNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error 
 
 func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) error {
 	return filepath.Walk(eventsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 		if info.IsDir() && path != eventsDir {
 			return filepath.SkipDir
 		}
