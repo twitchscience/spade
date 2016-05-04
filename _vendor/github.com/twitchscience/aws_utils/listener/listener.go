@@ -71,7 +71,6 @@ func (l *SQSListener) waitForMessages(qURL *string) {
 	o, err := l.sqsClient.ReceiveMessage(&sqs.ReceiveMessageInput{
 		MaxNumberOfMessages: aws.Int64(1),
 		QueueUrl:            qURL,
-		VisibilityTimeout:   aws.Int64(10),
 	})
 	if err != nil || len(o.Messages) < 1 {
 		time.Sleep(l.pollInterval)
