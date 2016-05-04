@@ -49,8 +49,8 @@ var (
 			"login": 42,
 		},
 	)
-	_transformer transformer.Transformer = transformer.NewRedshiftTransformer(_config)
-	_parser                              = parser.BuildSpadeParser(&dummyReporter{})
+	_transformer = transformer.NewRedshiftTransformer(_config)
+	_parser      = parser.BuildSpadeParser(&dummyReporter{})
 )
 
 func getPST() *time.Location {
@@ -256,11 +256,15 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 		t.Fail()
 	}
 	if !requestEqual(&expectedPP, w.requests[0]) {
-		t.Logf("Expected\n%+v\nbut got\n%+v\n", &expectedPP, w.requests[0])
-		t.Fail()
-	}
-
-	if !requestEqual(&expectedPT, w.requests[1]) {
+		if !requestEqual(&expectedPP, w.requests[1]) {
+			t.Logf("Expected\n%+v\nbut got\n%+v\n", expectedPP, *w.requests[1])
+			t.Fail()
+		}
+		if !requestEqual(&expectedPT, w.requests[0]) {
+			t.Logf("Expected\n%+v\nbut got\n%+v\n", expectedPT, *w.requests[1])
+			t.Fail()
+		}
+	} else if !requestEqual(&expectedPT, w.requests[1]) {
 		t.Logf("Expected\n%+v\nbut got\n%+v\n", expectedPT, *w.requests[1])
 		t.Fail()
 	}
@@ -388,8 +392,8 @@ func TestMultiRequestProcessing(t *testing.T) {
 		[]byte(sampleMultiLogLine),
 		now,
 	}
-	expected := []*writer.WriteRequest{
-		&writer.WriteRequest{
+	expected := map[string]*writer.WriteRequest{
+		"uuid1-0": &writer.WriteRequest{
 			Category: "login",
 			Version:  42,
 			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
@@ -397,7 +401,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 			Source:   []byte(expectedJSONBytes),
 			Pstart:   now,
 		},
-		&writer.WriteRequest{
+		"uuid1-1": &writer.WriteRequest{
 			Category: "login",
 			Version:  42,
 			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
@@ -405,7 +409,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 			Source:   []byte(expectedJSONBytes),
 			Pstart:   now,
 		},
-		&writer.WriteRequest{
+		"uuid1-2": &writer.WriteRequest{
 			Category: "login",
 			Version:  42,
 			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
@@ -413,7 +417,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 			Source:   []byte(expectedJSONBytes),
 			Pstart:   now,
 		},
-		&writer.WriteRequest{
+		"uuid1-3": &writer.WriteRequest{
 			Category: "login",
 			Version:  42,
 			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
@@ -439,12 +443,18 @@ func TestMultiRequestProcessing(t *testing.T) {
 		t.Fail()
 	}
 
-	for i, e := range w.requests {
-		if !requestEqual(expected[i], e) {
+	for _, e := range w.requests {
+		if expected[e.UUID] == nil {
+			t.Logf("Unknown or duplicate UUID: %s\n", e.UUID)
+			t.Fail()
+			continue
+		}
+		if !requestEqual(expected[e.UUID], e) {
 			fmt.Println(string(e.Source))
-			t.Logf("Expected %+v but got %+v\n", expected[i], e)
+			t.Logf("Expected %+v but got %+v\n", expected[e.UUID], e)
 			t.Fail()
 		}
+		expected[e.UUID] = nil // Ensure we don't get the same event twice.
 
 	}
 }
