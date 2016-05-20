@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+
+	"github.com/twitchscience/spade/geoip"
 )
 
 var config struct {
@@ -33,6 +35,8 @@ var config struct {
 	MaxLogBytes int64
 	// MaxLogAgeSecs is the max number of seconds between log rotations
 	MaxLogAgeSecs int64
+	// Geoip is the config for the geoip updater
+	Geoip *geoip.Config
 }
 
 func loadConfig(filename string) error {
@@ -62,12 +66,21 @@ func validateConfig() error {
 		config.NonTrackedBucketName,
 		config.AuditBucketName,
 		config.EdgeQueue,
+		config.Geoip.ConfigBucket,
+		config.Geoip.IpCityKey,
+		config.Geoip.IpASNKey,
 	} {
 		if str == "" {
 			return errors.New("Empty string found for required config option.")
 		}
 	}
-	for _, i := range []int64{config.SQSPollInterval, config.MaxLogBytes, config.MaxLogAgeSecs} {
+	for _, i := range []int64{
+		config.SQSPollInterval,
+		config.MaxLogBytes,
+		config.MaxLogAgeSecs,
+		int64(config.Geoip.UpdateFrequencyMins),
+		int64(config.Geoip.JitterSecs),
+	} {
 		if i <= 0 {
 			return errors.New("Nonpositive integer found in config, must provide positive integer.")
 		}

@@ -44,7 +44,6 @@ var (
 	stats_prefix   = flag.String("stat_prefix", "processor", "statsd prefix")
 	configFilename = flag.String("config", "conf.json", "name of config file")
 	printConfig    = flag.Bool("printConfig", false, "Print the config object after parsing?")
-	s3ConfigPrefix = flag.String("s3_config_prefix", "", "S3 key to the config directory, with trailing slash")
 	auditLogger    *gologging.UploadLogger
 )
 
@@ -135,9 +134,9 @@ func main() {
 		blueprintUploaderPool,
 		auditLogger,
 		fetcher.New(config.BlueprintSchemasURL),
-		*s3ConfigPrefix,
 		config.MaxLogBytes,
 		config.MaxLogAgeSecs,
+		*config.Geoip,
 	)
 
 	sqsListener := listener.BuildSQSListener(lm, time.Duration(config.SQSPollInterval)*time.Second, sqs)
