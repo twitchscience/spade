@@ -25,8 +25,8 @@ source "$SPADE_DIR/config/conf.sh"
 export AWS_REGION=us-west-2
 export AWS_DEFAULT_REGION=$AWS_REGION # aws-cli uses AWS_DEFAULT_REGION, aws-sdk-go uses AWS_REGION
 
-aws s3 cp "$CONFIG_PREFIX/GeoIPCity.dat" "$SPADE_DIR/config/GeoIPCity.dat"
-aws s3 cp "$CONFIG_PREFIX/GeoLiteASNum.dat" "$SPADE_DIR/config/GeoLiteASNum.dat"
+aws s3 cp "$CONFIG_PREFIX/GeoIPCity.dat" "${GEO_IP_DB}"
+aws s3 cp "$CONFIG_PREFIX/GeoLiteASNum.dat" "${ASN_IP_DB}"
 
 # Optional config variables (often set in the s3 conf)
 # export MAX_LOG_BYTES=100000000 # 100 MB
@@ -38,5 +38,4 @@ aws s3 cp "$CONFIG_PREFIX/GeoLiteASNum.dat" "$SPADE_DIR/config/GeoLiteASNum.dat"
 exec ${SPADE_DIR}/bin/spade -spade_dir ${SPADE_DATA_DIR} \
   -config "${SPADE_DIR}/config/conf.json" \
   -audit_log_dir ${SPADE_LOG_DIR} \
-  -stat_prefix ${STATSD_PREFIX} \
-  -s3_config_prefix $CONFIG_PREFIX
+  -stat_prefix ${STATSD_PREFIX}

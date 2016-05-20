@@ -17,21 +17,30 @@ import (
 )
 
 type Updater struct {
-	lastUpdated    time.Time
-	reloadTime     time.Duration
-	closer         chan bool
-	geo            GeoLookup
-	spadeDir       string
-	s3ConfigPrefix string
+	lastUpdated time.Time
+	closer      chan bool
+	geo         GeoLookup
+	config      Config
+	ipCityPath  string
+	ipASNPath   string
 }
 
-func NewUpdater(lastUpdated time.Time, reloadTime time.Duration, geo GeoLookup, s3ConfigPrefix string) Updater {
+type Config struct {
+	ConfigBucket        string
+	IpCityKey           string
+	IpASNKey            string
+	UpdateFrequencyMins int
+	JitterSecs          int
+}
+
+func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config) Updater {
 	u := Updater{
-		lastUpdated:    lastUpdated,
-		reloadTime:     reloadTime,
-		closer:         make(chan bool),
-		geo:            geo,
-		s3ConfigPrefix: s3ConfigPrefix,
+		lastUpdated: lastUpdated,
+		closer:      make(chan bool),
+		geo:         geo,
+		ipCityPath:  os.Getenv("GEO_IP_DB"),
+		ipASNPath:   os.Getenv("ASN_IP_DB"),
+		config:      config,
 	}
 	return u
 }
@@ -54,10 +63,10 @@ func writeWithRename(data io.ReadCloser, fname string) error {
 // getIfNew downloads the new geoip dbs from s3 if there are new ones, and returns
 // a boolean true if it was new
 func (u Updater) getIfNew() (bool, error) {
-	svc := s3.New(session.New(&aws.Config{Region: aws.String("us-west-2")}))
+	svc := s3.New(session.New(&aws.Config{}))
 	resp, err := svc.GetObject(&s3.GetObjectInput{
-		Bucket:          aws.String("twitch-aws-config"),
-		Key:             aws.String(u.s3ConfigPrefix + "GeoIPCity.dat"),
+		Bucket:          aws.String(u.config.ConfigBucket),
+		Key:             aws.String(u.config.IpCityKey),
 		IfModifiedSince: aws.Time(u.lastUpdated),
 	})
 	if err != nil {
@@ -68,21 +77,21 @@ func (u Updater) getIfNew() (bool, error) {
 				return false, nil
 			}
 		}
-		return false, fmt.Errorf("Error getting s3 object: %s", err)
+		return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, u.config.IpCityKey, err)
 	}
-	err = writeWithRename(resp.Body, u.spadeDir+"/config/GeoIPCity.dat")
+	err = writeWithRename(resp.Body, u.ipCityPath)
 	if err != nil {
 		return false, err
 	}
 
 	resp, err = svc.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String("twitch-aws-config"),
-		Key:    aws.String(u.s3ConfigPrefix + "GeoLiteASNum.dat"),
+		Bucket: aws.String(u.config.ConfigBucket),
+		Key:    aws.String(u.config.IpASNKey),
 	})
 	if err != nil {
-		return false, fmt.Errorf("Error getting s3 object: %s", err)
+		return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, u.config.IpASNKey, err)
 	}
-	writeWithRename(resp.Body, u.spadeDir+"/config/GeoLiteASNum.dat")
+	err = writeWithRename(resp.Body, u.ipASNPath)
 	if err != nil {
 		return false, err
 	}
@@ -90,12 +99,13 @@ func (u Updater) getIfNew() (bool, error) {
 }
 
 func (u Updater) UpdateLoop() {
-	tick := time.NewTicker(u.reloadTime)
+	tick := time.NewTicker(time.Duration(u.config.UpdateFrequencyMins) * time.Minute)
 	for {
 		select {
 		case <-tick.C:
-			jitter := time.Duration(rand.Intn(100)) * time.Second
+			jitter := time.Duration(rand.Intn(u.config.JitterSecs)) * time.Second
 			time.Sleep(jitter)
+			log.Printf("Pulling down new geoip dbs if they are new...")
 			newDB, err := u.getIfNew()
 			if err != nil {
 				log.Printf("Error getting the new geoip: %s", err.Error())
@@ -108,6 +118,9 @@ func (u Updater) UpdateLoop() {
 					continue
 				}
 				u.lastUpdated = time.Now()
+				log.Printf("Loaded and using new geoip databases.")
+			} else {
+				log.Printf("... geoip dbs are not new, waiting %v minutes to try again", u.config.UpdateFrequencyMins)
 			}
 
 		case <-u.closer:

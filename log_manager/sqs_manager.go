@@ -37,6 +37,7 @@ type SpadeEdgeLogManager struct {
 	Stats      reporter.StatsLogger
 	Loader     transformer.ConfigLoader
 	Downloader s3manageriface.DownloaderAPI
+	GeoUpdater geoip.Updater
 }
 
 type EdgeMessage struct {
@@ -52,9 +53,9 @@ func New(
 	blueprintUploaderPool *uploader.UploaderPool,
 	logger *gologging.UploadLogger,
 	fetcher fetcher.ConfigFetcher,
-	s3ConfigPrefix string,
 	maxLogBytes int64,
 	maxLogAgeSecs int64,
+	geoipConfig geoip.Config,
 ) *SpadeEdgeLogManager {
 	reporter := reporter.BuildSpadeReporter(
 		&sync.WaitGroup{},
@@ -80,9 +81,8 @@ func New(
 	}
 	go loader.Crank()
 
-	geoUpdater := geoip.NewUpdater(time.Now(), 1*time.Hour, transformer.GeoIpDB, s3ConfigPrefix)
+	geoUpdater := geoip.NewUpdater(time.Now(), transformer.GeoIpDB, geoipConfig)
 	go geoUpdater.UpdateLoop()
-	defer geoUpdater.Close()
 
 	writerController, err := writer.NewWriterController(
 		outputDir,
@@ -109,6 +109,7 @@ func New(
 		Loader:     loader,
 		Stats:      stats,
 		Downloader: downloader,
+		GeoUpdater: geoUpdater,
 	}
 }
 
@@ -122,6 +123,7 @@ func (s *SpadeEdgeLogManager) Handle(msg *sqs.Message) error {
 func (s *SpadeEdgeLogManager) Close() {
 	s.Writer.Close()
 	s.Processor.Close()
+	s.GeoUpdater.Close()
 }
 
 func (s *SpadeEdgeLogManager) handle(msg *sqs.Message) error {
