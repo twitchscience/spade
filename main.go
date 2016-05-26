@@ -92,6 +92,18 @@ func main() {
 		log.Printf("Connected to statsd at %s\n", statsdHostport)
 	}
 
+	// Listener for ELB health check
+	healthMux := http.NewServeMux()
+	healthMux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	go func() {
+		err := http.ListenAndServe(net.JoinHostPort("", "8080"), healthMux)
+		if err != nil {
+			log.Printf("Error listening to port 8080 with healthMux %v\n", err)
+		}
+	}()
+
 	geoIpUpdater := createGeoipUpdater(config.Geoip)
 	auditLogger := newAuditLogger(sns, s3Uploader)
 	reporterStats := reporter.WrapCactusStatter(stats, 0.1)
