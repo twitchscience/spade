@@ -33,8 +33,8 @@ type Config struct {
 	JitterSecs          int
 }
 
-func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config) Updater {
-	u := Updater{
+func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config) *Updater {
+	u := &Updater{
 		lastUpdated: lastUpdated,
 		closer:      make(chan bool),
 		geo:         geo,
@@ -62,7 +62,7 @@ func writeWithRename(data io.ReadCloser, fname string) error {
 
 // getIfNew downloads the new geoip dbs from s3 if there are new ones, and returns
 // a boolean true if it was new
-func (u Updater) getIfNew() (bool, error) {
+func (u *Updater) getIfNew() (bool, error) {
 	svc := s3.New(session.New(&aws.Config{}))
 	resp, err := svc.GetObject(&s3.GetObjectInput{
 		Bucket:          aws.String(u.config.ConfigBucket),
@@ -98,7 +98,7 @@ func (u Updater) getIfNew() (bool, error) {
 	return true, nil
 }
 
-func (u Updater) UpdateLoop() {
+func (u *Updater) UpdateLoop() {
 	tick := time.NewTicker(time.Duration(u.config.UpdateFrequencyMins) * time.Minute)
 	for {
 		select {
@@ -129,6 +129,6 @@ func (u Updater) UpdateLoop() {
 	}
 }
 
-func (u Updater) Close() {
+func (u *Updater) Close() {
 	u.closer <- true
 }

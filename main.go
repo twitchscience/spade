@@ -2,21 +2,18 @@ package main
 
 import (
 	"flag"
+	"net"
+	"net/http"
 	"syscall"
+	"time"
 
-	gen "github.com/twitchscience/gologging/key_name_generator"
-
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go/service/sns"
-	"github.com/aws/aws-sdk-go/service/sns/snsiface"
-	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/twitchscience/aws_utils/listener"
-	"github.com/twitchscience/aws_utils/notifier"
-	aws_upload "github.com/twitchscience/aws_utils/uploader"
-	"github.com/twitchscience/gologging/gologging"
+	"github.com/patrickmn/go-cache"
+	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
-	"github.com/twitchscience/spade/log_manager"
 	jsonLog "github.com/twitchscience/spade/parser/json_log"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/uploader"
@@ -25,74 +22,61 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
 )
 
 const (
-	MaxLinesPerLog              = 10000000 // 10 million
-	RotateTime                  = time.Minute * 10
-	RedshiftUploaderNumWorkers  = 3
-	BlueprintUploaderNumWorkers = 1
+	redshiftUploaderNumWorkers     = 3
+	blueprintUploaderNumWorkers    = 1
+	rotationCheckFrequency         = 2 * time.Second
+	duplicateCacheExpiry           = 5 * time.Minute
+	duplicateCacheCleanupFrequency = 1 * time.Minute
 )
 
 var (
 	_dir        = flag.String("spade_dir", ".", "where does spade_log live?")
-	logging_dir = flag.String("audit_log_dir", ".", "where does audit_log live?")
-
-	stats_prefix   = flag.String("stat_prefix", "processor", "statsd prefix")
-	configFilename = flag.String("config", "conf.json", "name of config file")
-	printConfig    = flag.Bool("printConfig", false, "Print the config object after parsing?")
-	auditLogger    *gologging.UploadLogger
+	statsPrefix = flag.String("stat_prefix", "processor", "statsd prefix")
 )
-
-type DummyNotifierHarness struct{}
-
-// TODO: DRY this up with spade-edge.2014-06-02 16:38
-type SNSErrorHarness struct {
-	topicARN string
-	notifier *notifier.SNSClient
-}
-
-func (d *DummyNotifierHarness) SendMessage(r *aws_upload.UploadReceipt) error {
-	return nil
-}
-
-func BuildSNSErrorHarness(topicARN string, sns snsiface.SNSAPI) *SNSErrorHarness {
-	return &SNSErrorHarness{
-		topicARN: topicARN,
-		notifier: notifier.BuildSNSClient(sns),
-	}
-}
-
-func (s *SNSErrorHarness) SendError(er error) {
-	err := s.notifier.SendMessage("error", s.topicARN, er)
-	if err != nil {
-		log.Println(err)
-	}
-}
 
 func init() {
 	jsonLog.Register(os.Getenv("REJECT_ON_BAD_FIRST_IP") != "")
 }
 
+type parseRequest struct {
+	data  []byte
+	start time.Time
+}
+
+func (p *parseRequest) Data() []byte {
+	return p.data
+}
+
+func (p *parseRequest) StartTime() time.Time {
+	return p.start
+}
+
 func main() {
 	flag.Parse()
+	loadConfig()
 
-	err := loadConfig(*configFilename)
-	if err != nil {
-		log.Fatalln("Error loading config", err)
-	}
-	if *printConfig {
-		log.Println(config)
-	}
+	// aws resources
+	session := session.New(&aws.Config{
+		HTTPClient: &http.Client{
+			Timeout: 6200 * time.Millisecond,
+			Transport: &http.Transport{
+				Dial: (&net.Dialer{
+					Timeout:   6200 * time.Millisecond,
+					KeepAlive: 30 * time.Second,
+				}).Dial,
+				TLSHandshakeTimeout: 6200 * time.Millisecond,
+				MaxIdleConnsPerHost: 100,
+			},
+		},
+	})
 
-	session := session.New()
 	sns := sns.New(session)
-	sqs := sqs.New(session)
 	s3Uploader := s3manager.NewUploader(session)
-	s3Downloader := s3manager.NewDownloader(session)
 
 	// Set up statsd monitoring
 	// - If the env is not set up we wil use a noop connection
@@ -101,66 +85,73 @@ func main() {
 	if statsdHostport == "" {
 		stats, _ = statsd.NewNoop()
 	} else {
-		if stats, err = statsd.New(statsdHostport, *stats_prefix); err != nil {
+		var err error
+		if stats, err = statsd.New(statsdHostport, *statsPrefix); err != nil {
 			log.Fatalf("Statsd configuration error: %v", err)
 		}
 		log.Printf("Connected to statsd at %s\n", statsdHostport)
 	}
 
-	auditRotateCoordinator := gologging.NewRotateCoordinator(MaxLinesPerLog, RotateTime)
+	geoIpUpdater := createGeoipUpdater(config.Geoip)
+	auditLogger := newAuditLogger(sns, s3Uploader)
+	reporterStats := reporter.WrapCactusStatter(stats, 0.1)
+	spadeReporter := createSpadeReporter(reporterStats, auditLogger)
+	spadeUploaderPool := uploader.BuildUploaderForRedshift(redshiftUploaderNumWorkers, sns, s3Uploader, config.AceBucketName, config.AceTopicARN, config.AceErrorTopicARN)
+	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(blueprintUploaderNumWorkers, sns, s3Uploader, config.NonTrackedBucketName, config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN)
+	spadeWriter := createSpadeWriter(*_dir, spadeReporter, spadeUploaderPool, blueprintUploaderPool, config.MaxLogBytes, config.MaxLogAgeSecs)
+	fetcher := fetcher.New(config.BlueprintSchemasURL)
+	schemaLoader := createSchemaLoader(fetcher, reporterStats)
+	processorPool := createProcessorPool(schemaLoader, spadeReporter)
+	processorPool.Listen(spadeWriter)
+	consumer := createConsumer(session, stats)
+	rotationTicker := time.NewTicker(rotationCheckFrequency)
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGINT)
+	duplicateCache := cache.New(duplicateCacheExpiry, duplicateCacheCleanupFrequency)
 
-	auditInfo := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor_audit", *logging_dir)
-
-	auditLogger, err = gologging.StartS3Logger(
-		auditRotateCoordinator,
-		auditInfo,
-		&DummyNotifierHarness{},
-		aws_upload.NewFactory(config.AuditBucketName, &gen.EdgeKeyNameGenerator{Info: auditInfo}, s3Uploader),
-		BuildSNSErrorHarness(config.ProcessorErrorTopicARN, sns),
-		2,
-	)
-	if err != nil {
-		log.Fatalf("Got Error while building audit: %s\n", err)
+	numProcessed := 0
+MainLoop:
+	for {
+		select {
+		case <-sigc:
+			break MainLoop
+		case <-rotationTicker.C:
+			spadeWriter.Rotate()
+			s := spadeReporter.Finalize()
+			log.Printf("Processed: %d Stats: %v", numProcessed, s)
+		case record := <-consumer.C:
+			if record.Error != nil {
+				log.Printf("Consumer error: %s", record.Error)
+			} else {
+				numProcessed++
+				var rawEvent spade.Event
+				err := spade.Unmarshal(record.Data, &rawEvent)
+				if err == nil {
+					_, found := duplicateCache.Get(rawEvent.Uuid)
+					if !found {
+						now := time.Now()
+						_ = stats.TimingDuration("record.age", now.Sub(rawEvent.ReceivedAt), 1.0)
+						spadeReporter.IncrementExpected(1)
+						processorPool.Process(&parseRequest{
+							data:  record.Data,
+							start: time.Now(),
+						})
+					} else {
+						log.Println("Ignoring duplicate of UUID", rawEvent.Uuid)
+					}
+					duplicateCache.Set(rawEvent.Uuid, 0, cache.DefaultExpiration)
+				}
+			}
+		}
 	}
 
-	spadeUploaderPool := uploader.BuildUploaderForRedshift(RedshiftUploaderNumWorkers, sns, s3Uploader, config.AceBucketName, config.AceTopicARN, config.AceErrorTopicARN)
-	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(BlueprintUploaderNumWorkers, sns, s3Uploader, config.NonTrackedBucketName, config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN)
+	consumer.Close()
+	spadeWriter.Close()
+	processorPool.Close()
+	geoIpUpdater.Close()
+	auditLogger.Close()
 
-	lm := log_manager.New(
-		*_dir,
-		reporter.WrapCactusStatter(stats, 0.1),
-		s3Downloader,
-		spadeUploaderPool,
-		blueprintUploaderPool,
-		auditLogger,
-		fetcher.New(config.BlueprintSchemasURL),
-		config.MaxLogBytes,
-		config.MaxLogAgeSecs,
-		*config.Geoip,
-	)
-
-	sqsListener := listener.BuildSQSListener(lm, time.Duration(config.SQSPollInterval)*time.Second, sqs)
-
-	wait := make(chan bool)
-
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc,
-		syscall.SIGINT)
-	go func() {
-		<-sigc
-		// Cause flush
-		sqsListener.Close()
-		auditLogger.Close()
-		lm.Close()
-		// TODO: rethink the auditlogger logic...
-		wait <- true
-	}()
-
-	// Start listener
-	sqsListener.Listen(config.EdgeQueue)
-	<-wait
-
-	err = uploader.ClearEventsFolder(spadeUploaderPool, *_dir+"/"+writer.EventsDir+"/")
+	err := uploader.ClearEventsFolder(spadeUploaderPool, *_dir+"/"+writer.EventsDir+"/")
 	if err != nil {
 		log.Println(err)
 	}
@@ -171,5 +162,6 @@ func main() {
 	}
 
 	spadeUploaderPool.Close()
+
 	blueprintUploaderPool.Close()
 }
