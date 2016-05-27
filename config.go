@@ -3,9 +3,17 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
+	"log"
 	"os"
 
+	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
+)
+
+var (
+	configFilename = flag.String("config", "conf.json", "name of config file")
+	printConfig    = flag.Bool("printConfig", false, "Print the config object after parsing?")
 )
 
 var config struct {
@@ -29,29 +37,36 @@ var config struct {
 	NonTrackedBucketName string
 	// AuditBucketName is the name of the s3 bucket to put audits into
 	AuditBucketName string
-	// EdgeQueue is the name of the SQS queue to listen to for events from the edge
-	EdgeQueue string
 	// MaxLogBytes is the max number of log bytes before file rotation
 	MaxLogBytes int64
 	// MaxLogAgeSecs is the max number of seconds between log rotations
 	MaxLogAgeSecs int64
+	// Consumer is the config for the kinesis based event consumer
+	Consumer consumer.Config
 	// Geoip is the config for the geoip updater
 	Geoip *geoip.Config
 }
 
-func loadConfig(filename string) error {
-	f, err := os.Open(filename)
+func loadConfig() {
+	f, err := os.Open(*configFilename)
 	if err != nil {
-		return err
+		log.Fatalf("Unable to load config from %s: %s", *configFilename, err)
 	}
 
-	p := json.NewDecoder(f)
-	err = p.Decode(&config)
+	err = json.NewDecoder(f).Decode(&config)
 	if err != nil {
-		return err
+		log.Fatalf("Unable to decode json config from %s: %s", *configFilename, err)
 	}
 
-	return validateConfig()
+	err = validateConfig()
+	if err != nil {
+		log.Fatalf("Config from %s is invalid: %s", *configFilename, err)
+	}
+
+	if *printConfig {
+		b, _ := json.MarshalIndent(config, "", "\t")
+		log.Printf("\n%s", string(b))
+	}
 }
 
 func validateConfig() error {
@@ -65,7 +80,6 @@ func validateConfig() error {
 		config.AceBucketName,
 		config.NonTrackedBucketName,
 		config.AuditBucketName,
-		config.EdgeQueue,
 		config.Geoip.ConfigBucket,
 		config.Geoip.IpCityKey,
 		config.Geoip.IpASNKey,

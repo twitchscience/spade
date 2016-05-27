@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/twitchscience/aws_utils/uploader"
@@ -50,12 +51,14 @@ func NewGzipWriter(
 
 		in: make(chan *WriteRequest),
 	}
+	writer.Add(1)
 	go writer.Listen()
 
 	return writer, nil
 }
 
 type gzipFileWriter struct {
+	sync.WaitGroup
 	ParentFolder     string
 	FullName         string
 	File             *os.File
@@ -88,6 +91,7 @@ func (w *gzipFileWriter) Rotate() (bool, error) {
 func (w *gzipFileWriter) Close() error {
 	defer gzPool.Put(w.GzWriter)
 	close(w.in)
+	w.Wait()
 
 	inode, err := w.File.Stat()
 	if err != nil {
@@ -127,6 +131,7 @@ func (w *gzipFileWriter) Write(req *WriteRequest) error {
 }
 
 func (w *gzipFileWriter) Listen() {
+	defer w.Done()
 	for {
 		req, ok := <-w.in
 		if !ok {

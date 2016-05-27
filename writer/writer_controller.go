@@ -41,6 +41,11 @@ type SpadeWriter interface {
 	Rotate() (bool, error)
 }
 
+type rotateResult struct {
+	allDone bool // did the rotation close all the files
+	err     error
+}
+
 type writerController struct {
 	SpadeFolder       string
 	Routes            map[string]SpadeWriter
@@ -52,7 +57,7 @@ type writerController struct {
 
 	inbound    chan *WriteRequest
 	closeChan  chan chan error
-	rotateChan chan chan error
+	rotateChan chan chan rotateResult
 
 	maxLogBytes   int64
 	maxLogAgeSecs int64
@@ -79,7 +84,7 @@ func NewWriterController(
 
 		inbound:    make(chan *WriteRequest, inboundChannelBuffer),
 		closeChan:  make(chan chan error),
-		rotateChan: make(chan chan error),
+		rotateChan: make(chan chan rotateResult),
 
 		maxLogBytes:   maxLogBytes,
 		maxLogAgeSecs: maxLogAgeSecs,
@@ -196,17 +201,18 @@ func (c *writerController) close() error {
 }
 
 func (c *writerController) Rotate() (bool, error) {
-	recieve := make(chan error)
+	recieve := make(chan rotateResult)
 	defer close(recieve)
 	c.rotateChan <- recieve
-	return len(c.Routes) == 0, <-recieve
+	result := <-recieve
+	return result.allDone, result.err
 }
 
-func (c *writerController) rotate() error {
+func (c *writerController) rotate() rotateResult {
 	for k, w := range c.Routes {
 		rotated, err := w.Rotate()
 		if err != nil {
-			return err
+			return rotateResult{false, err}
 		}
 		if rotated {
 			delete(c.Routes, k)
@@ -215,14 +221,14 @@ func (c *writerController) rotate() error {
 
 	rotated, err := c.NonTrackedWriter.Rotate()
 	if err != nil {
-		return err
+		return rotateResult{false, err}
 	}
 
 	if rotated {
 		c.initNonTrackedWriter()
 	}
 
-	return nil
+	return rotateResult{rotated && len(c.Routes) == 0, err}
 }
 
 func MakeErrorRequest(e *parser.MixpanelEvent, err interface{}) *WriteRequest {
