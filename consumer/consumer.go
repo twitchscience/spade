@@ -1,7 +1,11 @@
 package consumer
 
 import (
+	"bytes"
+	"compress/flate"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -10,6 +14,7 @@ import (
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/kinsumer"
 	kstatsd "github.com/twitchscience/kinsumer/statsd"
+	"github.com/twitchscience/scoop_protocol/spade"
 )
 
 // Config is used to set configuration variables for the Consumer
@@ -140,13 +145,51 @@ func New(session *session.Session, stats statsd.Statter, config Config) (*Consum
 	return c, nil
 }
 
+const COMPRESSION_VERSION byte = 0
+
+func decompress(c []byte) ([]byte, error) {
+	// Hack in just for kick over, test if the array is json
+	var e spade.Event
+	err := json.Unmarshal(c, &e)
+	if err == nil && e.Version == 3 {
+		return c, nil
+	}
+	// End hack
+
+	compressed := bytes.NewBuffer(c)
+	v, err := compressed.ReadByte()
+	if err != nil {
+		return nil, fmt.Errorf("Error reading version byte: %s", err)
+	}
+	if v != COMPRESSION_VERSION {
+		return nil, fmt.Errorf("Unknown version, got %v expected %v", v, COMPRESSION_VERSION)
+	}
+
+	deflator := flate.NewReader(compressed)
+
+	var decompressed bytes.Buffer
+	_, err = io.Copy(&decompressed, deflator)
+	if err != nil {
+		return nil, fmt.Errorf("Error decompressing event: %s", err)
+	}
+	err = deflator.Close()
+	if err != nil {
+		return nil, fmt.Errorf("Error decompressing event: %s", err)
+	}
+
+	return decompressed.Bytes(), nil
+}
+
 func (c *Consumer) crank() {
 	for {
-		d, e := c.kinsumer.Next()
+		d, err := c.kinsumer.Next()
+		if err == nil && d != nil {
+			d, err = decompress(d)
+		}
 		select {
 		case <-c.closer:
 			return
-		case c.send <- &Result{Data: d, Error: e}:
+		case c.send <- &Result{Data: d, Error: err}:
 		}
 	}
 }
