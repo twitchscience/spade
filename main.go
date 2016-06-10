@@ -82,6 +82,10 @@ func expandGlob(glob []byte) ([]*spade.Event, error) {
 	}
 
 	deflator := flate.NewReader(compressed)
+	defer func() {
+		_ = deflator.Close()
+	}()
+
 	var decompressed bytes.Buffer
 	_, err = io.Copy(&decompressed, deflator)
 	if err != nil {
@@ -89,7 +93,7 @@ func expandGlob(glob []byte) ([]*spade.Event, error) {
 	}
 
 	var events []*spade.Event
-	err = json.Unmarshal(decompressed.Bytes(), events)
+	err = json.Unmarshal(decompressed.Bytes(), &events)
 	if err != nil {
 		return nil, fmt.Errorf("Error Unmarhalling: %v", err)
 	}
