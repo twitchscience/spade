@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"compress/flate"
+	"encoding/json"
 	"flag"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"syscall"
@@ -27,11 +32,12 @@ import (
 )
 
 const (
-	redshiftUploaderNumWorkers     = 3
-	blueprintUploaderNumWorkers    = 1
-	rotationCheckFrequency         = 2 * time.Second
-	duplicateCacheExpiry           = 5 * time.Minute
-	duplicateCacheCleanupFrequency = 1 * time.Minute
+	redshiftUploaderNumWorkers          = 3
+	blueprintUploaderNumWorkers         = 1
+	rotationCheckFrequency              = 2 * time.Second
+	duplicateCacheExpiry                = 5 * time.Minute
+	duplicateCacheCleanupFrequency      = 1 * time.Minute
+	compressionVersion             byte = 1
 )
 
 var (
@@ -54,6 +60,45 @@ func (p *parseRequest) Data() []byte {
 
 func (p *parseRequest) StartTime() time.Time {
 	return p.start
+}
+
+func expandGlob(glob []byte) ([]*spade.Event, error) {
+	// Hack in just for kick over, test if the array is json
+	var e spade.Event
+	err := json.Unmarshal(glob, &e)
+	if err == nil && e.Version == 3 {
+		return []*spade.Event{&e}, nil
+	}
+	// End hack
+
+	compressed := bytes.NewBuffer(glob)
+
+	v, err := compressed.ReadByte()
+	if err != nil {
+		return nil, fmt.Errorf("Error reading version byte: %s", err)
+	}
+	if v != compressionVersion {
+		return nil, fmt.Errorf("Unknown version, got %v expected %v", v, compressionVersion)
+	}
+
+	deflator := flate.NewReader(compressed)
+	defer func() {
+		_ = deflator.Close()
+	}()
+
+	var decompressed bytes.Buffer
+	_, err = io.Copy(&decompressed, deflator)
+	if err != nil {
+		return nil, fmt.Errorf("Error decompressiong: %v", err)
+	}
+
+	var events []*spade.Event
+	err = json.Unmarshal(decompressed.Bytes(), &events)
+	if err != nil {
+		return nil, fmt.Errorf("Error Unmarhalling: %v", err)
+	}
+
+	return events, nil
 }
 
 func main() {
@@ -121,7 +166,8 @@ func main() {
 	signal.Notify(sigc, syscall.SIGINT)
 	duplicateCache := cache.New(duplicateCacheExpiry, duplicateCacheCleanupFrequency)
 
-	numProcessed := 0
+	numGlobs := 0
+	numEvents := 0
 MainLoop:
 	for {
 		select {
@@ -130,28 +176,34 @@ MainLoop:
 		case <-rotationTicker.C:
 			spadeWriter.Rotate()
 			s := spadeReporter.Finalize()
-			log.Printf("Processed: %d Stats: %v", numProcessed, s)
+			log.Printf("Globs: %d Events %d Stats: %v", numGlobs, numEvents, s)
 		case record := <-consumer.C:
 			if record.Error != nil {
 				log.Printf("Consumer error: %s", record.Error)
 			} else {
-				numProcessed++
-				var rawEvent spade.Event
-				err := spade.Unmarshal(record.Data, &rawEvent)
-				if err == nil {
-					_, found := duplicateCache.Get(rawEvent.Uuid)
+				numGlobs++
+				events, err := expandGlob(record.Data)
+				if err == nil && len(events) > 0 {
+					uuid := events[0].Uuid
+					_, found := duplicateCache.Get(uuid)
 					if !found {
-						now := time.Now()
-						_ = stats.TimingDuration("record.age", now.Sub(rawEvent.ReceivedAt), 1.0)
-						spadeReporter.IncrementExpected(1)
-						processorPool.Process(&parseRequest{
-							data:  record.Data,
-							start: time.Now(),
-						})
+						numEvents += len(events)
+						for _, e := range events {
+							now := time.Now()
+							_ = stats.TimingDuration("record.age", now.Sub(e.ReceivedAt), 1.0)
+							spadeReporter.IncrementExpected(1)
+							d, _ := spade.Marshal(e)
+							processorPool.Process(&parseRequest{
+								data:  d,
+								start: time.Now(),
+							})
+						}
 					} else {
-						log.Println("Ignoring duplicate of UUID", rawEvent.Uuid)
+						log.Println("Ignoring duplicate of UUID", uuid)
 					}
-					duplicateCache.Set(rawEvent.Uuid, 0, cache.DefaultExpiration)
+					duplicateCache.Set(uuid, 0, cache.DefaultExpiration)
+				} else if err != nil {
+					log.Printf("expandGlob returned error: %v", err)
 				}
 			}
 		}
