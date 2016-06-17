@@ -39,15 +39,17 @@ func getPST() *time.Location {
 // A RedshiftType combines a way to get the input to the ColumnTransformer.
 // Basically it performs Transformer(Event[EventProperty]) -> Column.
 type RedshiftType struct {
-	Transformer   ColumnTranformer
-	EventProperty string
+	Transformer  ColumnTranformer
+	InboundName  string
+	OutboundName string
 }
 
-func (r *RedshiftType) Format(eventProperties map[string]interface{}) (string, error) {
-	if p, ok := eventProperties[r.EventProperty]; ok {
-		return r.Transformer(p)
+func (r *RedshiftType) Format(eventProperties map[string]interface{}) (string, string, error) {
+	if p, ok := eventProperties[r.InboundName]; ok {
+		value, err := r.Transformer(p)
+		return r.OutboundName, value, err
 	}
-	return "", ColumnNotFoundError
+	return "", "", ColumnNotFoundError
 }
 
 // Returns us a Transformer for a given string
@@ -231,7 +233,7 @@ func varcharFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Varchar")
 	}
-	return fmt.Sprintf("%q", str), nil
+	return str, nil
 }
 
 func boolFormat(target interface{}) (string, error) {

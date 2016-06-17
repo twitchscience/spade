@@ -24,8 +24,9 @@ func getTypes(definitions []schema.ColumnDefinition) ([]transformer.RedshiftType
 			return nil, transformer.UnknownTransformError
 		}
 		_type := transformer.RedshiftType{
-			Transformer:   t,
-			EventProperty: definition.InboundName,
+			Transformer:  t,
+			InboundName:  definition.InboundName,
+			OutboundName: definition.OutboundName,
 		}
 		types[i] = _type
 	}

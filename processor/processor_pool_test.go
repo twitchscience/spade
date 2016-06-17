@@ -28,20 +28,20 @@ var (
 		map[string][]transformer.RedshiftType{
 			"login": []transformer.RedshiftType{
 				transformer.RedshiftType{
-					Transformer:   transformer.GetTransform("float"),
-					EventProperty: "sampling_factor",
+					Transformer: transformer.GetTransform("float"),
+					InboundName: "sampling_factor",
 				},
 				transformer.RedshiftType{
-					Transformer:   transformer.GetTransform("varchar"),
-					EventProperty: "distinct_id",
+					Transformer: transformer.GetTransform("varchar"),
+					InboundName: "distinct_id",
 				},
 				transformer.RedshiftType{
-					Transformer:   transformer.GetTransform("f@timestamp@unix"),
-					EventProperty: "time",
+					Transformer: transformer.GetTransform("f@timestamp@unix"),
+					InboundName: "time",
 				},
 				transformer.RedshiftType{
-					Transformer:   transformer.GetTransform("f@timestamp@unix"),
-					EventProperty: "client_time",
+					Transformer: transformer.GetTransform("f@timestamp@unix"),
+					InboundName: "client_time",
 				},
 			},
 		},
@@ -280,7 +280,7 @@ func TestEmptyPropertyProcessing(t *testing.T) {
 	expected := writer.WriteRequest{
 		Category: "login",
 		Version:  42,
-		Line:     "\t\t" + logTime.In(PST).Format(transformer.RedshiftDatetimeIngestString) + "\t",
+		Line:     "\"\"\t\"\"\t\"" + logTime.In(PST).Format(transformer.RedshiftDatetimeIngestString) + "\"\t\"\"",
 		UUID:     "uuid1",
 		Source:   nil,
 		Failure:  reporter.SKIPPED_COLUMN,
@@ -321,7 +321,7 @@ func TestRequestProcessing(t *testing.T) {
 	expected := writer.WriteRequest{
 		Category: "login",
 		Version:  42,
-		Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
+		Line:     "\"0.1500000059604645\"\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t\"2013-10-17 11:05:55\"\t\"2013-09-30 17:00:02\"",
 		UUID:     "uuid1",
 		Source:   []byte(expectedJSONBytes),
 		Pstart:   now,
@@ -396,7 +396,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 		"uuid1-0": &writer.WriteRequest{
 			Category: "login",
 			Version:  42,
-			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
+			Line:     "\"0.1500000059604645\"\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t\"2013-10-17 11:05:55\"\t\"2013-09-30 17:00:02\"",
 			UUID:     "uuid1-0",
 			Source:   []byte(expectedJSONBytes),
 			Pstart:   now,
@@ -404,7 +404,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 		"uuid1-1": &writer.WriteRequest{
 			Category: "login",
 			Version:  42,
-			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
+			Line:     "\"0.1500000059604645\"\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t\"2013-10-17 11:05:55\"\t\"2013-09-30 17:00:02\"",
 			UUID:     "uuid1-1",
 			Source:   []byte(expectedJSONBytes),
 			Pstart:   now,
@@ -412,7 +412,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 		"uuid1-2": &writer.WriteRequest{
 			Category: "login",
 			Version:  42,
-			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
+			Line:     "\"0.1500000059604645\"\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t\"2013-10-17 11:05:55\"\t\"2013-09-30 17:00:02\"",
 			UUID:     "uuid1-2",
 			Source:   []byte(expectedJSONBytes),
 			Pstart:   now,
@@ -420,7 +420,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 		"uuid1-3": &writer.WriteRequest{
 			Category: "login",
 			Version:  42,
-			Line:     "0.1500000059604645\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t2013-10-17 11:05:55\t2013-09-30 17:00:02",
+			Line:     "\"0.1500000059604645\"\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t\"2013-10-17 11:05:55\"\t\"2013-09-30 17:00:02\"",
 			UUID:     "uuid1-3",
 			Source:   []byte(expectedJSONBytes),
 			Pstart:   now,

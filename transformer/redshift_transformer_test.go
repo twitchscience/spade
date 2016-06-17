@@ -50,10 +50,10 @@ func _transformer_runner(t *testing.T, input *parser.MixpanelEvent, expected *wr
 	var _config = &testLoader{
 		Configs: map[string][]RedshiftType{
 			"login": []RedshiftType{
-				RedshiftType{intFormat(64), "times"},
-				RedshiftType{floatFormat, "fraction"},
-				RedshiftType{varcharFormat, "name"},
-				RedshiftType{unixTimeFormat, "now"},
+				RedshiftType{intFormat(64), "times", "times"},
+				RedshiftType{floatFormat, "fraction", "fraction"},
+				RedshiftType{varcharFormat, "name", "name"},
+				RedshiftType{unixTimeFormat, "now", "now"},
 			},
 		},
 		Versions: map[string]int{
@@ -63,6 +63,7 @@ func _transformer_runner(t *testing.T, input *parser.MixpanelEvent, expected *wr
 	var _transformer Transformer = NewRedshiftTransformer(_config)
 	if !reflect.DeepEqual(_transformer.Consume(input), expected) {
 		t.Logf("Got %v expected %v\n", *_transformer.Consume(input), expected)
+		t.Logf("%#v", _transformer.Consume(input).Record)
 		t.Fail()
 	}
 }
@@ -107,7 +108,8 @@ func TestTransformBadColumnEventConsume(t *testing.T) {
 	expected := writer.WriteRequest{
 		Category: "login",
 		Version:  42,
-		Line:     "\t0.1234\t\"kai.hayashi\"\t2013-10-17 11:05:55",
+		Line:     "\"\"\t\"0.1234\"\t\"kai.hayashi\"\t\"2013-10-17 11:05:55\"",
+		Record:   map[string]string{"times": "", "fraction": "0.1234", "name": "kai.hayashi", "now": "2013-10-17 11:05:55"},
 		Source: []byte(`{
 			"times":    "sda",
 			"fraction": 0.1234,
@@ -158,7 +160,8 @@ func TestMissingPropertyEventConsume(t *testing.T) {
 	expected := writer.WriteRequest{
 		Category: "login",
 		Version:  42,
-		Line:     "42\t0.1234\t\"kai.hayashi\"\t",
+		Line:     "\"42\"\t\"0.1234\"\t\"kai.hayashi\"\t\"\"",
+		Record:   map[string]string{"times": "42", "fraction": "0.1234", "name": "kai.hayashi", "": ""},
 		Source: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
@@ -211,7 +214,8 @@ func TestNormalEventConsume(t *testing.T) {
 	expected := writer.WriteRequest{
 		Category: "login",
 		Version:  42,
-		Line:     "42\t0.1234\t\"kai.hayashi\"\t2013-10-17 11:05:55",
+		Line:     "\"42\"\t\"0.1234\"\t\"kai.hayashi\"\t\"2013-10-17 11:05:55\"",
+		Record:   map[string]string{"times": "42", "fraction": "0.1234", "name": "kai.hayashi", "now": "2013-10-17 11:05:55"},
 		Source: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,

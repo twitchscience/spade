@@ -9,6 +9,7 @@ import (
 
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
+	"github.com/twitchscience/spade/writer"
 )
 
 var (
@@ -45,6 +46,9 @@ var config struct {
 	Consumer consumer.Config
 	// Geoip is the config for the geoip updater
 	Geoip *geoip.Config
+
+	// KinesisWriters contain a list of configs for KinesisWriters
+	KinesisOutputs []writer.KinesisWriterConfig
 }
 
 func loadConfig() {
@@ -97,6 +101,13 @@ func validateConfig() error {
 	} {
 		if i <= 0 {
 			return errors.New("Nonpositive integer found in config, must provide positive integer.")
+		}
+	}
+
+	for _, c := range config.KinesisOutputs {
+		err := c.Validate()
+		if err != nil {
+			return err
 		}
 	}
 	return nil

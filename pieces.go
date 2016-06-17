@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/gologging/gologging"
@@ -125,4 +126,17 @@ func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
 	}
 	go u.UpdateLoop()
 	return u
+}
+
+func createKinesisWriters(kinesis *kinesis.Kinesis, stats statsd.Statter) []writer.SpadeWriter {
+	var writers []writer.SpadeWriter
+	for _, c := range config.KinesisOutputs {
+		w, err := writer.NewKinesisWriter(kinesis, stats, c)
+		if err != nil {
+			log.Fatalf("error creating Kinesis writer '%s': %s", c.StreamName, err)
+		}
+		writers = append(writers, w)
+	}
+
+	return writers
 }

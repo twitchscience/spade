@@ -11,7 +11,10 @@ import (
 type WriteRequest struct {
 	Category string
 	Version  int
+	// Line is the transformed data in tsv format
 	Line     string
+	// Record is the transformed data in a key/value map
+	Record   map[string]string
 	UUID     string
 	// Keep the source around for logging
 	Source  json.RawMessage

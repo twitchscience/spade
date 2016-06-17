@@ -14,6 +14,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/patrickmn/go-cache"
@@ -70,7 +71,6 @@ func expandGlob(glob []byte) ([]*spade.Event, error) {
 		return []*spade.Event{&e}, nil
 	}
 	// End hack
-
 	compressed := bytes.NewBuffer(glob)
 
 	v, err := compressed.ReadByte()
@@ -122,6 +122,7 @@ func main() {
 
 	sns := sns.New(session)
 	s3Uploader := s3manager.NewUploader(session)
+	kinesis := kinesis.New(session)
 
 	// Set up statsd monitoring
 	// - If the env is not set up we wil use a noop connection
@@ -149,17 +150,23 @@ func main() {
 		}
 	}()
 
-	geoIpUpdater := createGeoipUpdater(config.Geoip)
+	geoIPUpdater := createGeoipUpdater(config.Geoip)
 	auditLogger := newAuditLogger(sns, s3Uploader)
 	reporterStats := reporter.WrapCactusStatter(stats, 0.1)
 	spadeReporter := createSpadeReporter(reporterStats, auditLogger)
 	spadeUploaderPool := uploader.BuildUploaderForRedshift(redshiftUploaderNumWorkers, sns, s3Uploader, config.AceBucketName, config.AceTopicARN, config.AceErrorTopicARN)
 	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(blueprintUploaderNumWorkers, sns, s3Uploader, config.NonTrackedBucketName, config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN)
+
+	multee := &writer.Multee{}
 	spadeWriter := createSpadeWriter(*_dir, spadeReporter, spadeUploaderPool, blueprintUploaderPool, config.MaxLogBytes, config.MaxLogAgeSecs)
+	kinesisWriters := createKinesisWriters(kinesis, stats)
+	multee.Add(spadeWriter)
+	multee.AddMany(kinesisWriters)
+
 	fetcher := fetcher.New(config.BlueprintSchemasURL)
 	schemaLoader := createSchemaLoader(fetcher, reporterStats)
 	processorPool := createProcessorPool(schemaLoader, spadeReporter)
-	processorPool.Listen(spadeWriter)
+	processorPool.Listen(multee)
 	consumer := createConsumer(session, stats)
 	rotationTicker := time.NewTicker(rotationCheckFrequency)
 	sigc := make(chan os.Signal, 1)
@@ -174,7 +181,7 @@ MainLoop:
 		case <-sigc:
 			break MainLoop
 		case <-rotationTicker.C:
-			spadeWriter.Rotate()
+			multee.Rotate()
 			s := spadeReporter.Finalize()
 			log.Printf("Globs: %d Events %d Stats: %v", numGlobs, numEvents, s)
 		case record := <-consumer.C:
@@ -210,9 +217,9 @@ MainLoop:
 	}
 
 	consumer.Close()
-	spadeWriter.Close()
+	multee.Close()
 	processorPool.Close()
-	geoIpUpdater.Close()
+	geoIPUpdater.Close()
 	auditLogger.Close()
 
 	err := uploader.ClearEventsFolder(spadeUploaderPool, *_dir+"/"+writer.EventsDir+"/")
