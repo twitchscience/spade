@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"strings"
-
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/writer"
@@ -43,12 +41,13 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 		}
 	}
 
-	line, err := t.transform(event)
+	line, kv, err := t.transform(event)
 	if err == nil {
 		return &writer.WriteRequest{
 			Category: event.Event,
 			Version:  version,
 			Line:     line,
+			Record:   kv,
 			UUID:     event.UUID,
 			Source:   event.Properties,
 			Failure:  reporter.NONE,
@@ -88,6 +87,7 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 			Category: event.Event,
 			Version:  version,
 			Line:     line,
+			Record:   kv,
 			UUID:     event.UUID,
 			Source:   event.Properties,
 			Failure:  reporter.SKIPPED_COLUMN,
@@ -106,18 +106,19 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 	}
 }
 
-func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, error) {
+func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, map[string]string, error) {
 	if event.Event == "" {
-		return "", EmptyRequestError{fmt.Sprintf("%v is not being tracked", event.Event)}
+		return "", nil, EmptyRequestError{fmt.Sprintf("%v is not being tracked", event.Event)}
 	}
 
 	var possibleError error = nil
 	columns, err := t.Configs.GetColumnsForEvent(event.Event)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
-	output := make([]string, len(columns))
+	var tsvOutput bytes.Buffer
+	kvOutput := make(map[string]string)
 
 	// We can probably make this so that it never actually needs to decode the json
 	// If each table knew which byte sequences a column corresponds to we can
@@ -138,12 +139,18 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, er
 	}
 
 	for n, column := range columns {
-		o, err := column.Format(temp)
+		k, v, err := column.Format(temp)
 		// We should add reporting here to statsd
 		if err != nil {
 			possibleError = SkippedColumnError{fmt.Sprintf("Problem parsing into %v: %v\n", column, err)}
 		}
-		output[n] = o
+		if n != 0 {
+			tsvOutput.WriteRune('\t')
+		}
+		tsvOutput.WriteRune('"')
+		tsvOutput.WriteString(v)
+		tsvOutput.WriteRune('"')
+		kvOutput[k] = v
 	}
-	return strings.Join(output, "\t"), possibleError
+	return tsvOutput.String(), kvOutput, possibleError
 }
