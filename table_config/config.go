@@ -7,15 +7,15 @@ import (
 	"log"
 	"os"
 
-	"github.com/twitchscience/scoop_protocol/schema"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/transformer"
 )
 
 type Tables struct {
-	Configs []schema.Event
+	Configs []scoop_protocol.Config
 }
 
-func getTypes(definitions []schema.ColumnDefinition) ([]transformer.RedshiftType, error) {
+func getTypes(definitions []scoop_protocol.ColumnDefinition) ([]transformer.RedshiftType, error) {
 	types := make([]transformer.RedshiftType, len(definitions))
 	for i, definition := range definitions {
 		t := transformer.GetTransform(definition.Transformer)
@@ -47,7 +47,7 @@ func LoadConfig(file io.Reader) (Tables, error) {
 	if err != nil {
 		return Tables{nil}, err
 	}
-	var cfgs []schema.Event
+	var cfgs []scoop_protocol.Config
 	err = json.Unmarshal(b, &cfgs)
 	if err != nil {
 		return Tables{nil}, err
@@ -68,8 +68,8 @@ func (c *Tables) CompileForParsing() (map[string][]transformer.RedshiftType, map
 	return configs, versions, nil
 }
 
-func (c *Tables) CompileForMaintenance() map[string]schema.Event {
-	creationStrings := make(map[string]schema.Event)
+func (c *Tables) CompileForMaintenance() map[string]scoop_protocol.Config {
+	creationStrings := make(map[string]scoop_protocol.Config)
 	for _, config := range c.Configs {
 		creationStrings[config.EventName] = config
 	}

@@ -52,11 +52,6 @@
     },
     {
       "type": "file",
-      "source": "{{user `binary_dir`}}/transformer_dumper",
-      "destination": "/opt/science/{{user `project`}}/bin/transformer_dumper"
-    },
-    {
-      "type": "file",
       "source": "build/scripts/",
       "destination": "/opt/science/{{user `project`}}/bin"
     },
@@ -70,7 +65,6 @@
       "inline":
       [
         "sudo chmod +x /opt/science/{{user `project`}}/bin/*",
-        "/opt/science/{{user `project`}}/bin/transformer_dumper -outFile=/opt/science/{{user `project`}}/config/transforms_available.json",
         "for f in /opt/science/{{user `project`}}/config/upstart/*.conf; do sudo ln -s $f /etc/init/$(basename $f); done",
         "sudo mv /opt/science/{{user `project`}}/config/cloudwatchlogs.conf /var/awslogs/etc/config"
       ]

@@ -9,16 +9,16 @@ import (
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
-	"github.com/twitchscience/scoop_protocol/schema"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/reporter"
 )
 
 var (
-	knownScoopProtocolConfig1 = []schema.Event{
-		schema.Event{
+	knownScoopProtocolConfig1 = []scoop_protocol.Config{
+		{
 			EventName: "foo",
-			Columns: []schema.ColumnDefinition{
-				schema.ColumnDefinition{
+			Columns: []scoop_protocol.ColumnDefinition{
+				{
 					InboundName:           "in",
 					OutboundName:          "out",
 					Transformer:           "int",
@@ -27,11 +27,11 @@ var (
 			},
 		},
 	}
-	knownScoopProtocolConfig2 = []schema.Event{
-		schema.Event{
+	knownScoopProtocolConfig2 = []scoop_protocol.Config{
+		{
 			EventName: "bar",
-			Columns: []schema.ColumnDefinition{
-				schema.ColumnDefinition{
+			Columns: []scoop_protocol.ColumnDefinition{
+				{
 					InboundName:           "in",
 					OutboundName:          "out",
 					Transformer:           "int",
@@ -51,7 +51,7 @@ func TestRefresh(t *testing.T) {
 				false,
 				false,
 			},
-			configs: [][]schema.Event{
+			configs: [][]scoop_protocol.Config{
 				knownScoopProtocolConfig1,
 				knownScoopProtocolConfig2,
 			},
@@ -110,13 +110,13 @@ func TestRetryPull(t *testing.T) {
 
 type testFetcher struct {
 	failFetch []bool
-	configs   [][]schema.Event
+	configs   [][]scoop_protocol.Config
 
 	i int
 }
 
 type testReadWriteCloser struct {
-	config []schema.Event
+	config []scoop_protocol.Config
 }
 
 func (trwc *testReadWriteCloser) Read(p []byte) (int, error) {
