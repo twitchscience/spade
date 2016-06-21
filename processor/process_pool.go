@@ -22,14 +22,14 @@ func BuildProcessorPool(nConverters, nTransformers int,
 	converters := make([]*RequestConverter, nConverters)
 
 	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
-	transport := NewGobTransport(NewBufferedTransport())
+	transport := make(chan parser.MixpanelEvent, QUEUE_SIZE)
 
 	for i := 0; i < nConverters; i++ {
 		converters[i] = &RequestConverter{
 			r:      rep,
 			parser: parser.BuildSpadeParser(rep),
 			in:     requestChannel,
-			T:      transport,
+			out:    transport,
 			closer: make(chan bool),
 		}
 	}
@@ -37,7 +37,7 @@ func BuildProcessorPool(nConverters, nTransformers int,
 	for i := 0; i < nTransformers; i++ {
 		transformers[i] = &RequestTransformer{
 			t:      transformer.NewRedshiftTransformer(configs),
-			T:      transport,
+			in:     transport,
 			closer: make(chan bool),
 		}
 	}
@@ -71,35 +71,4 @@ func (p *SpadeProcessorPool) Listen(w writer.SpadeWriter) {
 
 func (p *SpadeProcessorPool) Process(request parser.Parseable) {
 	p.in <- request
-}
-
-func BuildTestPool(nConverters, nTransformers int, p parser.Parser, t transformer.Transformer) *SpadeProcessorPool {
-	transformers := make([]*RequestTransformer, nTransformers)
-	converters := make([]*RequestConverter, nConverters)
-
-	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
-	transport := NewGobTransport(NewBufferedTransport())
-
-	for i := 0; i < nConverters; i++ {
-		converters[i] = &RequestConverter{
-			parser: p,
-			in:     requestChannel,
-			T:      transport,
-			closer: make(chan bool),
-		}
-	}
-
-	for i := 0; i < nTransformers; i++ {
-		transformers[i] = &RequestTransformer{
-			t:      t,
-			T:      transport,
-			closer: make(chan bool),
-		}
-	}
-
-	return &SpadeProcessorPool{
-		in:           requestChannel,
-		converters:   converters,
-		transformers: transformers,
-	}
 }
