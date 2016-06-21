@@ -1,10 +1,6 @@
 package processor
 
 import (
-	"io"
-	"log"
-	"time"
-
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/writer"
@@ -12,7 +8,7 @@ import (
 
 type RequestTransformer struct {
 	t      transformer.Transformer
-	T      *GobTransport
+	in     <-chan parser.MixpanelEvent
 	closer chan bool
 }
 
@@ -31,21 +27,12 @@ func (p *RequestTransformer) Process(e *parser.MixpanelEvent) (request *writer.W
 }
 
 func (p *RequestTransformer) Listen(w writer.SpadeWriter) {
-	ticker := time.Tick(10 * time.Microsecond)
 	for {
 		select {
 		case <-p.closer:
 			return
-		case <-ticker:
-			// can we reuse?
-			var event parser.MixpanelEvent
-			err := p.T.Read(&event)
-			if err != nil && err != io.EOF {
-				event = *parser.MakeBadEncodedEvent()
-				log.Printf("got a reader error: %v\n", err)
-			} else if err == nil {
-				w.Write(p.Process(&event))
-			}
+		case event := <-p.in:
+			w.Write(p.Process(&event))
 		}
 	}
 }

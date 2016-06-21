@@ -166,13 +166,13 @@ func buildTestPool(nConverters, nTransformers int, p parser.Parser, t transforme
 	converters := make([]*RequestConverter, nConverters)
 
 	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
-	transport := NewGobTransport(NewBufferedTransport())
+	transport := make(chan parser.MixpanelEvent, QUEUE_SIZE)
 
 	for i := 0; i < nConverters; i++ {
 		converters[i] = &RequestConverter{
 			parser: p,
 			in:     requestChannel,
-			T:      transport,
+			out:    transport,
 			closer: make(chan bool),
 		}
 	}
@@ -180,7 +180,7 @@ func buildTestPool(nConverters, nTransformers int, p parser.Parser, t transforme
 	for i := 0; i < nTransformers; i++ {
 		transformers[i] = &RequestTransformer{
 			t:      t,
-			T:      transport,
+			in:     transport,
 			closer: make(chan bool),
 		}
 	}
@@ -239,11 +239,11 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 		m:        &sync.Mutex{},
 		requests: make([]*writer.WriteRequest, 0, 2),
 	}
-	pP := BuildTestPool(1, 1, &_panicParser{}, _transformer)
+	pP := buildTestPool(1, 1, &_panicParser{}, _transformer)
 	pP.Listen(w)
 	pP.Process(_exampleRequest)
 
-	pT := BuildTestPool(1, 1, _parser, &_panicTransformer{})
+	pT := buildTestPool(1, 1, _parser, &_panicTransformer{})
 	pT.Listen(w)
 	pT.Process(_exampleRequest)
 
@@ -293,7 +293,7 @@ func TestEmptyPropertyProcessing(t *testing.T) {
 		requests: make([]*writer.WriteRequest, 0, 1),
 	}
 
-	p := BuildTestPool(1, 1, _parser, _transformer)
+	p := buildTestPool(1, 1, _parser, _transformer)
 	p.Listen(w)
 	p.Process(_exampleRequest)
 
@@ -331,7 +331,7 @@ func TestRequestProcessing(t *testing.T) {
 
 		requests: make([]*writer.WriteRequest, 0, 1),
 	}
-	p := BuildTestPool(1, 1, _parser, _transformer)
+	p := buildTestPool(1, 1, _parser, _transformer)
 	p.Listen(w)
 	p.Process(_exampleRequest)
 
@@ -368,7 +368,7 @@ func TestErrorRequestProcessing(t *testing.T) {
 
 		requests: make([]*writer.WriteRequest, 0, 1),
 	}
-	p := BuildTestPool(1, 1, _parser, _transformer)
+	p := buildTestPool(1, 1, _parser, _transformer)
 	p.Listen(w)
 	p.Process(_exampleRequest)
 
@@ -431,7 +431,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 
 		requests: make([]*writer.WriteRequest, 0, 1),
 	}
-	p := BuildTestPool(5, 30, _parser, _transformer)
+	p := buildTestPool(5, 30, _parser, _transformer)
 	p.Listen(w)
 	p.Process(_exampleRequest)
 
@@ -470,7 +470,7 @@ func BenchmarkRequestProcessing(b *testing.B) {
 		r: make(chan *writer.WriteRequest),
 	}
 
-	rp := BuildTestPool(15, 30, _parser, _transformer)
+	rp := buildTestPool(15, 30, _parser, _transformer)
 	rp.Listen(w)
 
 	b.ReportAllocs()
