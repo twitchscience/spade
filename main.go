@@ -187,6 +187,7 @@ MainLoop:
 		case record := <-consumer.C:
 			if record.Error != nil {
 				log.Printf("Consumer error: %s", record.Error)
+				break MainLoop
 			} else {
 				numGlobs++
 				events, err := expandGlob(record.Data)
