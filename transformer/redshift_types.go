@@ -89,16 +89,7 @@ var (
 		"timestamp": genTimeFormat,
 	}
 	exportedTransformGenerators = []string{"f@timestamp@unix"}
-	TransformsAvailable         = getTransformList()
 )
-
-func getTransformList() []string {
-	var res []string
-	for k, _ := range transformMap {
-		res = append(res, k)
-	}
-	return append(res, exportedTransformGenerators...)
-}
 
 // Probably want to change this to be a static type of error
 func genError(offender interface{}, t string) error {

@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/twitchscience/scoop_protocol/schema"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
-func newColumnDefs(in, out, transformer, opts string) schema.ColumnDefinition {
-	return schema.ColumnDefinition{
+func newColumnDefs(in, out, transformer, opts string) scoop_protocol.ColumnDefinition {
+	return scoop_protocol.ColumnDefinition{
 		InboundName:           in,
 		OutboundName:          out,
 		Transformer:           transformer,
@@ -18,19 +18,19 @@ func newColumnDefs(in, out, transformer, opts string) schema.ColumnDefinition {
 }
 
 func buildConfig() []byte {
-	data := []schema.Event{
-		schema.Event{
+	data := []scoop_protocol.Config{
+		{
 			EventName: "test1",
-			Columns: []schema.ColumnDefinition{
+			Columns: []scoop_protocol.ColumnDefinition{
 				newColumnDefs("testIn", "test", "int", ""),
 				newColumnDefs("testCharIn", "testChar", "varchar", "(32)"),
 				newColumnDefs("testIn", "test", "f@timestamp@2006-01-02 15:04:05", ""),
 			},
 			Version: 22,
 		},
-		schema.Event{
+		{
 			EventName: "test2",
-			Columns: []schema.ColumnDefinition{
+			Columns: []scoop_protocol.ColumnDefinition{
 				newColumnDefs("testbIn", "testb", "int", ""),
 				newColumnDefs("testCharbIn", "testCharb", "varchar", "(32)"),
 			},

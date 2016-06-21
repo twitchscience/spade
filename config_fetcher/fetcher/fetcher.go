@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/twitchscience/scoop_protocol/schema"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
 type ConfigFetcher interface {
@@ -65,7 +65,7 @@ func validate(b []byte) bool {
 	if len(b) == 0 {
 		return false
 	}
-	var cfgs []schema.Event
+	var cfgs []scoop_protocol.Config
 	err := json.Unmarshal(b, &cfgs)
 	return (err == nil)
 }

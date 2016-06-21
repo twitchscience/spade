@@ -2,7 +2,11 @@ package transformer
 
 import (
 	"encoding/json"
+	"reflect"
+	"sort"
 	"testing"
+
+	"github.com/twitchscience/scoop_protocol/transformer"
 )
 
 func _type_runner(t *testing.T, input interface{}, _type RedshiftType,
@@ -109,4 +113,18 @@ func TestIpConversion(t *testing.T) {
 func TestHashTransformer(t *testing.T) {
 	hashTransformerConverter := RedshiftType{hashTransformer, "_", "_"}
 	_type_runner(t, "asd", hashTransformerConverter, "2014669166", false)
+}
+
+func TestInSyncWithScoopProtocol(t *testing.T) {
+	var processorNames []string
+	for k, _ := range transformMap {
+		processorNames = append(processorNames, k)
+	}
+	processorNames = append(processorNames, exportedTransformGenerators...)
+	sort.Strings(processorNames)
+	sort.Strings(transformer.ValidTransforms)
+
+	if !reflect.DeepEqual(processorNames, transformer.ValidTransforms) {
+		t.Errorf("Expected processor valid transform names to be equal to scoop_protocol's list of valid transforms. Respectively found them as %v and %v", processorNames, transformer.ValidTransforms)
+	}
 }

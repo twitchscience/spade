@@ -9,14 +9,14 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/twitchscience/scoop_protocol/schema"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
-var knownScoopProtocolSchemaEvents = []schema.Event{
-	schema.Event{
+var knownScoopProtocolSchemaEvents = []scoop_protocol.Config{
+	{
 		EventName: "foo",
-		Columns: []schema.ColumnDefinition{
-			schema.ColumnDefinition{
+		Columns: []scoop_protocol.ColumnDefinition{
+			{
 				InboundName:           "in",
 				OutboundName:          "out",
 				Transformer:           "foo",
