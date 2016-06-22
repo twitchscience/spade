@@ -9,42 +9,42 @@ func TestGeoIp(t *testing.T) {
 		t.FailNow()
 	}
 	anIp := "222.22.24.22"
-	if "\"Zhengzhou\"" != g.GetCity(anIp) {
+	if "Zhengzhou" != g.GetCity(anIp) {
 		t.Error("Got the wrong city!", g.GetCity(anIp))
 		t.Fail()
 	}
-	if "\"CN\"" != g.GetCountry(anIp) {
+	if "CN" != g.GetCountry(anIp) {
 		t.Error("Got the wrong Country!", g.GetCountry(anIp))
 		t.Fail()
 	}
-	if "\"09\"" != g.GetRegion(anIp) {
+	if "09" != g.GetRegion(anIp) {
 		t.Error("Got the wrong Region!", g.GetRegion(anIp))
 		t.Fail()
 	}
-	if "\"AS4538 China Education and Research Network Center\"" != g.GetAsn(anIp) {
+	if "AS4538 China Education and Research Network Center" != g.GetAsn(anIp) {
 		t.Error("Got the wrong ASN!", g.GetAsn(anIp))
 		t.Fail()
 	}
 	testIp := "62.238.12.232"
-	if "\"Terneuzen\"" != g.GetCity(testIp) {
+	if "Terneuzen" != g.GetCity(testIp) {
 		t.Error("Got the wrong city!")
 		t.Fail()
 	}
-	if "\"NL\"" != g.GetCountry(testIp) {
+	if "NL" != g.GetCountry(testIp) {
 		t.Error("Got the wrong Country!")
 		t.Fail()
 	}
-	if "\"10\"" != g.GetRegion(testIp) {
+	if "10" != g.GetRegion(testIp) {
 		t.Error("Got the wrong Region! got: ", g.GetRegion(testIp))
 		t.Fail()
 	}
-	if "\"AS15542 ZeelandNet BV\"" != g.GetAsn(testIp) {
+	if "AS15542 ZeelandNet BV" != g.GetAsn(testIp) {
 		t.Error("Got the wrong ASN!", g.GetAsn(testIp))
 		t.Fail()
 	}
 
 	testIp = "73.202.16.139"
-	if "\"\"" != g.GetCity(testIp) {
+	if "" != g.GetCity(testIp) {
 		t.Error("Got the wrong City! got: ", g.GetRegion(testIp))
 		t.Fail()
 	}
@@ -52,7 +52,7 @@ func TestGeoIp(t *testing.T) {
 	g.geoLoc = "TestNewGeoIPCity.dat"
 	g.asnLoc = "TestNewGeoIPASNum.dat"
 	g.Reload()
-	if "\"Oakland\"" != g.GetCity(testIp) {
+	if "Oakland" != g.GetCity(testIp) {
 		t.Error("Got the wrong City from the updated geoip db! got: ", g.GetRegion(testIp))
 		t.Fail()
 	}

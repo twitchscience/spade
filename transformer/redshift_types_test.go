@@ -95,16 +95,16 @@ func TestIpConversion(t *testing.T) {
 		t.Fail()
 	}
 	ipCityConverter := RedshiftType{ipCityFormat, "_", "_"}
-	_type_runner(t, "222.22.24.22", ipCityConverter, "\"Zhengzhou\"", false)
+	_type_runner(t, "222.22.24.22", ipCityConverter, "Zhengzhou", false)
 
 	ipCountryConverter := RedshiftType{ipCountryFormat, "_", "_"}
-	_type_runner(t, "222.22.24.22", ipCountryConverter, "\"CN\"", false)
+	_type_runner(t, "222.22.24.22", ipCountryConverter, "CN", false)
 
 	ipRegionConverter := RedshiftType{ipRegionFormat, "_", "_"}
-	_type_runner(t, "222.22.24.22", ipRegionConverter, "\"09\"", false)
+	_type_runner(t, "222.22.24.22", ipRegionConverter, "09", false)
 
 	ipAsnConverter := RedshiftType{ipAsnFormat, "_", "_"}
-	_type_runner(t, "222.22.24.22", ipAsnConverter, "\"AS4538 China Education and Research Network Center\"", false)
+	_type_runner(t, "222.22.24.22", ipAsnConverter, "AS4538 China Education and Research Network Center", false)
 
 	ipAsnIntConverter := RedshiftType{ipAsnIntFormat, "_", "_"}
 	_type_runner(t, "222.22.24.22", ipAsnIntConverter, "4538", false)
