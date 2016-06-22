@@ -147,9 +147,7 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 		if n != 0 {
 			tsvOutput.WriteRune('\t')
 		}
-		tsvOutput.WriteRune('"')
-		tsvOutput.WriteString(v)
-		tsvOutput.WriteRune('"')
+		tsvOutput.WriteString(fmt.Sprintf("%q", v))
 		kvOutput[k] = v
 	}
 	return tsvOutput.String(), kvOutput, possibleError
