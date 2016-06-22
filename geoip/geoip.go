@@ -69,7 +69,7 @@ func (g *GeoMMIp) GetRegion(ip string) string {
 	if loc == nil {
 		return ""
 	}
-	return fmt.Sprintf("%q", loc.Region)
+	return fmt.Sprintf("%s", loc.Region)
 }
 
 func (g *GeoMMIp) GetCountry(ip string) string {
@@ -77,7 +77,7 @@ func (g *GeoMMIp) GetCountry(ip string) string {
 	if loc == nil {
 		return ""
 	}
-	return fmt.Sprintf("%q", loc.CountryCode)
+	return fmt.Sprintf("%s", loc.CountryCode)
 }
 
 func (g *GeoMMIp) GetCity(ip string) string {
@@ -85,14 +85,14 @@ func (g *GeoMMIp) GetCity(ip string) string {
 	if loc == nil {
 		return ""
 	}
-	return fmt.Sprintf("%q", loc.City)
+	return fmt.Sprintf("%s", loc.City)
 }
 
 func (g *GeoMMIp) GetAsn(ip string) string {
 	g.RLock()
 	loc, _ := g.asn.GetName(ip)
 	g.RUnlock()
-	return fmt.Sprintf("%q", loc)
+	return fmt.Sprintf("%s", loc)
 }
 
 type NoopGeoIp struct{}
