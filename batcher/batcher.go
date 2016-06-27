@@ -115,7 +115,7 @@ func (b *Batcher) complete() {
 	}
 
 	b.completor(b.pending)
-	b.pending = b.pending[:0]
+	b.pending = nil
 	b.pendingSize = 0
 }
 
