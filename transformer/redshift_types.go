@@ -135,6 +135,7 @@ const (
 
 func intFormat(bitsAllowed uint) func(interface{}) (string, error) {
 	maxIntAllowed := int64(1<<(bitsAllowed-1) - 1)
+	minIntAllowed := int64(1<<(bitsAllowed-1)) * -1
 	return func(target interface{}) (string, error) {
 		// The json decoder we are using outputs as json.Number
 		t, ok := target.(json.Number)
@@ -153,8 +154,8 @@ func intFormat(bitsAllowed uint) func(interface{}) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if i > maxIntAllowed {
-			return "", err
+		if i > maxIntAllowed || i < minIntAllowed {
+			return "", fmt.Errorf("parsing \"%v\": value out of range (bits: %v)", i, bitsAllowed)
 		}
 		return strconv.FormatInt(i, 10), nil
 	}
