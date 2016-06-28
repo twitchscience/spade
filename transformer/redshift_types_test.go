@@ -25,16 +25,35 @@ func _type_runner(t *testing.T, input interface{}, _type RedshiftType,
 }
 
 func TestIntConversion(t *testing.T) {
-	normalInteger := RedshiftType{intFormat(64), "_", "_"}
+	normalInteger := RedshiftType{intFormat(32), "_", "_"}
 	_type_runner(t, json.Number("42"), normalInteger, "42", false)
 	_type_runner(t, "42", normalInteger, "42", false)
+	_type_runner(t, "2147483647", normalInteger, "2147483647", false)
+	_type_runner(t, "-2147483648", normalInteger, "-2147483648", false)
 
-	// These should all fail as they are incorrect representations.
-	// In the future we will want to make this less strict
+	_type_runner(t, "-10707512961", normalInteger, "", true)
+	_type_runner(t, "2147483648", normalInteger, "", true)
+	_type_runner(t, "-2147483649", normalInteger, "", true)
 	_type_runner(t, json.Number("42.2"), normalInteger, "", true)
 	_type_runner(t, nil, normalInteger, "", true)
 	_type_runner(t, "hashs", normalInteger, "", true)
 	_type_runner(t, "12hs", normalInteger, "", true)
+}
+
+func TestBigIntConversion(t *testing.T) {
+	bigInteger := RedshiftType{intFormat(64), "_", "_"}
+	_type_runner(t, json.Number("42"), bigInteger, "42", false)
+	_type_runner(t, "42", bigInteger, "42", false)
+	_type_runner(t, "-10707512961", bigInteger, "-10707512961", false)
+	_type_runner(t, "9223372036854775807", bigInteger, "9223372036854775807", false)
+	_type_runner(t, "-9223372036854775808", bigInteger, "-9223372036854775808", false)
+
+	_type_runner(t, "9223372036854775808", bigInteger, "", true)
+	_type_runner(t, "-9223372036854775809", bigInteger, "", true)
+	_type_runner(t, json.Number("42.2"), bigInteger, "", true)
+	_type_runner(t, nil, bigInteger, "", true)
+	_type_runner(t, "hashs", bigInteger, "", true)
+	_type_runner(t, "12hs", bigInteger, "", true)
 }
 
 func TestSmallIntConversion(t *testing.T) {
