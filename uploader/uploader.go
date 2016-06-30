@@ -1,8 +1,10 @@
 package uploader
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -82,6 +84,45 @@ func (s *SNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error 
 	return s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, extractEventVersion(message.Path))
 }
 
+func SafeGzipUpload(uploaderPool *uploader.UploaderPool, path string) {
+	if isValidGzip(path) {
+		uploaderPool.Upload(&uploader.UploadRequest{
+			Filename: path,
+			FileType: uploader.Gzip,
+		})
+	} else {
+		log.Println(path, " is not a valid gzip file, removing...")
+		err := os.Remove(path)
+		if err != nil {
+			log.Println("Cannot remove", path)
+		}
+	}
+}
+
+func isValidGzip(path string) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		log.Println("Cannot open", path, err)
+		return false
+	}
+	defer file.Close()
+
+	reader, err := gzip.NewReader(file)
+	if err != nil {
+		log.Println("gzip.NewReader err", path, err)
+		return false
+	}
+	defer reader.Close()
+
+	_, err = ioutil.ReadAll(reader)
+	if err != nil {
+		log.Println("Cannot read", path, err)
+		return false
+	}
+
+	return true
+}
+
 func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) error {
 	return filepath.Walk(eventsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -91,10 +132,7 @@ func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) er
 			return filepath.SkipDir
 		}
 		if strings.HasSuffix(path, ".gz") {
-			uploaderPool.Upload(&uploader.UploadRequest{
-				Filename: path,
-				FileType: uploader.Gzip,
-			})
+			SafeGzipUpload(uploaderPool, path)
 		}
 		return nil
 	})

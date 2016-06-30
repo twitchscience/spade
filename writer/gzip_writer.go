@@ -11,6 +11,7 @@ import (
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/spade/gzip_pool"
 	"github.com/twitchscience/spade/reporter"
+	spade_uploader "github.com/twitchscience/spade/uploader"
 )
 
 var (
@@ -118,10 +119,7 @@ func (w *gzipFileWriter) Close() error {
 		w.ParentFolder, inode.Name())
 
 	os.Rename(w.FullName, rotatedFileName)
-	w.uploader.Upload(&uploader.UploadRequest{
-		Filename: rotatedFileName,
-		FileType: uploader.Gzip,
-	})
+	spade_uploader.SafeGzipUpload(w.uploader, rotatedFileName)
 	return nil
 }
 
