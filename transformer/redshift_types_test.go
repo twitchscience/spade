@@ -127,6 +127,10 @@ func TestIpConversion(t *testing.T) {
 
 	ipAsnIntConverter := RedshiftType{ipAsnIntFormat, "_", "_"}
 	_type_runner(t, "222.22.24.22", ipAsnIntConverter, "4538", false)
+
+	// test an IP where the ASN has no description
+	ipAsnIntConverterNoDescription := RedshiftType{ipAsnIntFormat, "_", "_"}
+	_type_runner(t, "118.192.154.0", ipAsnIntConverterNoDescription, "59050", false)
 }
 
 func TestHashTransformer(t *testing.T) {

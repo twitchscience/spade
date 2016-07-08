@@ -282,9 +282,12 @@ func ipAsnIntFormat(target interface{}) (string, error) {
 		return "", genError(target, "Ip Asn")
 	}
 	asnString := GeoIpDB.GetAsn(str)
-	index := strings.Index(asnString, " ")
-	if index < 0 || !strings.HasPrefix(asnString, "AS") {
+	if !strings.HasPrefix(asnString, "AS") {
 		return "", genError(target, "Ip Asn")
+	}
+	index := strings.Index(asnString, " ")
+	if index < 0 {
+		index = len(asnString)
 	}
 	asnInt, err := strconv.Atoi(asnString[2:index])
 	if err != nil {
