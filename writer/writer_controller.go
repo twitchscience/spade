@@ -197,7 +197,7 @@ func (c *writerController) close() error {
 		return err
 	}
 
-	return c.initNonTrackedWriter()
+	return nil
 }
 
 func (c *writerController) Rotate() (bool, error) {
