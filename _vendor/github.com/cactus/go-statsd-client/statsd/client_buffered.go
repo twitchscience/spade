@@ -1,8 +1,12 @@
+// Copyright (c) 2012-2016 Eli Janssen
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
 package statsd
 
 import "time"
 
-// Return a new BufferedClient
+// NewBufferedClient seturns a new BufferedClient
 //
 // addr is a string of the format "hostname:port", and must be parsable by
 // net.ResolveUDPAddr.
