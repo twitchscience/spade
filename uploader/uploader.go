@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
 	"github.com/aws/aws-sdk-go/service/sns/snsiface"
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/notifier"
 	"github.com/twitchscience/aws_utils/uploader"
 	gen "github.com/twitchscience/gologging/key_name_generator"
@@ -30,10 +30,10 @@ type ProcessorErrorHandler struct {
 }
 
 func (p *ProcessorErrorHandler) SendError(err error) {
-	log.Println(err)
+	logger.WithError(err).Error("")
 	e := p.notifier.SendMessage("error", p.topicARN, err)
 	if e != nil {
-		log.Println(e)
+		logger.WithError(e).Error("Failed to send error")
 	}
 }
 
@@ -91,32 +91,33 @@ func SafeGzipUpload(uploaderPool *uploader.UploaderPool, path string) {
 			FileType: uploader.Gzip,
 		})
 	} else {
-		log.Println(path, " is not a valid gzip file, removing...")
+		logger.WithField("path", path).Warn("Given path is not a valid gzip file; removing")
 		err := os.Remove(path)
 		if err != nil {
-			log.Println("Cannot remove", path)
+			logger.WithError(err).WithField("path", path).Error("Failed to remove path")
 		}
 	}
 }
 
 func isValidGzip(path string) bool {
+	entry := logger.WithField("path", path)
 	file, err := os.Open(path)
 	if err != nil {
-		log.Println("Cannot open", path, err)
+		entry.WithError(err).Error("Failed to open")
 		return false
 	}
 	defer file.Close()
 
 	reader, err := gzip.NewReader(file)
 	if err != nil {
-		log.Println("gzip.NewReader err", path, err)
+		entry.WithError(err).Error("Failed to create gzip.NewReader")
 		return false
 	}
 	defer reader.Close()
 
 	_, err = ioutil.ReadAll(reader)
 	if err != nil {
-		log.Println("Cannot read", path, err)
+		entry.WithError(err).Error("Failed to read gzipped file")
 		return false
 	}
 

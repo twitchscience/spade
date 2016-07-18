@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
+
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 var (
@@ -134,7 +135,7 @@ func (g *Globber) complete() {
 	g.pending.WriteRune(postfix)
 	err := g._complete()
 	if err != nil {
-		log.Printf("Failed compressing glob: %s", err)
+		logger.WithError(err).Error("Failed to compress glob")
 	}
 }
 

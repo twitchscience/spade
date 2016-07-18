@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"os"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 type Updater struct {
@@ -34,7 +34,7 @@ type Config struct {
 }
 
 func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config) *Updater {
-	u := &Updater{
+	return &Updater{
 		lastUpdated: lastUpdated,
 		closer:      make(chan bool),
 		geo:         geo,
@@ -42,7 +42,6 @@ func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config) *Updater {
 		ipASNPath:   os.Getenv("ASN_IP_DB"),
 		config:      config,
 	}
-	return u
 }
 
 func writeWithRename(data io.ReadCloser, fname string) error {
@@ -105,22 +104,22 @@ func (u *Updater) UpdateLoop() {
 		case <-tick.C:
 			jitter := time.Duration(rand.Intn(u.config.JitterSecs)) * time.Second
 			time.Sleep(jitter)
-			log.Printf("Pulling down new geoip dbs if they are new...")
+			logger.Info("Pulling down new GeoIP DBs if they are new")
 			newDB, err := u.getIfNew()
 			if err != nil {
-				log.Printf("Error getting the new geoip: %s", err.Error())
+				logger.WithError(err).Error("Failed to get the new GeoIP")
 				continue
 			}
 			if newDB {
-				err := u.geo.Reload()
-				if err != nil {
-					log.Printf("Error reloading geo db: %s", err)
+				if err := u.geo.Reload(); err != nil {
+					logger.WithError(err).Error("Error reloading Geo DB")
 					continue
 				}
 				u.lastUpdated = time.Now()
-				log.Printf("Loaded and using new geoip databases.")
+				logger.Info("Loaded and using new GeoIP DBs")
 			} else {
-				log.Printf("... geoip dbs are not new, waiting %v minutes to try again", u.config.UpdateFrequencyMins)
+				logger.WithField("update_period", u.config.UpdateFrequencyMins).
+					Info("GeoIP DBs are not new, waiting to try again")
 			}
 
 		case <-u.closer:

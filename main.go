@@ -18,7 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/patrickmn/go-cache"
-	_ "github.com/twitchscience/aws_utils/logger"
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	jsonLog "github.com/twitchscience/spade/parser/json_log"
@@ -26,7 +26,6 @@ import (
 	"github.com/twitchscience/spade/uploader"
 	"github.com/twitchscience/spade/writer"
 
-	"log"
 	"os"
 	"os/signal"
 
@@ -134,9 +133,9 @@ func main() {
 	} else {
 		var err error
 		if stats, err = statsd.New(statsdHostport, *statsPrefix); err != nil {
-			log.Fatalf("Statsd configuration error: %v", err)
+			logger.WithError(err).Fatal("Statsd configuration error")
 		}
-		log.Printf("Connected to statsd at %s\n", statsdHostport)
+		logger.WithField("statsd_host_port", statsdHostport).Info("Connected to statsd")
 	}
 
 	// Listener for ELB health check
@@ -147,7 +146,7 @@ func main() {
 	go func() {
 		err := http.ListenAndServe(net.JoinHostPort("", "8080"), healthMux)
 		if err != nil {
-			log.Printf("Error listening to port 8080 with healthMux %v\n", err)
+			logger.WithError(err).Error("Failure listening to port 8080 with healthMux")
 		}
 	}()
 
@@ -169,7 +168,7 @@ func main() {
 	processorPool := createProcessorPool(schemaLoader, spadeReporter)
 	processorPool.Listen(multee)
 	consumer := createConsumer(session, stats)
-	rotationTicker := time.NewTicker(rotationCheckFrequency)
+	rotation := time.Tick(rotationCheckFrequency)
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT)
 	duplicateCache := cache.New(duplicateCacheExpiry, duplicateCacheCleanupFrequency)
@@ -181,42 +180,47 @@ MainLoop:
 		select {
 		case <-sigc:
 			break MainLoop
-		case <-rotationTicker.C:
+		case <-rotation:
 			multee.Rotate()
 			s := spadeReporter.Finalize()
-			log.Printf("Globs: %d Events %d Stats: %v", numGlobs, numEvents, s)
+			logger.WithFields(map[string]interface{} {
+				"num_globs":  numGlobs,
+				"num_events": numEvents,
+				"stats":      s,
+			}).Info("Processed data rotated to output")
 		case record := <-consumer.C:
 			if record.Error != nil {
-				log.Printf("Consumer error: %s", record.Error)
+				logger.WithError(record.Error).Error("Consumer failed")
 				break MainLoop
+			}
+
+			numGlobs++
+			events, err := expandGlob(record.Data)
+			if err != nil {
+				logger.WithError(err).Error("Failed to expand glob")
+				continue MainLoop
+			}
+
+			if len(events) == 0 {
+				continue MainLoop
+			}
+
+			_ = stats.Inc("record.count", 1, 1.0)
+			uuid := events[0].Uuid
+			if _, found := duplicateCache.Get(uuid); found {
+				logger.WithField("uuid", uuid).Info("Ignoring duplicate UUID")
+				_ = stats.Inc("record.dupe", 1, 1.0)
 			} else {
-				numGlobs++
-				events, err := expandGlob(record.Data)
-				if err == nil && len(events) > 0 {
-					_ = stats.Inc("record.count", 1, 1.0)
-					uuid := events[0].Uuid
-					_, found := duplicateCache.Get(uuid)
-					if !found {
-						numEvents += len(events)
-						for _, e := range events {
-							now := time.Now()
-							_ = stats.TimingDuration("record.age", now.Sub(e.ReceivedAt), 1.0)
-							spadeReporter.IncrementExpected(1)
-							d, _ := spade.Marshal(e)
-							processorPool.Process(&parseRequest{
-								data:  d,
-								start: time.Now(),
-							})
-						}
-					} else {
-						log.Println("Ignoring duplicate of UUID", uuid)
-						_ = stats.Inc("record.dupe", 1, 1.0)
-					}
-					duplicateCache.Set(uuid, 0, cache.DefaultExpiration)
-				} else if err != nil {
-					log.Printf("expandGlob returned error: %v", err)
+				numEvents += len(events)
+				for _, e := range events {
+					now := time.Now()
+					_ = stats.TimingDuration("record.age", now.Sub(e.ReceivedAt), 1.0)
+					spadeReporter.IncrementExpected(1)
+					d, _ := spade.Marshal(e)
+					processorPool.Process(&parseRequest{data: d, start: time.Now()})
 				}
 			}
+			duplicateCache.Set(uuid, 0, cache.DefaultExpiration)
 		}
 	}
 
@@ -228,12 +232,12 @@ MainLoop:
 
 	err := uploader.ClearEventsFolder(spadeUploaderPool, *_dir+"/"+writer.EventsDir+"/")
 	if err != nil {
-		log.Println(err)
+		logger.WithError(err).Error("Failed to clear events directory")
 	}
 
 	err = uploader.ClearEventsFolder(blueprintUploaderPool, *_dir+"/"+writer.NonTrackedDir+"/")
 	if err != nil {
-		log.Println(err)
+		logger.WithError(err).Error("Failed to clear untracked events directory")
 	}
 
 	spadeUploaderPool.Close()

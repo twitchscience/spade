@@ -3,13 +3,13 @@ package main
 // I need a better name for this file
 
 import (
-	"log"
 	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/cactus/go-statsd-client/statsd"
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/gologging/gologging"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
@@ -29,26 +29,14 @@ const (
 	transformerPoolSize   = 10
 )
 
-func createSpadeReporter(
-	stats reporter.StatsLogger,
-	auditLogger *gologging.UploadLogger,
-) reporter.Reporter {
-	r := reporter.BuildSpadeReporter(
+func createSpadeReporter(stats reporter.StatsLogger, auditLogger *gologging.UploadLogger) reporter.Reporter {
+	 return reporter.BuildSpadeReporter(
 		&sync.WaitGroup{},
 		[]reporter.Tracker{
-			&reporter.SpadeStatsdTracker{
-				Stats: stats,
-			},
-			&reporter.SpadeUUIDTracker{
-				Logger: auditLogger,
-			},
+			&reporter.SpadeStatsdTracker{Stats: stats},
+			&reporter.SpadeUUIDTracker{Logger: auditLogger},
 		},
 	)
-	if r == nil {
-		log.Fatal("Unable to build spade reporter")
-	}
-
-	return r
 }
 
 func createSpadeWriter(
@@ -69,61 +57,36 @@ func createSpadeWriter(
 	)
 
 	if err != nil {
-		log.Fatalf("Error creating spade writer: %s", err)
+		logger.WithError(err).Fatal("Error creating spade writer")
 	}
 
 	return w
 }
 
-func createSchemaLoader(
-	fetcher fetcher.ConfigFetcher,
-	stats reporter.StatsLogger,
-) *table_config.DynamicLoader {
-	loader, err := table_config.NewDynamicLoader(
-		fetcher,
-		schemaReloadFrequency,
-		schemaRetryDelay,
-		stats,
-	)
+func createSchemaLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger) *table_config.DynamicLoader {
+	loader, err := table_config.NewDynamicLoader(fetcher, schemaReloadFrequency, schemaRetryDelay, stats)
 	if err != nil {
-		log.Fatalf("Error creating schema dynamic loader: %s", err)
+		logger.WithError(err).Fatal("Failed to create schema dynamic loader")
 	}
-	go loader.Crank()
 
+	go loader.Crank()
 	return loader
 }
 
-func createProcessorPool(
-	loader transformer.ConfigLoader,
-	reporter reporter.Reporter,
-) *processor.SpadeProcessorPool {
-	processor := processor.BuildProcessorPool(
-		parserPoolSize,
-		transformerPoolSize,
-		loader,
-		reporter,
-	)
-
-	if processor == nil {
-		log.Fatal("Error building processor pool")
-	}
-
-	return processor
+func createProcessorPool(loader transformer.ConfigLoader, reporter reporter.Reporter) *processor.SpadeProcessorPool {
+	return processor.BuildProcessorPool(parserPoolSize, transformerPoolSize, loader, reporter)
 }
 
 func createConsumer(session *session.Session, stats statsd.Statter) *consumer.Consumer {
 	consumer, err := consumer.New(session, stats, config.Consumer)
 	if err != nil {
-		log.Fatalf("Error creating consumer: %s", err)
+		logger.WithError(err).Fatal("Failed to create consumer")
 	}
 	return consumer
 }
 
 func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
 	u := geoip.NewUpdater(time.Now(), transformer.GeoIpDB, *config)
-	if u == nil {
-		log.Fatalf("Unable to create geoip updater")
-	}
 	go u.UpdateLoop()
 	return u
 }
@@ -133,7 +96,9 @@ func createKinesisWriters(kinesis *kinesis.Kinesis, stats statsd.Statter) []writ
 	for _, c := range config.KinesisOutputs {
 		w, err := writer.NewKinesisWriter(kinesis, stats, c)
 		if err != nil {
-			log.Fatalf("error creating Kinesis writer '%s': %s", c.StreamName, err)
+			logger.WithError(err).
+				WithField("stream_name", c.StreamName).
+				Fatal("Failed to create Kinesis writer")
 		}
 		writers = append(writers, w)
 	}

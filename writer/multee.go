@@ -1,8 +1,9 @@
 package writer
 
 import (
-	"log"
 	"sync"
+
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 // Multee implements the `SpadeWriter` interface and forwards all calls
@@ -39,7 +40,7 @@ func (t *Multee) Write(r *WriteRequest) error {
 		// all possible ones that occured
 		err := writer.Write(r)
 		if err != nil {
-			log.Println("Error forwarding event to writer index", i)
+			logger.WithError(err).WithField("writer_index", i).Error("Failed to forward event")
 		}
 	}
 	return nil
@@ -58,7 +59,7 @@ func (t *Multee) Rotate() (bool, error) {
 		// out of all possible ones that occured
 		done, err := writer.Rotate()
 		if err != nil {
-			log.Println("Error forwarding rotation request to writer at index", i)
+			logger.WithError(err).WithField("writer_index", i).Error("Failed to forward rotation request")
 			allDone = false
 		} else {
 			allDone = allDone && done
@@ -83,7 +84,9 @@ func (t *Multee) Close() error {
 			defer wg.Done()
 			err := w.Close()
 			if err != nil {
-				log.Println("Error forwarding rotation request to writer at index", i)
+				logger.WithError(err).
+					WithField("writer_index", i).
+					Error("Failed to forward rotation request")
 			}
 		}(writer, idx)
 	}
