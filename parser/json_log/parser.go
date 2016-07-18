@@ -3,11 +3,11 @@ package json_log
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 	"strings"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/parser"
 )
@@ -37,7 +37,7 @@ func Register(rejectIfBadFirstIp bool) {
 		rejectIfBadFirstIp: rejectIfBadFirstIp,
 	})
 	if rejectIfBadFirstIp == true {
-		log.Println("Warning: Rejecting any event with a bad first ip in the x-forwarded chain")
+		logger.Warn("Rejecting any event with a bad first IP in the x-forwarded chain")
 	}
 }
 

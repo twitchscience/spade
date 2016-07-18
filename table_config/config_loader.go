@@ -2,11 +2,11 @@ package table_config
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"sync"
 	"time"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/transformer"
@@ -141,7 +141,7 @@ func (d *DynamicLoader) Crank() {
 			now := time.Now()
 			newConfig, newVersions, err := d.pullConfigIn()
 			if err != nil {
-				log.Printf("Failed to refresh config: %v\n", err)
+				logger.WithError(err).Error("Failed to refresh config")
 				d.stats.Timing("config.error", time.Now().Sub(now))
 				continue
 			}

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/transformer"
 )
@@ -20,7 +20,7 @@ func getTypes(definitions []scoop_protocol.ColumnDefinition) ([]transformer.Reds
 	for i, definition := range definitions {
 		t := transformer.GetTransform(definition.Transformer)
 		if t == nil {
-			log.Printf("Critical error while parsing config %v\n", transformer.UnknownTransformError)
+			logger.WithError(transformer.UnknownTransformError).Error("Failed to parse config")
 			return nil, transformer.UnknownTransformError
 		}
 		_type := transformer.RedshiftType{

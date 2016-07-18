@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 )
 
@@ -26,10 +26,10 @@ func main() {
 	flag.Parse()
 	bpUrl, err := makeBluePrintUrl(*schemaServerProto, *schemaServerHostname, *schemaServerPort)
 	if err != nil {
-		log.Fatal(err)
+		logger.WithError(err).Fatal("Failed to create blueprint URL")
 	}
 	err = fetcher.FetchConfig(fetcher.New(bpUrl), *schemaCacheFileName)
 	if err != nil {
-		log.Fatal(err)
+		logger.WithError(err).Fatal("Failed to fetch config")
 	}
 }

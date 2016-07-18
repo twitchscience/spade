@@ -3,11 +3,11 @@ package writer
 import (
 	"compress/gzip"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/spade/gzip_pool"
 	"github.com/twitchscience/spade/reporter"
@@ -137,8 +137,7 @@ func (w *gzipFileWriter) Listen() {
 		}
 		_, err := w.GzWriter.Write([]byte(req.Line + "\n"))
 		if err != nil {
-
-			log.Printf("Failed Write: %v\n", err)
+			logger.WithError(err).Error("Failed to write to gzip")
 			w.Reporter.Record(&reporter.Result{
 				Failure:    reporter.FAILED_WRITE,
 				UUID:       req.UUID,

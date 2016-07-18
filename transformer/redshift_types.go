@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/geoip"
 )
 
@@ -106,7 +106,10 @@ func loadDB() geoip.GeoLookup {
 	dbloc, asnloc := os.Getenv("GEO_IP_DB"), os.Getenv("ASN_IP_DB")
 	g, load_err := geoip.NewGeoMMIp(dbloc, asnloc)
 	if load_err != nil {
-		log.Printf("Error loading geoip db at %s and %s: (%s), using noop db instead", dbloc, asnloc, load_err)
+		logger.WithError(load_err).WithFields(map[string]interface{} {
+			"db_location":  dbloc,
+			"asn_location": asnloc,
+		}).Error("Failed to load GeoIP DB, using no-op DB instead")
 		return geoip.Noop()
 	}
 	return g

@@ -2,11 +2,11 @@ package main
 
 import (
 	"flag"
-	"log"
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
 	"github.com/aws/aws-sdk-go/service/sns/snsiface"
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/notifier"
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/gologging/gologging"
@@ -35,28 +35,28 @@ func (d *snsHarness) SendMessage(r *uploader.UploadReceipt) error {
 func (s *snsHarness) SendError(er error) {
 	err := s.notifier.SendMessage("error", s.topicARN, er)
 	if err != nil {
-		log.Println(err)
+		logger.WithError(err).WithField("sent_error", er).Error("Failed to send error")
 	}
 }
 
 func newAuditLogger(sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI) *gologging.UploadLogger {
-	c := gologging.NewRotateCoordinator(maxLinesPerLog, rotateTime)
-	i := key_name_generator.BuildInstanceInfo(&key_name_generator.EnvInstanceFetcher{}, "spade_processor_audit", *loggingDir)
-	h := &snsHarness{
+	rotateCoordinator := gologging.NewRotateCoordinator(maxLinesPerLog, rotateTime)
+	instanceInfo := key_name_generator.BuildInstanceInfo(&key_name_generator.EnvInstanceFetcher{}, "spade_processor_audit", *loggingDir)
+	harness := &snsHarness{
 		topicARN: config.ProcessorErrorTopicARN,
 		notifier: notifier.BuildSNSClient(sns),
 	}
 	l, err := gologging.StartS3Logger(
-		c,
-		i,
-		h,
-		uploader.NewFactory(config.AuditBucketName, &key_name_generator.EdgeKeyNameGenerator{Info: i}, s3Uploader),
-		h,
+		rotateCoordinator,
+		instanceInfo,
+		harness,
+		uploader.NewFactory(config.AuditBucketName, &key_name_generator.EdgeKeyNameGenerator{Info: instanceInfo}, s3Uploader),
+		harness,
 		numWorkers,
 	)
 
 	if err != nil {
-		log.Fatalf("Error starting audit logger: %s", err)
+		logger.WithError(err).Fatal("Failed to start audit logger")
 	}
 
 	return l

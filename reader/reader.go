@@ -4,10 +4,10 @@ import (
 	"bufio"
 	"compress/gzip"
 	"io"
-	"log"
 	"os"
 	"time"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/parser"
 )
 
@@ -89,7 +89,7 @@ func (reader *FileLogReader) Close() error {
 			if err == nil {
 				err = internalErr
 			} else {
-				log.Printf("Swallowed error %v while closing file", internalErr)
+				logger.WithError(internalErr).Error("Swallowed while closing file")
 			}
 		}
 	}

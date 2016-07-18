@@ -3,7 +3,6 @@ package writer
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twinj/uuid"
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/batcher"
 	"github.com/twitchscience/spade/globber"
 )
@@ -76,20 +76,6 @@ const (
 	statRecordsSucceeded
 	statRecordsDropped
 )
-
-func generateStatNames(streamName string) map[int]string {
-	stats := make(map[int]string)
-	stats[statPutRecordsLength] = "kinesiswriter." + streamName + "putrecords.attempted"
-	stats[statPutRecordsLength] = "kinesiswriter." + streamName + "putrecords.length"
-	stats[statPutRecordsErrors] = "kinesiswriter." + streamName + "putrecords.errors"
-	stats[statRecordsFailedThrottled] = "kinesiswriter." + streamName + "records_failed.throttled"
-	stats[statRecordsFailedInternalError] = "kinesiswriter." + streamName + "records_failed.internal_error"
-	stats[statRecordsFailedUnknown] = "kinesiswriter." + streamName + "records_failed.unknown_reason"
-	stats[statRecordsSucceeded] = "kinesiswriter." + streamName + "records_succeeded"
-	stats[statRecordsDropped] = "kinesiswriter." + streamName + "records_dropped"
-
-	return stats
-}
 
 // NewKinesisWriter returns an instance of SpadeWriter that writes
 // events to kinesis
@@ -248,7 +234,10 @@ func (w *KinesisWriter) sendBatch(batch [][]byte) {
 		res, err := w.client.PutRecords(args)
 
 		if err != nil {
-			log.Printf("PutRecords failure attempt number %d / %d: %v", attempt, w.config.MaxAttemptsPerRecord, err)
+			logger.WithError(err).WithFields(map[string]interface{} {
+				"attempt":      attempt,
+				"max_attempts": w.config.MaxAttemptsPerRecord,
+			}).Error("Failed to put records")
 			w.incStat(statPutRecordsErrors, 1)
 			time.Sleep(retryDelay)
 			continue
@@ -292,7 +281,9 @@ func (w *KinesisWriter) sendBatch(batch [][]byte) {
 
 		time.Sleep(retryDelay)
 	}
-	log.Printf("Failed sending %d out of %d records to kinesis", len(args.Records), len(records))
+	logger.WithField("failures", len(args.Records)).
+		WithField("attempts", len(records)).
+		Error("Failed to send records to Kinesis")
 	w.incStat(statRecordsDropped, int64(len(args.Records)))
 }
 

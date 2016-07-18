@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"log"
 	"os"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/writer"
@@ -52,24 +52,25 @@ var config struct {
 }
 
 func loadConfig() {
+	entry := logger.WithField("config_file", *configFilename)
 	f, err := os.Open(*configFilename)
 	if err != nil {
-		log.Fatalf("Unable to load config from %s: %s", *configFilename, err)
+		entry.WithError(err).Fatal("Failed to load config")
 	}
 
 	err = json.NewDecoder(f).Decode(&config)
 	if err != nil {
-		log.Fatalf("Unable to decode json config from %s: %s", *configFilename, err)
+		entry.WithError(err).Fatal("Failed to decode JSON config")
 	}
 
 	err = validateConfig()
 	if err != nil {
-		log.Fatalf("Config from %s is invalid: %s", *configFilename, err)
+		entry.WithError(err).Fatal("Config is invalid")
 	}
 
 	if *printConfig {
 		b, _ := json.MarshalIndent(config, "", "\t")
-		log.Printf("\n%s", string(b))
+		entry.WithField("config", string(b)).Info("Configuration")
 	}
 }
 
@@ -105,8 +106,7 @@ func validateConfig() error {
 	}
 
 	for _, c := range config.KinesisOutputs {
-		err := c.Validate()
-		if err != nil {
+		if err := c.Validate(); err != nil {
 			return err
 		}
 	}
