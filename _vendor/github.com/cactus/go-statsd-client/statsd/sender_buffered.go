@@ -1,3 +1,7 @@
+// Copyright (c) 2012-2016 Eli Janssen
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
 package statsd
 
 import (
@@ -12,17 +16,17 @@ var senderPool = newBufferPool()
 // BufferedSender provides a buffered statsd udp, sending multiple
 // metrics, where possible.
 type BufferedSender struct {
+	sender        Sender
 	flushBytes    int
 	flushInterval time.Duration
-	sender        Sender
-	// lifecycle
-	shutdown chan chan error
-	running  bool
-	runmx    sync.RWMutex
 	// buffers
 	bufmx  sync.Mutex
 	buffer *bytes.Buffer
 	bufs   chan *bytes.Buffer
+	// lifecycle
+	runmx    sync.RWMutex
+	shutdown chan chan error
+	running  bool
 }
 
 // Send bytes.
@@ -133,7 +137,7 @@ func (s *BufferedSender) flush(b *bytes.Buffer) (int, error) {
 	return n, err
 }
 
-// Returns a new BufferedSender
+// NewBufferedSender returns a new BufferedSender
 //
 // addr is a string of the format "hostname:port", and must be parsable by
 // net.ResolveUDPAddr.
