@@ -193,6 +193,7 @@ MainLoop:
 				numGlobs++
 				events, err := expandGlob(record.Data)
 				if err == nil && len(events) > 0 {
+					_ = stats.Inc("record.count", 1, 1.0)
 					uuid := events[0].Uuid
 					_, found := duplicateCache.Get(uuid)
 					if !found {
@@ -209,6 +210,7 @@ MainLoop:
 						}
 					} else {
 						log.Println("Ignoring duplicate of UUID", uuid)
+						_ = stats.Inc("record.dupe", 1, 1.0)
 					}
 					duplicateCache.Set(uuid, 0, cache.DefaultExpiration)
 				} else if err != nil {
