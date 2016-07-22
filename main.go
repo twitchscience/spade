@@ -103,6 +103,9 @@ func expandGlob(glob []byte) ([]*spade.Event, error) {
 
 func main() {
 	flag.Parse()
+	logger.Init("info")
+	logger.Info("Starting processor")
+	logger.CaptureDefault()
 	loadConfig()
 
 	// aws resources
@@ -183,7 +186,7 @@ MainLoop:
 		case <-rotation:
 			multee.Rotate()
 			s := spadeReporter.Finalize()
-			logger.WithFields(map[string]interface{} {
+			logger.WithFields(map[string]interface{}{
 				"num_globs":  numGlobs,
 				"num_events": numEvents,
 				"stats":      s,
