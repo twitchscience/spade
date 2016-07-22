@@ -77,6 +77,20 @@ const (
 	statRecordsDropped
 )
 
+func generateStatNames(streamName string) map[int]string {
+	stats := make(map[int]string)
+	stats[statPutRecordsAttempted] = "kinesiswriter." + streamName + ".putrecords.attempted"
+	stats[statPutRecordsLength] = "kinesiswriter." + streamName + ".putrecords.length"
+	stats[statPutRecordsErrors] = "kinesiswriter." + streamName + ".putrecords.errors"
+	stats[statRecordsFailedThrottled] = "kinesiswriter." + streamName + ".records_failed.throttled"
+	stats[statRecordsFailedInternalError] = "kinesiswriter." + streamName + ".records_failed.internal_error"
+	stats[statRecordsFailedUnknown] = "kinesiswriter." + streamName + ".records_failed.unknown_reason"
+	stats[statRecordsSucceeded] = "kinesiswriter." + streamName + ".records_succeeded"
+	stats[statRecordsDropped] = "kinesiswriter." + streamName + ".records_dropped"
+
+	return stats
+}
+
 // NewKinesisWriter returns an instance of SpadeWriter that writes
 // events to kinesis
 func NewKinesisWriter(client *kinesis.Kinesis, statter statsd.Statter, config KinesisWriterConfig) (SpadeWriter, error) {
@@ -85,11 +99,12 @@ func NewKinesisWriter(client *kinesis.Kinesis, statter statsd.Statter, config Ki
 		return nil, err
 	}
 	w := &KinesisWriter{
-		incoming: make(chan *WriteRequest, config.BufferSize),
-		batches:  make(chan [][]byte),
-		config:   config,
-		client:   client,
-		statter:  statter,
+		incoming:  make(chan *WriteRequest, config.BufferSize),
+		batches:   make(chan [][]byte),
+		config:    config,
+		client:    client,
+		statter:   statter,
+		statNames: generateStatNames(config.StreamName),
 	}
 
 	w.batcher, err = batcher.New(config.Batcher, func(b [][]byte) {
@@ -196,7 +211,11 @@ type record struct {
 
 func (w *KinesisWriter) incStat(stat int, amount int64) {
 	if amount != 0 {
-		_ = w.statter.Inc(w.statNames[stat], amount, 1)
+		err := w.statter.Inc(w.statNames[stat], amount, 1)
+		if err != nil {
+			logger.WithError(err).WithField("statName", w.statNames[stat]).
+				Error("Failed to put stat")
+		}
 	}
 }
 
@@ -234,7 +253,7 @@ func (w *KinesisWriter) sendBatch(batch [][]byte) {
 		res, err := w.client.PutRecords(args)
 
 		if err != nil {
-			logger.WithError(err).WithFields(map[string]interface{} {
+			logger.WithError(err).WithFields(map[string]interface{}{
 				"attempt":      attempt,
 				"max_attempts": w.config.MaxAttemptsPerRecord,
 			}).Error("Failed to put records")
