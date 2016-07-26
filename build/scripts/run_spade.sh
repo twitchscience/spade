@@ -11,8 +11,6 @@ SPADE_DATA_DIR="${SPADE_DIR}/data"
 SPADE_LOG_DIR="${SPADE_DIR}/log"
 export STATSD_HOSTPORT="localhost:8125"
 
-eval "$(curl 169.254.169.254/latest/user-data/)"
-
 export HOST="$(curl 169.254.169.254/latest/meta-data/hostname)"
 
 STATSD_PREFIX="${CLOUD_APP}.${CLOUD_DEV_PHASE:-${CLOUD_ENVIRONMENT}}.${EC2_REGION}.${CLOUD_AUTO_SCALE_GROUP##*-}"
