@@ -4,7 +4,7 @@
 file = /var/log/upstart/spade.log
 log_group_name = science/$CLOUD_APP/$CLOUD_ENVIRONMENT
 log_stream_name = spade.log on {instance_id} at {hostname}
-datetime_format = %Y/%m/%d %H:%M:%S
+datetime_format = %Y-%m-%dT%H:%M:%S.%fZ%z
 batch_count = 100
 
 # for more info, see the CloudWatch Log conf reference at:
