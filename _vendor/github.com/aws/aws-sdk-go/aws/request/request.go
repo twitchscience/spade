@@ -73,11 +73,15 @@ func New(cfg aws.Config, clientInfo metadata.ClientInfo, handlers Handlers,
 	if method == "" {
 		method = "POST"
 	}
+	p := operation.HTTPPath
+	if p == "" {
+		p = "/"
+	}
 
 	httpReq, _ := http.NewRequest(method, "", nil)
 
 	var err error
-	httpReq.URL, err = url.Parse(clientInfo.Endpoint + operation.HTTPPath)
+	httpReq.URL, err = url.Parse(clientInfo.Endpoint + p)
 	if err != nil {
 		httpReq.URL = &url.URL{}
 		err = awserr.New("InvalidEndpointURL", "invalid endpoint uri", err)

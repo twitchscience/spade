@@ -185,32 +185,14 @@ func (d *Decoder) decodeBinary(b []byte, v reflect.Value) error {
 		return nil
 	}
 
-	if v.Kind() != reflect.Slice {
-		return &UnmarshalTypeError{Value: "binary", Type: v.Type()}
-	}
-
-	if v.Type() == byteSliceType {
-		// Optimization for []byte types
+	switch v.Interface().(type) {
+	case []byte:
 		if v.IsNil() || v.Cap() < len(b) {
 			v.Set(reflect.MakeSlice(byteSliceType, len(b), len(b)))
 		} else if v.Len() != len(b) {
 			v.SetLen(len(b))
 		}
 		copy(v.Interface().([]byte), b)
-		return nil
-	}
-
-	switch v.Type().Elem().Kind() {
-	case reflect.Uint8:
-		// Fallback to reflection copy for type aliased of []byte type
-		if v.IsNil() || v.Cap() < len(b) {
-			v.Set(reflect.MakeSlice(v.Type(), len(b), len(b)))
-		} else if v.Len() != len(b) {
-			v.SetLen(len(b))
-		}
-		for i := 0; i < len(b); i++ {
-			v.Index(i).SetUint(uint64(b[i]))
-		}
 	default:
 		if v.Kind() == reflect.Array && v.Type().Elem().Kind() == reflect.Uint8 {
 			reflect.Copy(v, reflect.ValueOf(b))
@@ -485,11 +467,8 @@ func (d *Decoder) decodeString(s *string, v reflect.Value, fieldTag tag) error {
 	}
 
 	switch v.Kind() {
-	case reflect.String:
-		v.SetString(*s)
-	case reflect.Interface:
-		// Ensure type aliasing is handled properly
-		v.Set(reflect.ValueOf(*s).Convert(v.Type()))
+	case reflect.String, reflect.Interface:
+		v.Set(reflect.ValueOf(*s))
 	default:
 		return &UnmarshalTypeError{Value: "string", Type: v.Type()}
 	}

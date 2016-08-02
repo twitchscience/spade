@@ -4,7 +4,6 @@ package kinsumer
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,7 +18,8 @@ import (
 )
 
 type shardConsumerError struct {
-	shardID *string
+	shardID string
+	action  string
 	err     error
 }
 
@@ -35,7 +35,7 @@ type Kinsumer struct {
 	kinesis               kinesisiface.KinesisAPI   // interface to the kinesis service
 	dynamodb              dynamodbiface.DynamoDBAPI // interface to the dynamodb service
 	streamName            string                    // name of the kinesis stream to consume from
-	shards                []*kinesis.Shard          // all the shards in the stream, for detecting when the shards change
+	shardIDs              []string                  // all the shards in the stream, for detecting when the shards change
 	stop                  chan struct{}             // channel used to signal to all the go routines that we want to stop consuming
 	stoprequest           chan bool                 // channel used internally to signal to the main go routine to stop processing
 	records               chan *consumedRecord      // channel for the go routines to put the consumed records on
@@ -44,16 +44,20 @@ type Kinsumer struct {
 	waitGroup             sync.WaitGroup            // waitGroup to sync the consumers go routines on
 	mainWG                sync.WaitGroup            // WaitGroup for the mainLoop
 	shardErrors           chan shardConsumerError   // all the errors found by the consumers that were not handled
-	clientsTableName      string                    // dynamo table where info about each client is stored
-	checkpointTableName   string                    // dynamo table where the checkpoints for each shard are stored
+	clientsTableName      string                    // dynamo table of info about each client
+	checkpointTableName   string                    // dynamo table of the checkpoints for each shard
+	metadataTableName     string                    // dynamo table of metadata about the leader and shards
 	clientID              string                    // identifier to differentiate between the running clients
 	clientName            string                    // display name of the client - used just for debugging
 	totalClients          int                       // The number of clients that are currently working on this stream
 	thisClient            int                       // The (sorted by name) index of this client in the total list
 	config                Config                    // configuration struct
 	numberOfRuns          int32                     // Used to atomically make sure we only ever allow one Run() to be called
-	maxAgeForClientRecord time.Duration             // Cutoff for records we read from dynamodb before we assume the record is stale
-
+	isLeader              bool                      // Whether this client is the leader
+	leaderLost            chan bool                 // Channel that receives an event when the node loses leadership
+	leaderWG              sync.WaitGroup            // waitGroup for the leader loop
+	maxAgeForClientRecord time.Duration             // Cutoff for client/checkpoint records we read from dynamodb before we assume the record is stale
+	maxAgeForLeaderRecord time.Duration             // Cutoff for leader/shard cache records we read from dynamodb before we assume the record is stale
 }
 
 // New returns a Kinsumer Interface with default kinesis and dynamodb instances, to be used in ec2 instances to get default auth and config
@@ -98,52 +102,23 @@ func NewWithInterfaces(kinesis kinesisiface.KinesisAPI, dynamodb dynamodbiface.D
 		shardErrors:           make(chan shardConsumerError, 10),
 		checkpointTableName:   applicationName + "_checkpoints",
 		clientsTableName:      applicationName + "_clients",
+		metadataTableName:     applicationName + "_metadata",
 		clientID:              uuid.NewV4().String(),
 		clientName:            clientName,
 		config:                config,
 		maxAgeForClientRecord: config.shardCheckFrequency * 5,
+		maxAgeForLeaderRecord: config.leaderActionFrequency * 5,
 	}
 	return consumer, nil
 }
 
+// refreshShards registers our client, refreshes the lists of clients and shards, checks if we
+// have become/unbecome the leader, and returns whether the shards/clients changed.
 //TODO: Write unit test - needs dynamo _and_ kinesis mocking
 func (k *Kinsumer) refreshShards() (bool, error) {
-	var (
-		innerError error
-		shards     []*kinesis.Shard
-	)
+	var shardIDs []string
 
 	if err := registerWithClientsTable(k.dynamodb, k.clientID, k.clientName, k.clientsTableName); err != nil {
-		return false, err
-	}
-
-	params := &kinesis.DescribeStreamInput{
-		StreamName: aws.String(k.streamName),
-	}
-
-	err := k.kinesis.DescribeStreamPages(params, func(page *kinesis.DescribeStreamOutput, _ bool) bool {
-		if page == nil || page.StreamDescription == nil {
-			innerError = ErrKinesisCantDescribeStream
-			return false
-		}
-
-		switch aws.StringValue(page.StreamDescription.StreamStatus) {
-		case "CREATING":
-			innerError = ErrKinesisBeingCreated
-			return false
-		case "DELETING":
-			innerError = ErrKinesisBeingDeleted
-			return false
-		}
-		shards = append(shards, page.StreamDescription.Shards...)
-		return true
-	})
-
-	if innerError != nil {
-		return false, innerError
-	}
-
-	if err != nil {
 		return false, err
 	}
 
@@ -161,9 +136,6 @@ func (k *Kinsumer) refreshShards() (bool, error) {
 		}
 	}
 
-	// TODO: It might make sense for a client that detects it is the first client (first in the sorted list)
-	//       to delete old references in dynamodb. The algorithm would be to use rescan using the same cutoff but with a
-	//       flipped filter, then do a conditional delete (in case the entry was updated)
 	if !found {
 		return false, ErrThisClientNotInDynamo
 	}
@@ -172,13 +144,24 @@ func (k *Kinsumer) refreshShards() (bool, error) {
 		return false, err
 	}
 
+	if thisClient == 0 && !k.isLeader {
+		k.becomeLeader()
+	} else if thisClient != 0 && k.isLeader {
+		k.unbecomeLeader()
+	}
+
+	shardIDs, err = loadShardIDsFromDynamo(k.dynamodb, k.metadataTableName)
+	if err != nil {
+		return false, err
+	}
+
 	changed := (totalClients != k.totalClients) ||
 		(thisClient != k.thisClient) ||
-		(len(k.shards) != len(shards))
+		(len(k.shardIDs) != len(shardIDs))
 
 	if !changed {
-		for idx := range shards {
-			if aws.StringValue(shards[idx].ShardId) != aws.StringValue(k.shards[idx].ShardId) {
+		for idx := range shardIDs {
+			if shardIDs[idx] != k.shardIDs[idx] {
 				changed = true
 				break
 			}
@@ -186,11 +169,7 @@ func (k *Kinsumer) refreshShards() (bool, error) {
 	}
 
 	if changed {
-		k.shards = shards
-	}
-
-	if len(k.shards) == 0 && len(shards) > 0 {
-		return false, ErrNoShardsAssigned
+		k.shardIDs = shardIDs
 	}
 
 	k.thisClient = thisClient
@@ -199,18 +178,26 @@ func (k *Kinsumer) refreshShards() (bool, error) {
 	return changed, nil
 }
 
+// startConsumers launches a shard consumer for each shard we should own
 // TODO: Can we unit test this at all?
-func (k *Kinsumer) startConsumers() {
+func (k *Kinsumer) startConsumers() error {
 	k.stop = make(chan struct{})
+	assigned := false
 
-	for i, shard := range k.shards {
+	for i, shard := range k.shardIDs {
 		if (i % k.totalClients) == k.thisClient {
 			k.waitGroup.Add(1)
-			go k.consume(shard.ShardId)
+			assigned = true
+			go k.consume(shard)
 		}
 	}
+	if len(k.shardIDs) != 0 && !assigned {
+		return ErrNoShardsAssigned
+	}
+	return nil
 }
 
+// stopConsumers stops all our shard consumers
 func (k *Kinsumer) stopConsumers() {
 	close(k.stop)
 	k.waitGroup.Wait()
@@ -224,6 +211,7 @@ DrainLoop:
 	}
 }
 
+// dynamoTableActive returns an error if the given table is not ACTIVE
 func (k *Kinsumer) dynamoTableActive(name string) error {
 	out, err := k.dynamodb.DescribeTable(&dynamodb.DescribeTableInput{
 		TableName: aws.String(name),
@@ -238,6 +226,7 @@ func (k *Kinsumer) dynamoTableActive(name string) error {
 	return nil
 }
 
+// kinesisStreamReady returns an error if the given stream is not ACTIVE
 func (k *Kinsumer) kinesisStreamReady() error {
 	out, err := k.kinesis.DescribeStream(&kinesis.DescribeStreamInput{
 		StreamName: aws.String(k.streamName),
@@ -254,7 +243,9 @@ func (k *Kinsumer) kinesisStreamReady() error {
 	return nil
 }
 
-// Run the kinesis consumer process. This is a blocking call, use Stop() to force it to return
+// Run runs the main kinesis consumer process. This is a non-blocking call, use Stop() to force it to return.
+// This goroutine is responsible for startin/stopping consumers, aggregating all consumers' records,
+// updating checkpointers as records are consumed, and refreshing our shard/client list and leadership
 //TODO: Can we unit test this at all?
 func (k *Kinsumer) Run() error {
 	if err := k.dynamoTableActive(k.checkpointTableName); err != nil {
@@ -283,7 +274,18 @@ func (k *Kinsumer) Run() error {
 		defer func() {
 			// Deregister is a nice to have but clients also time out if they
 			// fail to deregister, so ignore error here.
-			_ = deregisterFromClientsTable(k.dynamodb, k.clientID, k.clientsTableName)
+			err := deregisterFromClientsTable(k.dynamodb, k.clientID, k.clientsTableName)
+			if err != nil {
+				k.errors <- fmt.Errorf("error deregistering client: %s", err)
+			}
+			if k.isLeader {
+				close(k.leaderLost)
+				k.leaderLost = nil
+				k.isLeader = false
+			}
+			// Do this outside the k.isLeader check in case k.isLeader was false because
+			// we lost leadership but haven't had time to shutdown the goroutine yet.
+			k.leaderWG.Wait()
 		}()
 
 		// We close k.output so that Next() stops, this is also the reason
@@ -296,7 +298,9 @@ func (k *Kinsumer) Run() error {
 		}()
 
 		var record *consumedRecord
-		k.startConsumers()
+		if err := k.startConsumers(); err != nil {
+			k.errors <- fmt.Errorf("error starting consumers: %s", err)
+		}
 		defer k.stopConsumers()
 
 		for {
@@ -323,17 +327,18 @@ func (k *Kinsumer) Run() error {
 				record.checkpointer.update(aws.StringValue(record.record.SequenceNumber))
 				record = nil
 			case se := <-k.shardErrors:
-				log.Printf("ShardError (%s): %s", *se.shardID, se.err)
-				k.errors <- se.err
+				k.errors <- fmt.Errorf("shard error (%s) in %s: %s", se.shardID, se.action, se.err)
 			case <-shardChangeTicker.C:
 				changed, err := k.refreshShards()
 				if err != nil {
-					k.errors <- err
+					k.errors <- fmt.Errorf("error refreshing shards: %s", err)
 				} else if changed {
 					shardChangeTicker.Stop()
 					k.stopConsumers()
 					record = nil
-					k.startConsumers()
+					if err := k.startConsumers(); err != nil {
+						k.errors <- fmt.Errorf("error restarting consumers: %s", err)
+					}
 					// We create a new shardChangeTicker here so that the time it takes to stop and
 					// start the consumers is not included in the wait for the next tick.
 					shardChangeTicker = time.NewTicker(k.config.shardCheckFrequency)
@@ -345,7 +350,7 @@ func (k *Kinsumer) Run() error {
 	return nil
 }
 
-// Stop the consumption of kinesis events
+// Stop stops the consumption of kinesis events
 //TODO: Can we unit test this at all?
 func (k *Kinsumer) Stop() {
 	k.stoprequest <- true
