@@ -26,7 +26,8 @@ const (
 	errorSleepDuration = 1 * time.Second
 )
 
-func getShardIterator(k kinesisiface.KinesisAPI, streamName *string, shardID *string, sequenceNumber string) (*string, error) {
+// getShardIterator gets a shard iterator after the last sequence number we read or at the start of the stream
+func getShardIterator(k kinesisiface.KinesisAPI, streamName string, shardID string, sequenceNumber string) (string, error) {
 	shardIteratorType := kinesis.ShardIteratorTypeAfterSequenceNumber
 
 	// If we do not have a sequenceNumber yet we need to get a shardIterator
@@ -38,34 +39,36 @@ func getShardIterator(k kinesisiface.KinesisAPI, streamName *string, shardID *st
 	}
 
 	resp, err := k.GetShardIterator(&kinesis.GetShardIteratorInput{
-		ShardId:                shardID,
+		ShardId:                aws.String(shardID),
 		ShardIteratorType:      &shardIteratorType,
 		StartingSequenceNumber: ps,
-		StreamName:             streamName,
+		StreamName:             aws.String(streamName),
 	})
-	return resp.ShardIterator, err
+	return aws.StringValue(resp.ShardIterator), err
 }
 
-func getRecords(k kinesisiface.KinesisAPI, iterator *string) (records []*kinesis.Record, nextIterator *string, lag time.Duration, err error) {
+// getRecords returns the next records and shard iterator from the given shard iterator
+func getRecords(k kinesisiface.KinesisAPI, iterator string) (records []*kinesis.Record, nextIterator string, lag time.Duration, err error) {
 	params := &kinesis.GetRecordsInput{
 		Limit:         aws.Int64(getRecordsLimit),
-		ShardIterator: iterator,
+		ShardIterator: aws.String(iterator),
 	}
 
 	output, err := k.GetRecords(params)
 
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, "", 0, err
 	}
 
 	records = output.Records
-	nextIterator = output.NextShardIterator
+	nextIterator = aws.StringValue(output.NextShardIterator)
 	lag = time.Duration(aws.Int64Value(output.MillisBehindLatest)) * time.Millisecond
 
 	return records, nextIterator, lag, nil
 }
 
-func (k *Kinsumer) captureShard(shardID *string) (*checkpointer, error) {
+// captureShard blocks until we capture the given shardID
+func (k *Kinsumer) captureShard(shardID string) (*checkpointer, error) {
 	// Attempt to capture the shard in dynamo
 	for {
 		// Ask the checkpointer to capture the shard
@@ -95,8 +98,10 @@ func (k *Kinsumer) captureShard(shardID *string) (*checkpointer, error) {
 	}
 }
 
+// consume is a blocking call that captures then consumes the given shard in a loop.
+// It is also responsible for writing out the checkpoint updates to dynamo.
 // TODO: There are no tests for this file. Not sure how to even unit test this.
-func (k *Kinsumer) consume(shardID *string) {
+func (k *Kinsumer) consume(shardID string) {
 	defer k.waitGroup.Done()
 
 	// commitTicker is used to periodically commit, so that we don't hammer dynamo every time
@@ -107,7 +112,7 @@ func (k *Kinsumer) consume(shardID *string) {
 	// capture the checkpointer
 	checkpointer, err := k.captureShard(shardID)
 	if err != nil {
-		k.shardErrors <- shardConsumerError{shardID: shardID, err: err}
+		k.shardErrors <- shardConsumerError{shardID: shardID, action: "captureShard", err: err}
 		return
 	}
 
@@ -119,19 +124,21 @@ func (k *Kinsumer) consume(shardID *string) {
 
 	sequenceNumber := checkpointer.sequenceNumber
 
+	// finished means we have reached the end of the shard but haven't necessarily processed/committed everything
+	finished := false
 	// Make sure we release the shard when we are done.
 	defer func() {
 		innerErr := checkpointer.release()
 		if innerErr != nil {
-			k.shardErrors <- shardConsumerError{shardID: shardID, err: innerErr}
+			k.shardErrors <- shardConsumerError{shardID: shardID, action: "checkpointer.release", err: innerErr}
 			return
 		}
 	}()
 
 	// Get the starting shard iterator
-	iterator, err := getShardIterator(k.kinesis, &k.streamName, shardID, sequenceNumber)
+	iterator, err := getShardIterator(k.kinesis, k.streamName, shardID, sequenceNumber)
 	if err != nil {
-		k.shardErrors <- shardConsumerError{shardID: shardID, err: err}
+		k.shardErrors <- shardConsumerError{shardID: shardID, action: "getShardIterator", err: err}
 		return
 	}
 
@@ -140,13 +147,13 @@ func (k *Kinsumer) consume(shardID *string) {
 
 	retryCount := 0
 
+	var lastSeqNum string
 mainloop:
 	for {
-		// We have reached the end of the shard's data. Stop processing.
-		if iterator == nil || *iterator == "" {
-			//TODO: Note that right now this will cause uneven work on clients as the balancing algorithm won't
-			//      take fully consumed (split/merged) shards into account.
-			break
+		// We have reached the end of the shard's data. Set Finished in dynamo and stop processing.
+		if iterator == "" && !finished {
+			checkpointer.finish(lastSeqNum)
+			finished = true
 		}
 
 		// Handle async actions, and throttle requests to keep kinesis happy
@@ -154,9 +161,12 @@ mainloop:
 		case <-k.stop:
 			return
 		case <-commitTicker.C:
-			err := checkpointer.commit()
+			finishCommitted, err := checkpointer.commit()
 			if err != nil {
-				k.shardErrors <- shardConsumerError{shardID: shardID, err: err}
+				k.shardErrors <- shardConsumerError{shardID: shardID, action: "checkpointer.commit", err: err}
+				return
+			}
+			if finishCommitted {
 				return
 			}
 		case <-time.After(nextThrottleDelay):
@@ -164,6 +174,10 @@ mainloop:
 
 		// Reset the throttleDelay
 		nextThrottleDelay = k.config.throttleDelay
+
+		if finished {
+			continue
+		}
 
 		// Get records from kinesis
 		records, next, lag, err := getRecords(k.kinesis, iterator)
@@ -188,13 +202,13 @@ mainloop:
 					}
 				}
 			}
-			k.shardErrors <- shardConsumerError{shardID: shardID, err: err}
+			k.shardErrors <- shardConsumerError{shardID: shardID, action: "getRecords", err: err}
 			return
 		}
 		retryCount = 0
 
 		// Put all the records we got onto the channel
-		k.config.stats.EventsFromKinesis(len(records), aws.StringValue(shardID), lag)
+		k.config.stats.EventsFromKinesis(len(records), shardID, lag)
 		if len(records) > 0 {
 			retrievedAt := time.Now()
 			for _, record := range records {
@@ -209,8 +223,11 @@ mainloop:
 				}
 			}
 
-			// Since we got records, lets hit kinesis again.
+			// Since we got records, let's hit kinesis again.
 			nextThrottleDelay = 0
+
+			// Update the last sequence number we saw, in case we reached the end of the stream.
+			lastSeqNum = aws.StringValue(records[len(records)-1].SequenceNumber)
 		}
 		iterator = next
 	}
