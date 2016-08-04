@@ -14,7 +14,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/patrickmn/go-cache"
@@ -125,7 +124,6 @@ func main() {
 
 	sns := sns.New(session)
 	s3Uploader := s3manager.NewUploader(session)
-	kinesis := kinesis.New(session)
 
 	// Set up statsd monitoring
 	// - If the env is not set up we wil use a noop connection
@@ -162,7 +160,7 @@ func main() {
 
 	multee := &writer.Multee{}
 	spadeWriter := createSpadeWriter(*_dir, spadeReporter, spadeUploaderPool, blueprintUploaderPool, config.MaxLogBytes, config.MaxLogAgeSecs)
-	kinesisWriters := createKinesisWriters(kinesis, stats)
+	kinesisWriters := createKinesisWriters(session, stats)
 	multee.Add(spadeWriter)
 	multee.AddMany(kinesisWriters)
 

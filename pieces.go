@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/uploader"
@@ -30,7 +29,7 @@ const (
 )
 
 func createSpadeReporter(stats reporter.StatsLogger, auditLogger *gologging.UploadLogger) reporter.Reporter {
-	 return reporter.BuildSpadeReporter(
+	return reporter.BuildSpadeReporter(
 		&sync.WaitGroup{},
 		[]reporter.Tracker{
 			&reporter.SpadeStatsdTracker{Stats: stats},
@@ -91,10 +90,10 @@ func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
 	return u
 }
 
-func createKinesisWriters(kinesis *kinesis.Kinesis, stats statsd.Statter) []writer.SpadeWriter {
+func createKinesisWriters(session *session.Session, stats statsd.Statter) []writer.SpadeWriter {
 	var writers []writer.SpadeWriter
 	for _, c := range config.KinesisOutputs {
-		w, err := writer.NewKinesisWriter(kinesis, stats, c)
+		w, err := writer.NewKinesisWriter(session, stats, c)
 		if err != nil {
 			logger.WithError(err).
 				WithField("stream_name", c.StreamName).
