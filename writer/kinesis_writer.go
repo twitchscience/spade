@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twinj/uuid"
@@ -19,6 +21,7 @@ import (
 // and it's nested globber and batcher objects
 type KinesisWriterConfig struct {
 	StreamName           string
+	StreamRole           string
 	BufferSize           int
 	MaxAttemptsPerRecord int
 	RetryDelay           string
@@ -93,10 +96,22 @@ func generateStatNames(streamName string) map[int]string {
 
 // NewKinesisWriter returns an instance of SpadeWriter that writes
 // events to kinesis
-func NewKinesisWriter(client *kinesis.Kinesis, statter statsd.Statter, config KinesisWriterConfig) (SpadeWriter, error) {
+func NewKinesisWriter(session *session.Session, statter statsd.Statter, config KinesisWriterConfig) (SpadeWriter, error) {
 	err := config.Validate()
 	if err != nil {
 		return nil, err
+	}
+	var client *kinesis.Kinesis
+	if config.StreamRole == "" {
+		client = kinesis.New(session)
+	} else {
+		credentials := stscreds.NewCredentials(
+			session,
+			config.StreamRole,
+			func(provider *stscreds.AssumeRoleProvider) {
+				provider.ExpiryWindow = time.Minute
+			})
+		client = kinesis.New(session.Copy(&aws.Config{Credentials: credentials}))
 	}
 	w := &KinesisWriter{
 		incoming:  make(chan *WriteRequest, config.BufferSize),
@@ -256,7 +271,7 @@ func (w *KinesisWriter) sendBatch(batch [][]byte) {
 			logger.WithError(err).WithFields(map[string]interface{}{
 				"attempt":      attempt,
 				"max_attempts": w.config.MaxAttemptsPerRecord,
-			}).Error("Failed to put records")
+			}).Warn("Failed to put records")
 			w.incStat(statPutRecordsErrors, 1)
 			time.Sleep(retryDelay)
 			continue
