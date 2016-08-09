@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/firehose"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twinj/uuid"
@@ -18,10 +19,11 @@ import (
 )
 
 // KinesisWriterConfig is used to configure a KinesisWriter
-// and it's nested globber and batcher objects
+// and its nested globber and batcher objects
 type KinesisWriterConfig struct {
 	StreamName           string
 	StreamRole           string
+	StreamType           string // StreamType should be either "stream" or "firehose"
 	BufferSize           int
 	MaxAttemptsPerRecord int
 	RetryDelay           string
@@ -55,16 +57,58 @@ func (c *KinesisWriterConfig) Validate() error {
 	return nil
 }
 
-// KinesisWriter is a writer that writes events to kinesis
-type KinesisWriter struct {
-	incoming  chan *WriteRequest
-	batches   chan [][]byte
-	globber   *globber.Globber
-	batcher   *batcher.Batcher
-	config    KinesisWriterConfig
-	client    *kinesis.Kinesis
+// WriterStatter sends stats for a BatchWriter.
+type WriterStatter struct {
 	statter   statsd.Statter
 	statNames map[int]string
+}
+
+// NewWriterStatter returns a WriterStatter for the given stream.
+func NewWriterStatter(statter statsd.Statter, streamName string) *WriterStatter {
+	return &WriterStatter{
+		statter:   statter,
+		statNames: generateStatNames(streamName),
+	}
+}
+
+// IncStat increments a stat by an amount on the WriterStatter.
+func (w *WriterStatter) IncStat(stat int, amount int64) {
+	if amount != 0 {
+		err := w.statter.Inc(w.statNames[stat], amount, 1)
+		if err != nil {
+			logger.WithError(err).WithField("statName", w.statNames[stat]).
+				Error("Failed to put stat")
+		}
+	}
+}
+
+// BatchWriter is an interface to write batches to an external sink.
+type BatchWriter interface {
+	SendBatch([][]byte)
+}
+
+// StreamBatchWriter writes batches to Kinesis Streams
+type StreamBatchWriter struct {
+	client  *kinesis.Kinesis
+	config  *KinesisWriterConfig
+	statter *WriterStatter
+}
+
+// FirehoseBatchWriter writes batches to Kinesis Firehose
+type FirehoseBatchWriter struct {
+	client  *firehose.Firehose
+	config  *KinesisWriterConfig
+	statter *WriterStatter
+}
+
+// KinesisWriter is a writer that writes events to kinesis
+type KinesisWriter struct {
+	incoming    chan *WriteRequest
+	batches     chan [][]byte
+	globber     *globber.Globber
+	batcher     *batcher.Batcher
+	config      KinesisWriterConfig
+	batchWriter BatchWriter
 
 	sync.WaitGroup
 }
@@ -101,25 +145,30 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config K
 	if err != nil {
 		return nil, err
 	}
-	var client *kinesis.Kinesis
-	if config.StreamRole == "" {
-		client = kinesis.New(session)
-	} else {
+	var batchWriter BatchWriter
+	if config.StreamRole != "" {
 		credentials := stscreds.NewCredentials(
 			session,
 			config.StreamRole,
 			func(provider *stscreds.AssumeRoleProvider) {
 				provider.ExpiryWindow = time.Minute
 			})
-		client = kinesis.New(session.Copy(&aws.Config{Credentials: credentials}))
+		session = session.Copy(&aws.Config{Credentials: credentials})
+	}
+	writerStatter := NewWriterStatter(statter, config.StreamName)
+	switch config.StreamType {
+	case "stream":
+		batchWriter = &StreamBatchWriter{kinesis.New(session), &config, writerStatter}
+	case "firehose":
+		batchWriter = &FirehoseBatchWriter{firehose.New(session), &config, writerStatter}
+	default:
+		return nil, fmt.Errorf("unknown stream type: %s", config.StreamType)
 	}
 	w := &KinesisWriter{
-		incoming:  make(chan *WriteRequest, config.BufferSize),
-		batches:   make(chan [][]byte),
-		config:    config,
-		client:    client,
-		statter:   statter,
-		statNames: generateStatNames(config.StreamName),
+		incoming:    make(chan *WriteRequest, config.BufferSize),
+		batches:     make(chan [][]byte),
+		config:      config,
+		batchWriter: batchWriter,
 	}
 
 	w.batcher, err = batcher.New(config.Batcher, func(b [][]byte) {
@@ -212,7 +261,10 @@ func (w *KinesisWriter) sendWorker() {
 			return
 		}
 		w.Add(1)
-		go w.sendBatch(batch)
+		go func(batch [][]byte) {
+			defer w.Done()
+			w.batchWriter.SendBatch(batch)
+		}(batch)
 	}
 }
 
@@ -224,18 +276,8 @@ type record struct {
 	Data    []byte
 }
 
-func (w *KinesisWriter) incStat(stat int, amount int64) {
-	if amount != 0 {
-		err := w.statter.Inc(w.statNames[stat], amount, 1)
-		if err != nil {
-			logger.WithError(err).WithField("statName", w.statNames[stat]).
-				Error("Failed to put stat")
-		}
-	}
-}
-
-func (w *KinesisWriter) sendBatch(batch [][]byte) {
-	defer w.Done()
+// SendBatch writes the given batch to a stream, configured by the KinesisWriter
+func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 	if len(batch) == 0 {
 		return
 	}
@@ -262,8 +304,8 @@ func (w *KinesisWriter) sendBatch(batch [][]byte) {
 	}
 
 	for attempt := 1; attempt <= w.config.MaxAttemptsPerRecord; attempt++ {
-		w.incStat(statPutRecordsAttempted, 1)
-		w.incStat(statPutRecordsLength, int64(len(records)))
+		w.statter.IncStat(statPutRecordsAttempted, 1)
+		w.statter.IncStat(statPutRecordsLength, int64(len(records)))
 
 		res, err := w.client.PutRecords(args)
 
@@ -271,21 +313,17 @@ func (w *KinesisWriter) sendBatch(batch [][]byte) {
 			logger.WithError(err).WithFields(map[string]interface{}{
 				"attempt":      attempt,
 				"max_attempts": w.config.MaxAttemptsPerRecord,
-			}).Warn("Failed to put records")
-			w.incStat(statPutRecordsErrors, 1)
+				"stream":       w.config.StreamName,
+			}).Error("Failed to put records")
+			w.statter.IncStat(statPutRecordsErrors, 1)
 			time.Sleep(retryDelay)
 			continue
 		}
 
 		// Find all failed records and update the slice to contain only failures
-		i := 0
+		retryCount := 0
 		var provisionThroughputExceeded, internalFailure, unknownError, succeeded int64
 		for j, result := range res.Records {
-			shard := aws.StringValue(result.ShardId)
-			if shard == "" {
-				shard = "unknown"
-			}
-
 			if aws.StringValue(result.ErrorCode) != "" {
 				switch aws.StringValue(result.ErrorCode) {
 				case "ProvisionedThroughputExceededException":
@@ -296,20 +334,19 @@ func (w *KinesisWriter) sendBatch(batch [][]byte) {
 					// Something undocumented
 					unknownError++
 				}
-				args.Records[i] = args.Records[j]
-				i++
+				args.Records[retryCount] = args.Records[j]
+				retryCount++
 			} else {
 				succeeded++
 			}
 		}
-		w.incStat(statRecordsFailedThrottled, provisionThroughputExceeded)
-		w.incStat(statRecordsFailedInternalError, internalFailure)
-		w.incStat(statRecordsFailedUnknown, unknownError)
-		w.incStat(statRecordsSucceeded, succeeded)
-		args.Records = args.Records[:i]
+		w.statter.IncStat(statRecordsFailedThrottled, provisionThroughputExceeded)
+		w.statter.IncStat(statRecordsFailedInternalError, internalFailure)
+		w.statter.IncStat(statRecordsFailedUnknown, unknownError)
+		w.statter.IncStat(statRecordsSucceeded, succeeded)
+		args.Records = args.Records[:retryCount]
 
-		if len(args.Records) == 0 {
-			// No records need to be retried.
+		if retryCount == 0 {
 			return
 		}
 
@@ -317,8 +354,93 @@ func (w *KinesisWriter) sendBatch(batch [][]byte) {
 	}
 	logger.WithField("failures", len(args.Records)).
 		WithField("attempts", len(records)).
+		WithField("stream", w.config.StreamName).
 		Error("Failed to send records to Kinesis")
-	w.incStat(statRecordsDropped, int64(len(args.Records)))
+	w.statter.IncStat(statRecordsDropped, int64(len(args.Records)))
+}
+
+// SendBatch writes the given batch to a firehose, configured by the KinesisWriter
+func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
+	if len(batch) == 0 {
+		return
+	}
+
+	records := make([]*firehose.Record, len(batch))
+	for i, e := range batch {
+		UUID := uuid.NewV4()
+		data, _ := json.Marshal(&record{
+			UUID:    UUID.String(),
+			Version: version,
+			Data:    e,
+		})
+		// Add '\n' as a record separator
+		data = append(data, '\n')
+		records[i] = &firehose.Record{
+			Data: data,
+		}
+	}
+
+	retryDelay, _ := time.ParseDuration(w.config.RetryDelay)
+
+	args := &firehose.PutRecordBatchInput{
+		DeliveryStreamName: aws.String(w.config.StreamName),
+		Records:            records,
+	}
+
+	for attempt := 1; attempt <= w.config.MaxAttemptsPerRecord; attempt++ {
+		w.statter.IncStat(statPutRecordsAttempted, 1)
+		w.statter.IncStat(statPutRecordsLength, int64(len(records)))
+
+		res, err := w.client.PutRecordBatch(args)
+
+		if err != nil {
+			logger.WithError(err).WithFields(map[string]interface{}{
+				"attempt":      attempt,
+				"max_attempts": w.config.MaxAttemptsPerRecord,
+				"stream":       w.config.StreamName,
+			}).Error("Failed to put record batch")
+			w.statter.IncStat(statPutRecordsErrors, 1)
+			time.Sleep(retryDelay)
+			continue
+		}
+
+		// Find all failed records and update the slice to contain only failures
+		retryCount := 0
+		var provisionThroughputExceeded, internalFailure, unknownError, succeeded int64
+		for j, result := range res.RequestResponses {
+			if aws.StringValue(result.ErrorCode) != "" {
+				switch aws.StringValue(result.ErrorCode) {
+				case "ProvisionedThroughputExceededException":
+					provisionThroughputExceeded++
+				case "InternalFailure":
+					internalFailure++
+				default:
+					// Something undocumented
+					unknownError++
+				}
+				args.Records[retryCount] = args.Records[j]
+				retryCount++
+			} else {
+				succeeded++
+			}
+		}
+		w.statter.IncStat(statRecordsFailedThrottled, provisionThroughputExceeded)
+		w.statter.IncStat(statRecordsFailedInternalError, internalFailure)
+		w.statter.IncStat(statRecordsFailedUnknown, unknownError)
+		w.statter.IncStat(statRecordsSucceeded, succeeded)
+		args.Records = args.Records[:retryCount]
+
+		if retryCount == 0 {
+			return
+		}
+
+		time.Sleep(retryDelay)
+	}
+	logger.WithField("failures", len(args.Records)).
+		WithField("attempts", len(records)).
+		WithField("stream", w.config.StreamName).
+		Error("Failed to send records to Firehose")
+	w.statter.IncStat(statRecordsDropped, int64(len(args.Records)))
 }
 
 // Close closes a KinesisWriter
