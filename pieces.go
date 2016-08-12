@@ -68,7 +68,7 @@ func createSchemaLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogge
 		logger.WithError(err).Fatal("Failed to create schema dynamic loader")
 	}
 
-	go loader.Crank()
+	logger.Go(loader.Crank)
 	return loader
 }
 
@@ -86,7 +86,7 @@ func createConsumer(session *session.Session, stats statsd.Statter) *consumer.Co
 
 func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
 	u := geoip.NewUpdater(time.Now(), transformer.GeoIpDB, *config)
-	go u.UpdateLoop()
+	logger.Go(u.UpdateLoop)
 	return u
 }
 

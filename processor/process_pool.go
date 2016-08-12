@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/transformer"
@@ -60,12 +61,16 @@ func (p *SpadeProcessorPool) Close() {
 }
 
 // Resets the Processing Pool to use the new writer
-func (p *SpadeProcessorPool) Listen(w writer.SpadeWriter) {
+func (p *SpadeProcessorPool) Listen(writer writer.SpadeWriter) {
 	for _, worker := range p.transformers {
-		go worker.Listen(w)
+		w := worker
+		logger.Go(func() {
+			w.Listen(writer)
+		})
 	}
 	for _, worker := range p.converters {
-		go worker.Listen()
+		w := worker
+		logger.Go(w.Listen)
 	}
 }
 

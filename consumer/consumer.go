@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/cactus/go-statsd-client/statsd"
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/kinsumer"
 	kstatsd "github.com/twitchscience/kinsumer/statsd"
 )
@@ -133,10 +134,10 @@ func New(session *session.Session, stats statsd.Statter, config Config) (*Consum
 		closer:   make(chan struct{}),
 	}
 	c.Add(1)
-	go func() {
+	logger.Go(func() {
 		defer c.Done()
 		c.crank()
-	}()
+	})
 	return c, nil
 }
 

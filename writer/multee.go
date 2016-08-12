@@ -77,10 +77,12 @@ func (t *Multee) Close() error {
 	wg.Add(len(t.targets))
 
 	for idx, writer := range t.targets {
+		w := writer
+		i := idx
 		// losing errors here. Alternative is to
 		// return an arbitrary error out of all
 		// possible ones that occured
-		go func(w SpadeWriter, i int) {
+		logger.Go(func() {
 			defer wg.Done()
 			err := w.Close()
 			if err != nil {
@@ -88,7 +90,7 @@ func (t *Multee) Close() error {
 					WithField("writer_index", i).
 					Error("Failed to forward rotation request")
 			}
-		}(writer, idx)
+		})
 	}
 
 	wg.Wait()

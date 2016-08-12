@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/gologging/gologging"
 )
 
@@ -74,7 +75,7 @@ func BuildSpadeReporter(wait *sync.WaitGroup, trackers []Tracker) Reporter {
 		report:   make(chan chan map[string]int),
 		reset:    make(chan bool),
 	}
-	go r.crank()
+	logger.Go(r.crank)
 	return r
 }
 

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 // Config is used to configure a batcher instance
@@ -78,7 +80,7 @@ func New(config Config, completor Complete) (*Batcher, error) {
 	}
 
 	b.Add(1)
-	go b.worker()
+	logger.Go(b.worker)
 	return b, nil
 }
 

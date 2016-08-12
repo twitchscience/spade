@@ -53,7 +53,7 @@ func NewGzipWriter(
 		in: make(chan *WriteRequest),
 	}
 	writer.Add(1)
-	go writer.Listen()
+	logger.Go(writer.Listen)
 
 	return writer, nil
 }
