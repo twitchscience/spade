@@ -90,7 +90,7 @@ func New(config Config, completor Complete) (*Globber, error) {
 	}
 
 	g.Add(1)
-	go g.worker()
+	logger.Go(g.worker)
 	return g, nil
 }
 

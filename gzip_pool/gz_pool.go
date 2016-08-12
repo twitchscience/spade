@@ -5,6 +5,8 @@ import (
 	"compress/gzip"
 	"container/list"
 	"io"
+
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 type GZPool struct {
@@ -42,7 +44,7 @@ func New(size int) *GZPool {
 		put:  make(chan *gzip.Writer),
 	}
 	pool.init(size)
-	go pool.crank()
+	logger.Go(pool.crank)
 	return pool
 }
 

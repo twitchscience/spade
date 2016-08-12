@@ -102,10 +102,11 @@ func expandGlob(glob []byte) ([]*spade.Event, error) {
 
 func main() {
 	flag.Parse()
-	logger.Init("info")
+	loadConfig()
+	logger.InitWithRollbar("info", config.RollbarToken, config.RollbarEnvironment)
 	logger.Info("Starting processor")
 	logger.CaptureDefault()
-	loadConfig()
+	defer logger.LogPanic()
 
 	// aws resources
 	session := session.New(&aws.Config{
@@ -144,12 +145,12 @@ func main() {
 	healthMux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	go func() {
+	logger.Go(func() {
 		err := http.ListenAndServe(net.JoinHostPort("", "8080"), healthMux)
 		if err != nil {
 			logger.WithError(err).Error("Failure listening to port 8080 with healthMux")
 		}
-	}()
+	})
 
 	geoIPUpdater := createGeoipUpdater(config.Geoip)
 	auditLogger := newAuditLogger(sns, s3Uploader)
@@ -244,4 +245,5 @@ MainLoop:
 	spadeUploaderPool.Close()
 
 	blueprintUploaderPool.Close()
+	logger.Wait()
 }

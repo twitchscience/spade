@@ -188,8 +188,8 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config K
 	}
 
 	w.Add(2)
-	go w.incomingWorker()
-	go w.sendWorker()
+	logger.Go(w.incomingWorker)
+	logger.Go(w.sendWorker)
 	return w, nil
 }
 
@@ -261,10 +261,10 @@ func (w *KinesisWriter) sendWorker() {
 			return
 		}
 		w.Add(1)
-		go func(batch [][]byte) {
+		logger.Go(func() {
 			defer w.Done()
 			w.batchWriter.SendBatch(batch)
-		}(batch)
+		})
 	}
 }
 

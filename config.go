@@ -46,6 +46,10 @@ var config struct {
 	Consumer consumer.Config
 	// Geoip is the config for the geoip updater
 	Geoip *geoip.Config
+	// RollbarToken is our token to authenticate with Rollbar
+	RollbarToken string
+	// RollbarEnvironment is the environment we report we are running in to Rollbar
+	RollbarEnvironment string
 
 	// KinesisWriters contain a list of configs for KinesisWriters
 	KinesisOutputs []writer.KinesisWriterConfig
@@ -88,6 +92,8 @@ func validateConfig() error {
 		config.Geoip.ConfigBucket,
 		config.Geoip.IpCityKey,
 		config.Geoip.IpASNKey,
+		config.RollbarToken,
+		config.RollbarEnvironment,
 	} {
 		if str == "" {
 			return errors.New("Empty string found for required config option.")

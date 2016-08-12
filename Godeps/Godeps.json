@@ -244,25 +244,30 @@
 			"Rev": "d77da356e56a7428ad25149ca77381849a6a5232"
 		},
 		{
+			"ImportPath": "github.com/stvp/rollbar",
+			"Comment": "v0.4.0-6-g3eb4713",
+			"Rev": "3eb4713e2655cd1be805795be31b3f85b74b05fd"
+		},
+		{
 			"ImportPath": "github.com/twinj/uuid",
 			"Comment": "0.10.0-94-gb505f2c",
 			"Rev": "b505f2cca343b7b21416b27b1f2ad88469800892"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/aws_utils/common",
-			"Rev": "7d9466672fe55aaf5dcbd4ccdb054cc84071db84"
+			"Rev": "2739958d94d4d27898d6d3f25ab1e3184aa0183d"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/aws_utils/logger",
-			"Rev": "7d9466672fe55aaf5dcbd4ccdb054cc84071db84"
+			"Rev": "2739958d94d4d27898d6d3f25ab1e3184aa0183d"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/aws_utils/notifier",
-			"Rev": "7d9466672fe55aaf5dcbd4ccdb054cc84071db84"
+			"Rev": "2739958d94d4d27898d6d3f25ab1e3184aa0183d"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/aws_utils/uploader",
-			"Rev": "7d9466672fe55aaf5dcbd4ccdb054cc84071db84"
+			"Rev": "2739958d94d4d27898d6d3f25ab1e3184aa0183d"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/file_writer",

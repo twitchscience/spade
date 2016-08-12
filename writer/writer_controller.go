@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
@@ -94,7 +95,7 @@ func NewWriterController(
 		return nil, err
 	}
 
-	go c.Listen()
+	logger.Go(c.Listen)
 	return c, nil
 }
 
