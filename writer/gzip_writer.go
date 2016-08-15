@@ -9,20 +9,22 @@ import (
 
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/uploader"
-	"github.com/twitchscience/spade/gzip_pool"
+	"github.com/twitchscience/spade/gzpool"
 	"github.com/twitchscience/spade/reporter"
 	spade_uploader "github.com/twitchscience/spade/uploader"
 )
 
 var (
-	gzPool = gzip_pool.New(32)
+	gzPool = gzpool.New(32)
 )
 
+// RotateConditions is the parameters for maximum time/size until we force a rotation.
 type RotateConditions struct {
 	MaxLogSize     int64
 	MaxTimeAllowed time.Duration
 }
 
+// NewGzipWriter returns a gzipFileWriter, a pool of gzip goroutines that report results.
 func NewGzipWriter(
 	folder, subfolder, writerType string,
 	reporter reporter.Reporter,
@@ -71,7 +73,7 @@ type gzipFileWriter struct {
 	in chan *WriteRequest
 }
 
-// Rotate the logs if necessary.
+// Rotate rotates the logs if necessary. This must be called at a regular interval.
 func (w *gzipFileWriter) Rotate() (bool, error) {
 	inode, err := w.File.Stat()
 	if err != nil {
@@ -89,6 +91,7 @@ func (w *gzipFileWriter) Rotate() (bool, error) {
 	return false, nil
 }
 
+// Close closes the input channel, flushes all inputs, then flushes all state.
 func (w *gzipFileWriter) Close() error {
 	defer gzPool.Put(w.GzWriter)
 	close(w.in)
@@ -118,16 +121,19 @@ func (w *gzipFileWriter) Close() error {
 	rotatedFileName := fmt.Sprintf("%s/upload/%s.gz",
 		w.ParentFolder, inode.Name())
 
-	os.Rename(w.FullName, rotatedFileName)
+	if err := os.Rename(w.FullName, rotatedFileName); err != nil {
+		return err
+	}
 	spade_uploader.SafeGzipUpload(w.uploader, rotatedFileName)
 	return nil
 }
 
-func (w *gzipFileWriter) Write(req *WriteRequest) error {
+// Write submits a line to be written by the pool.
+func (w *gzipFileWriter) Write(req *WriteRequest) {
 	w.in <- req
-	return nil
 }
 
+// Listen is a blocking method that processes input and reports the result of writing it.
 func (w *gzipFileWriter) Listen() {
 	defer w.Done()
 	for {
@@ -139,12 +145,12 @@ func (w *gzipFileWriter) Listen() {
 		if err != nil {
 			logger.WithError(err).Error("Failed to write to gzip")
 			w.Reporter.Record(&reporter.Result{
-				Failure:    reporter.FAILED_WRITE,
+				Failure:    reporter.FailedWrite,
 				UUID:       req.UUID,
 				Line:       req.Line,
 				Category:   req.Category,
 				FinishedAt: time.Now(),
-				Duration:   time.Now().Sub(req.Pstart),
+				Duration:   time.Since(req.Pstart),
 			})
 		} else {
 			w.Reporter.Record(req.GetResult())

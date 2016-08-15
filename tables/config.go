@@ -1,4 +1,4 @@
-package table_config
+package tables
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 	"github.com/twitchscience/spade/transformer"
 )
 
+// Tables is a list of versioned events and their definitions.
 type Tables struct {
 	Configs []scoop_protocol.Config
 }
@@ -20,8 +21,8 @@ func getTypes(definitions []scoop_protocol.ColumnDefinition) ([]transformer.Reds
 	for i, definition := range definitions {
 		t := transformer.GetTransform(definition.Transformer)
 		if t == nil {
-			logger.WithError(transformer.UnknownTransformError).Error("Failed to parse config")
-			return nil, transformer.UnknownTransformError
+			logger.WithError(transformer.ErrUnknownTransform).Error("Failed to parse config")
+			return nil, transformer.ErrUnknownTransform
 		}
 		_type := transformer.RedshiftType{
 			Transformer:  t,
@@ -33,15 +34,22 @@ func getTypes(definitions []scoop_protocol.ColumnDefinition) ([]transformer.Reds
 	return types, nil
 }
 
+// LoadConfigFromFile loads a Tables from the given filename.
 func LoadConfigFromFile(filename string) (Tables, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return Tables{nil}, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			logger.WithError(err).WithField("filename", filename).Error(
+				"Failed to close table config")
+		}
+	}()
 	return LoadConfig(file)
 }
 
+// LoadConfig loads a Tables from the given io.Reader.
 func LoadConfig(file io.Reader) (Tables, error) {
 	b, err := ioutil.ReadAll(file)
 	if err != nil {
@@ -55,6 +63,7 @@ func LoadConfig(file io.Reader) (Tables, error) {
 	return Tables{cfgs}, nil
 }
 
+// CompileForParsing returns a map of transformers and versions for our table configs.
 func (c *Tables) CompileForParsing() (map[string][]transformer.RedshiftType, map[string]int, error) {
 	configs := make(map[string][]transformer.RedshiftType)
 	versions := make(map[string]int)
@@ -68,6 +77,7 @@ func (c *Tables) CompileForParsing() (map[string][]transformer.RedshiftType, map
 	return configs, versions, nil
 }
 
+// CompileForMaintenance turns our list of Configs into a map.
 func (c *Tables) CompileForMaintenance() map[string]scoop_protocol.Config {
 	creationStrings := make(map[string]scoop_protocol.Config)
 	for _, config := range c.Configs {

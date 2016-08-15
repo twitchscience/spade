@@ -90,8 +90,8 @@ func validateConfig() error {
 		config.NonTrackedBucketName,
 		config.AuditBucketName,
 		config.Geoip.ConfigBucket,
-		config.Geoip.IpCityKey,
-		config.Geoip.IpASNKey,
+		config.Geoip.IPCityKey,
+		config.Geoip.IPASNKey,
 		config.RollbarToken,
 		config.RollbarEnvironment,
 	} {

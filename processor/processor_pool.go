@@ -8,22 +8,25 @@ import (
 	"github.com/twitchscience/spade/writer"
 )
 
-const QUEUE_SIZE = 400000
+// QueueSize is the size of the buffer on the input and output channels for the pool.
+const QueueSize = 400000
 
+// SpadeProcessorPool is pool of RequestConverters and RequestTransformers.
 type SpadeProcessorPool struct {
 	in           chan parser.Parseable
 	converters   []*RequestConverter
 	transformers []*RequestTransformer
 }
 
+// BuildProcessorPool builds a new SpadeProcessorPool.
 func BuildProcessorPool(nConverters, nTransformers int,
 	configs transformer.ConfigLoader, rep reporter.Reporter) *SpadeProcessorPool {
 
 	transformers := make([]*RequestTransformer, nTransformers)
 	converters := make([]*RequestConverter, nConverters)
 
-	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
-	transport := make(chan parser.MixpanelEvent, QUEUE_SIZE)
+	requestChannel := make(chan parser.Parseable, QueueSize)
+	transport := make(chan parser.MixpanelEvent, QueueSize)
 
 	for i := 0; i < nConverters; i++ {
 		converters[i] = &RequestConverter{
@@ -50,6 +53,7 @@ func BuildProcessorPool(nConverters, nTransformers int,
 	}
 }
 
+// Close closes all converters and trnasformers in the pool.
 // Important: Ensure pool is drained before calling close.
 func (p *SpadeProcessorPool) Close() {
 	for _, worker := range p.converters {
@@ -60,7 +64,7 @@ func (p *SpadeProcessorPool) Close() {
 	}
 }
 
-// Resets the Processing Pool to use the new writer
+// Listen starts up the converters and transformers, writing to the given writer.
 func (p *SpadeProcessorPool) Listen(writer writer.SpadeWriter) {
 	for _, worker := range p.transformers {
 		w := worker
@@ -74,6 +78,7 @@ func (p *SpadeProcessorPool) Listen(writer writer.SpadeWriter) {
 	}
 }
 
+// Process submits the given Parseable to the pool for converting/transforming.
 func (p *SpadeProcessorPool) Process(request parser.Parseable) {
 	p.in <- request
 }

@@ -29,21 +29,13 @@ func (t *Multee) AddMany(ws []SpadeWriter) {
 }
 
 // Write forwards a writerequest to multiple targets
-func (t *Multee) Write(r *WriteRequest) error {
+func (t *Multee) Write(r *WriteRequest) {
 	t.RLock()
 	defer t.RUnlock()
 
-	for i, writer := range t.targets {
-		// losing errors here. Alternatives are to
-		// not forward events to writers further down the
-		// chain, or to return an arbitrary error out of
-		// all possible ones that occured
-		err := writer.Write(r)
-		if err != nil {
-			logger.WithError(err).WithField("writer_index", i).Error("Failed to forward event")
-		}
+	for _, writer := range t.targets {
+		writer.Write(r)
 	}
-	return nil
 }
 
 // Rotate forwards a rotation request to multiple targets

@@ -8,52 +8,55 @@ func TestGeoIp(t *testing.T) {
 		t.Error("Failed to load geo DB")
 		t.FailNow()
 	}
-	anIp := "222.22.24.22"
-	if "Zhengzhou" != g.GetCity(anIp) {
-		t.Error("Got the wrong city!", g.GetCity(anIp))
+	anIP := "222.22.24.22"
+	if "Zhengzhou" != g.GetCity(anIP) {
+		t.Error("Got the wrong city!", g.GetCity(anIP))
 		t.Fail()
 	}
-	if "CN" != g.GetCountry(anIp) {
-		t.Error("Got the wrong Country!", g.GetCountry(anIp))
+	if "CN" != g.GetCountry(anIP) {
+		t.Error("Got the wrong Country!", g.GetCountry(anIP))
 		t.Fail()
 	}
-	if "09" != g.GetRegion(anIp) {
-		t.Error("Got the wrong Region!", g.GetRegion(anIp))
+	if "09" != g.GetRegion(anIP) {
+		t.Error("Got the wrong Region!", g.GetRegion(anIP))
 		t.Fail()
 	}
-	if "AS4538 China Education and Research Network Center" != g.GetAsn(anIp) {
-		t.Error("Got the wrong ASN!", g.GetAsn(anIp))
+	if "AS4538 China Education and Research Network Center" != g.GetAsn(anIP) {
+		t.Error("Got the wrong ASN!", g.GetAsn(anIP))
 		t.Fail()
 	}
-	testIp := "62.238.12.232"
-	if "Terneuzen" != g.GetCity(testIp) {
+	testIP := "62.238.12.232"
+	if "Terneuzen" != g.GetCity(testIP) {
 		t.Error("Got the wrong city!")
 		t.Fail()
 	}
-	if "NL" != g.GetCountry(testIp) {
+	if "NL" != g.GetCountry(testIP) {
 		t.Error("Got the wrong Country!")
 		t.Fail()
 	}
-	if "10" != g.GetRegion(testIp) {
-		t.Error("Got the wrong Region! got: ", g.GetRegion(testIp))
+	if "10" != g.GetRegion(testIP) {
+		t.Error("Got the wrong Region! got: ", g.GetRegion(testIP))
 		t.Fail()
 	}
-	if "AS15542 ZeelandNet BV" != g.GetAsn(testIp) {
-		t.Error("Got the wrong ASN!", g.GetAsn(testIp))
+	if "AS15542 ZeelandNet BV" != g.GetAsn(testIP) {
+		t.Error("Got the wrong ASN!", g.GetAsn(testIP))
 		t.Fail()
 	}
 
-	testIp = "73.202.16.139"
-	if "" != g.GetCity(testIp) {
-		t.Error("Got the wrong City! got: ", g.GetRegion(testIp))
+	testIP = "73.202.16.139"
+	if "" != g.GetCity(testIP) {
+		t.Error("Got the wrong City! got: ", g.GetRegion(testIP))
 		t.Fail()
 	}
 
 	g.geoLoc = "TestNewGeoIPCity.dat"
 	g.asnLoc = "TestNewGeoIPASNum.dat"
-	g.Reload()
-	if "Oakland" != g.GetCity(testIp) {
-		t.Error("Got the wrong City from the updated geoip db! got: ", g.GetRegion(testIp))
+	if err = g.Reload(); err != nil {
+		t.Error("Error reloading: ", err)
+		t.Fail()
+	}
+	if "Oakland" != g.GetCity(testIP) {
+		t.Error("Got the wrong City from the updated geoip db! got: ", g.GetRegion(testIP))
 		t.Fail()
 	}
 }

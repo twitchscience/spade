@@ -1,4 +1,4 @@
-package gzip_pool
+package gzpool
 
 import (
 	"bytes"
@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGZPoolSingleThread(t *testing.T) {
@@ -16,8 +18,8 @@ func TestGZPoolSingleThread(t *testing.T) {
 	gzipWriter := pool.Get(&testBuffer)
 	fmt.Fprint(gzipWriter, expected)
 
-	gzipWriter.Flush()
-	gzipWriter.Close()
+	assert.NoError(t, gzipWriter.Flush())
+	assert.NoError(t, gzipWriter.Close())
 	pool.Put(gzipWriter)
 
 	r, err := gzip.NewReader(&testBuffer)
@@ -46,8 +48,8 @@ func BenchmarkGZPoolMultithreaded(b *testing.B) {
 				gzipWriter := pool.Get(&testBuffer)
 				fmt.Fprint(gzipWriter, expected)
 
-				gzipWriter.Flush()
-				gzipWriter.Close()
+				assert.NoError(b, gzipWriter.Flush())
+				assert.NoError(b, gzipWriter.Close())
 				pool.Put(gzipWriter)
 
 				r, err := gzip.NewReader(&testBuffer)

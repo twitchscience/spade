@@ -1,8 +1,7 @@
-package table_config
+package tables
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"testing"
@@ -140,10 +139,10 @@ func (t *testFetcher) FetchAndWrite(r io.ReadCloser, w io.WriteCloser) error {
 func (t *testFetcher) Fetch() (io.ReadCloser, error) {
 	if len(t.failFetch) < t.i && t.failFetch[t.i] {
 		t.i++
-		return nil, errors.New(fmt.Sprintf("failed on %d try", t.i))
+		return nil, fmt.Errorf("failed on %d try", t.i)
 	}
 	if len(t.configs)-1 < t.i {
-		return nil, errors.New(fmt.Sprintf("failed on %d try", t.i))
+		return nil, fmt.Errorf("failed on %d try", t.i)
 	}
 	rc := &testReadWriteCloser{
 		config: t.configs[t.i],

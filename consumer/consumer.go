@@ -35,6 +35,7 @@ type Config struct {
 	BufferSize int
 }
 
+// Result is the next data/error to be consumed from the kinsumer.
 type Result struct {
 	Data  []byte
 	Error error

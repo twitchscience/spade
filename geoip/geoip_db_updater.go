@@ -16,6 +16,7 @@ import (
 	"github.com/twitchscience/aws_utils/logger"
 )
 
+// Updater keeps a GeoLookup's databases updated.
 type Updater struct {
 	lastUpdated time.Time
 	closer      chan bool
@@ -25,14 +26,16 @@ type Updater struct {
 	ipASNPath   string
 }
 
+// Config defines how a GeoLookup should be kept updated.
 type Config struct {
 	ConfigBucket        string
-	IpCityKey           string
-	IpASNKey            string
+	IPCityKey           string
+	IPASNKey            string
 	UpdateFrequencyMins int
 	JitterSecs          int
 }
 
+// NewUpdater returns a new Updater for the given GeoLookup.
 func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config) *Updater {
 	return &Updater{
 		lastUpdated: lastUpdated,
@@ -44,17 +47,17 @@ func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config) *Updater {
 	}
 }
 
-func writeWithRename(data io.ReadCloser, fname string) error {
+func writeWithRename(data io.Reader, fname string) error {
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(data)
 	partName := fname + ".part"
-	err := ioutil.WriteFile(partName, buf.Bytes(), 0644)
-	if err != nil {
-		return fmt.Errorf("Error writing object to file '%s': %s", partName, err)
+	if _, err := buf.ReadFrom(data); err != nil {
+		return fmt.Errorf("error reading data for '%s': %s", partName, err)
 	}
-	err = os.Rename(partName, fname)
-	if err != nil {
-		return fmt.Errorf("Error renaming file '%s' to '%s': %s", partName, fname, err)
+	if err := ioutil.WriteFile(partName, buf.Bytes(), 0644); err != nil {
+		return fmt.Errorf("error writing object to file '%s': %s", partName, err)
+	}
+	if err := os.Rename(partName, fname); err != nil {
+		return fmt.Errorf("error renaming file '%s' to '%s': %s", partName, fname, err)
 	}
 	return nil
 }
@@ -65,7 +68,7 @@ func (u *Updater) getIfNew() (bool, error) {
 	svc := s3.New(session.New(&aws.Config{}))
 	resp, err := svc.GetObject(&s3.GetObjectInput{
 		Bucket:          aws.String(u.config.ConfigBucket),
-		Key:             aws.String(u.config.IpCityKey),
+		Key:             aws.String(u.config.IPCityKey),
 		IfModifiedSince: aws.Time(u.lastUpdated),
 	})
 	if err != nil {
@@ -76,7 +79,7 @@ func (u *Updater) getIfNew() (bool, error) {
 				return false, nil
 			}
 		}
-		return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, u.config.IpCityKey, err)
+		return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, u.config.IPCityKey, err)
 	}
 	err = writeWithRename(resp.Body, u.ipCityPath)
 	if err != nil {
@@ -85,10 +88,10 @@ func (u *Updater) getIfNew() (bool, error) {
 
 	resp, err = svc.GetObject(&s3.GetObjectInput{
 		Bucket: aws.String(u.config.ConfigBucket),
-		Key:    aws.String(u.config.IpASNKey),
+		Key:    aws.String(u.config.IPASNKey),
 	})
 	if err != nil {
-		return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, u.config.IpASNKey, err)
+		return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, u.config.IPASNKey, err)
 	}
 	err = writeWithRename(resp.Body, u.ipASNPath)
 	if err != nil {
@@ -97,6 +100,7 @@ func (u *Updater) getIfNew() (bool, error) {
 	return true, nil
 }
 
+// UpdateLoop is a blocking function that updates the GeoLookup on a recurring basis.
 func (u *Updater) UpdateLoop() {
 	tick := time.NewTicker(time.Duration(u.config.UpdateFrequencyMins) * time.Minute)
 	for {
@@ -128,6 +132,7 @@ func (u *Updater) UpdateLoop() {
 	}
 }
 
+// Close stops the UpdateLoop for the Updater.
 func (u *Updater) Close() {
 	u.closer <- true
 }

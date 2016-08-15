@@ -1,4 +1,4 @@
-package gzip_pool
+package gzpool
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"github.com/twitchscience/aws_utils/logger"
 )
 
+// GZPool is a pool of gzip.Writers you can Get and then Put back.
 type GZPool struct {
 	size int
 	free *list.List
@@ -36,6 +37,7 @@ func (g *GZPool) crank() {
 	}
 }
 
+// New returns a GZPool starting with the given size.
 func New(size int) *GZPool {
 	pool := &GZPool{
 		size: size,
@@ -55,6 +57,7 @@ func (g *GZPool) init(size int) {
 	}
 }
 
+// Get returns a gzip.Writer from the GZPool.
 func (g *GZPool) Get(w io.Writer) *gzip.Writer {
 	receive := make(chan *gzip.Writer)
 	g.get <- receive
@@ -63,6 +66,7 @@ func (g *GZPool) Get(w io.Writer) *gzip.Writer {
 	return gzWriter
 }
 
+// Put places the gzip.Writer back in the GZPool.
 func (g *GZPool) Put(w *gzip.Writer) {
 	g.put <- w
 }

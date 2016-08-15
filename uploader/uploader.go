@@ -19,24 +19,13 @@ import (
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
+// SNSNotifierHarness is an SNS client that writes messages about uploaded files to a specific ARN.
 type SNSNotifierHarness struct {
 	topicARN string
 	notifier *notifier.SNSClient
 }
 
-type ProcessorErrorHandler struct {
-	topicARN string
-	notifier *notifier.SNSClient
-}
-
-func (p *ProcessorErrorHandler) SendError(err error) {
-	logger.WithError(err).Error("")
-	e := p.notifier.SendMessage("error", p.topicARN, err)
-	if e != nil {
-		logger.WithError(e).Error("Failed to send error")
-	}
-}
-
+// BuildSNSNotifierHarness builds an SNSNotifierHarness writing to the given ARN.
 func BuildSNSNotifierHarness(sns snsiface.SNSAPI, topicARN string) *SNSNotifierHarness {
 	client := notifier.BuildSNSClient(sns)
 	client.Signer.RegisterMessageType("uploadNotify", func(args ...interface{}) (string, error) {
@@ -61,6 +50,11 @@ func BuildSNSNotifierHarness(sns snsiface.SNSAPI, topicARN string) *SNSNotifierH
 	}
 }
 
+// SendMessage sends information to SNS about file uploaded to S3.
+func (s *SNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
+	return s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, extractEventVersion(message.Path))
+}
+
 func extractEventName(filename string) string {
 	path := strings.LastIndex(filename, "/") + 1
 	ext := path + strings.Index(filename[path:], ".")
@@ -80,10 +74,22 @@ func extractEventVersion(filename string) int {
 	return val
 }
 
-func (s *SNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
-	return s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, extractEventVersion(message.Path))
+// ProcessorErrorHandler sends messages about errors sending SNS messages to another topic.
+type ProcessorErrorHandler struct {
+	topicARN string
+	notifier *notifier.SNSClient
 }
 
+// SendError sends the sending error to an topic.
+func (p *ProcessorErrorHandler) SendError(err error) {
+	logger.WithError(err).Error("")
+	e := p.notifier.SendMessage("error", p.topicARN, err)
+	if e != nil {
+		logger.WithError(e).Error("Failed to send error")
+	}
+}
+
+// SafeGzipUpload validates a file is a valid gzip file and then uploads it.
 func SafeGzipUpload(uploaderPool *uploader.UploaderPool, path string) {
 	if isValidGzip(path) {
 		uploaderPool.Upload(&uploader.UploadRequest{
@@ -106,14 +112,22 @@ func isValidGzip(path string) bool {
 		entry.WithError(err).Error("Failed to open")
 		return false
 	}
-	defer file.Close()
+	defer func() {
+		if err = file.Close(); err != nil {
+			entry.WithError(err).Error("Failed to close file")
+		}
+	}()
 
 	reader, err := gzip.NewReader(file)
 	if err != nil {
 		entry.WithError(err).Error("Failed to create gzip.NewReader")
 		return false
 	}
-	defer reader.Close()
+	defer func() {
+		if err = reader.Close(); err != nil {
+			entry.WithError(err).Error("Failed to close reader")
+		}
+	}()
 
 	_, err = ioutil.ReadAll(reader)
 	if err != nil {
@@ -124,6 +138,7 @@ func isValidGzip(path string) bool {
 	return true
 }
 
+// ClearEventsFolder uploads all files in the eventsDir.
 func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) error {
 	return filepath.Walk(eventsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -161,7 +176,9 @@ func buildUploader(input *buildUploaderInput) *uploader.UploaderPool {
 	)
 }
 
-func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI, aceBucketName, aceTopicARN, aceErrorTopicARN string) *uploader.UploaderPool {
+// BuildUploaderForRedshift builds an Uploader that uploads files to s3 and notifies sns.
+func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI,
+	aceBucketName, aceTopicARN, aceErrorTopicARN string) *uploader.UploaderPool {
 	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
 
 	return buildUploader(&buildUploaderInput{
@@ -175,7 +192,9 @@ func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3
 	})
 }
 
-func BuildUploaderForBlueprint(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI, nonTrackedBucketName, nonTrackedTopicARN, nonTrackedErrorTopicARN string) *uploader.UploaderPool {
+// BuildUploaderForBlueprint builds an Uploader that uploads non-tracked events to s3 and notifies sns.
+func BuildUploaderForBlueprint(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI,
+	nonTrackedBucketName, nonTrackedTopicARN, nonTrackedErrorTopicARN string) *uploader.UploaderPool {
 	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
 
 	return buildUploader(&buildUploaderInput{

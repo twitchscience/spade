@@ -20,7 +20,9 @@ var (
 	maxNonTrackedLogSize        = getInt64FromEnv("MAX_UNTRACKED_LOG_BYTES", 1<<29)                                 // default 500MB
 	maxNonTrackedLogTimeAllowed = time.Duration(getInt64FromEnv("MAX_UNTRACKED_LOG_AGE_SECS", 10*60)) * time.Second // default 10 mins
 
-	EventsDir     = "events"
+	// EventsDir is the local subdirectory where successfully-transformed events are written.
+	EventsDir = "events"
+	// NonTrackedDir is the local subdirectory where non-tracked events are written.
 	NonTrackedDir = "nontracked"
 )
 
@@ -36,8 +38,9 @@ func getInt64FromEnv(target string, def int64) int64 {
 	return i
 }
 
+// SpadeWriter is an interface for writing to external sinks, like S3 or Kinesis.
 type SpadeWriter interface {
-	Write(*WriteRequest) error
+	Write(*WriteRequest)
 	Close() error
 	Rotate() (bool, error)
 }
@@ -64,7 +67,8 @@ type writerController struct {
 	maxLogAgeSecs int64
 }
 
-// The WriterController handles logic to distribute writes across a number of workers.
+// NewWriterController returns a writerController that handles logic to distribute
+// writes across a number of workers.
 // Each worker owns and operates one file. There are several sets of workers.
 // Each set corresponds to a event type. Thus if we are processing a log
 // file with 2 types of events we should produce (nWriters * 2) files
@@ -105,9 +109,8 @@ func getFilename(path, writerCategory string) string {
 	return fmt.Sprintf("%s/%s.gz", path, writerCategory)
 }
 
-func (c *writerController) Write(req *WriteRequest) error {
+func (c *writerController) Write(req *WriteRequest) {
 	c.inbound <- req
-	return nil
 }
 
 // TODO better Error handling
@@ -116,10 +119,13 @@ func (c *writerController) Listen() {
 		select {
 		case send := <-c.closeChan:
 			send <- c.close()
+			return
 		case send := <-c.rotateChan:
 			send <- c.rotate()
 		case req := <-c.inbound:
-			c.route(req)
+			if err := c.route(req); err != nil {
+				logger.WithError(err).Error("Error routing write request")
+			}
 		}
 	}
 }
@@ -127,7 +133,7 @@ func (c *writerController) Listen() {
 func (c *writerController) route(request *WriteRequest) error {
 	switch request.Failure {
 	// Success case
-	case reporter.NONE, reporter.SKIPPED_COLUMN:
+	case reporter.None, reporter.SkippedColumn:
 		category := request.GetCategory()
 		if _, hasWriter := c.Routes[category]; !hasWriter {
 			newWriter, err := NewGzipWriter(
@@ -149,7 +155,7 @@ func (c *writerController) route(request *WriteRequest) error {
 		c.Routes[category].Write(request)
 
 	// Log non tracking events for blueprint
-	case reporter.NON_TRACKING_EVENT:
+	case reporter.NonTrackingEvent:
 		c.NonTrackedWriter.Write(request)
 
 	// Otherwise tell the reporter that we got the event but it failed somewhere.
@@ -179,10 +185,10 @@ func (c *writerController) initNonTrackedWriter() error {
 }
 
 func (c *writerController) Close() error {
-	recieve := make(chan error)
-	defer close(recieve)
-	c.closeChan <- recieve
-	return <-recieve
+	receive := make(chan error)
+	defer close(receive)
+	c.closeChan <- receive
+	return <-receive
 }
 
 func (c *writerController) close() error {
@@ -193,12 +199,7 @@ func (c *writerController) close() error {
 		}
 	}
 
-	err := c.NonTrackedWriter.Close()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return c.NonTrackedWriter.Close()
 }
 
 func (c *writerController) Rotate() (bool, error) {
@@ -226,19 +227,22 @@ func (c *writerController) rotate() rotateResult {
 	}
 
 	if rotated {
-		c.initNonTrackedWriter()
+		if err = c.initNonTrackedWriter(); err != nil {
+			return rotateResult{false, err}
+		}
 	}
 
 	return rotateResult{rotated && len(c.Routes) == 0, err}
 }
 
+// MakeErrorRequest returns a WriteRequest indicating panic happened during processing.
 func MakeErrorRequest(e *parser.MixpanelEvent, err interface{}) *WriteRequest {
 	return &WriteRequest{
 		Category: "Unknown",
 		Line:     "",
 		UUID:     "error",
 		Source:   e.Properties,
-		Failure:  reporter.PANICED_IN_PROCESSING,
+		Failure:  reporter.PanickedInProcessing,
 		Pstart:   e.Pstart,
 	}
 }

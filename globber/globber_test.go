@@ -98,7 +98,8 @@ func TestGlobber(t *testing.T) {
 
 	assert.NoError(t, err)
 	for _, e := range data {
-		g.Submit(e)
+		err := g.Submit(e)
+		assert.NoError(t, err)
 	}
 	g.Close()
 

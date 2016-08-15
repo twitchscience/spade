@@ -6,25 +6,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/twitchscience/spade/reporter"
 )
 
 type errorParser struct{}
 
-func (_ *errorParser) Parse(_ Parseable) ([]MixpanelEvent, error) {
+func (p *errorParser) Parse(_ Parseable) ([]MixpanelEvent, error) {
 	return nil, fmt.Errorf("parser: expected error")
 }
 
 type singleEventParser struct{}
 
-func (_ *singleEventParser) Parse(_ Parseable) ([]MixpanelEvent, error) {
+func (p *singleEventParser) Parse(_ Parseable) ([]MixpanelEvent, error) {
 	return make([]MixpanelEvent, 1), nil
 }
 
 type multiEventParser struct{}
 
-func (_ *multiEventParser) Parse(_ Parseable) ([]MixpanelEvent, error) {
+func (p *multiEventParser) Parse(_ Parseable) ([]MixpanelEvent, error) {
 	return make([]MixpanelEvent, 2), nil
+}
+
+func clearAll() {
+	parsers = []parserEntry{}
 }
 
 func checkForParser(name string) bool {
@@ -38,7 +44,7 @@ func checkForParser(name string) bool {
 
 func TestRegisterAndClearing(t *testing.T) {
 	parserName := "test_parser"
-	Register(parserName, &singleEventParser{})
+	assert.NoError(t, Register(parserName, &singleEventParser{}))
 	if !checkForParser(parserName) {
 		t.Fatalf("register: %s not present, expected it to be. Current parsers: %v", parserName, parsers)
 	}
@@ -109,7 +115,7 @@ func TestParseCall(t *testing.T) {
 	fop := BuildSpadeParser(tr)
 	for _, tt := range tests {
 		clearAll()
-		Register("current_parser", tt.parser)
+		assert.NoError(t, Register("current_parser", tt.parser))
 		mes, err := fop.Parse(&logLine{})
 		if tt.expectError && err == nil {
 			t.Fatalf("parser: expected error, didn't get one from %v", reflect.TypeOf(tt.parser))
@@ -130,27 +136,27 @@ func TestParseCall(t *testing.T) {
 	}
 }
 
-func setupParsers(ps ...Parser) Parser {
+func setupParsers(t *testing.T, ps ...Parser) Parser {
 	clearAll()
 	fop := BuildSpadeParser(&testReporter{})
 	for i, p := range ps {
-		Register(fmt.Sprintf("parser%d", i), p)
+		assert.NoError(t, Register(fmt.Sprintf("parser%d", i), p))
 	}
 	return fop
 }
 
 func TestMultiParserCall(t *testing.T) {
-	p := setupParsers(&errorParser{}, &singleEventParser{})
+	p := setupParsers(t, &errorParser{}, &singleEventParser{})
 	if _, err := p.Parse(&logLine{}); err != nil {
 		t.Fatalf("multi parser: unexpected error %v", err)
 	}
 
-	p = setupParsers(&singleEventParser{}, &errorParser{})
+	p = setupParsers(t, &singleEventParser{}, &errorParser{})
 	if _, err := p.Parse(&logLine{}); err != nil {
 		t.Fatalf("multi parser: unexpected error %v", err)
 	}
 
-	p = setupParsers(&multiEventParser{}, &singleEventParser{}, &errorParser{})
+	p = setupParsers(t, &multiEventParser{}, &singleEventParser{}, &errorParser{})
 	mes, err := p.Parse(&logLine{})
 	if err != nil {
 		t.Fatalf("multi parser: unexpected error %v", err)

@@ -1,4 +1,4 @@
-package json_log
+package json
 
 import (
 	"encoding/json"
@@ -29,28 +29,34 @@ func (j *jsonLogEvent) Time() string {
 }
 
 type jsonLogParser struct {
-	rejectIfBadFirstIp bool // Test for whether the previous edge would've rejected the event and replicate that behavior
+	rejectIfBadFirstIP bool // Test for whether the previous edge would've rejected the event and replicate that behavior
 }
 
-func Register(rejectIfBadFirstIp bool) {
-	parser.Register("json_log", &jsonLogParser{
-		rejectIfBadFirstIp: rejectIfBadFirstIp,
+// Register registers a json_log parser in the global list of parsers.
+func Register(rejectIfBadFirstIP bool) error {
+	err := parser.Register("json_log", &jsonLogParser{
+		rejectIfBadFirstIP: rejectIfBadFirstIP,
 	})
-	if rejectIfBadFirstIp == true {
+	if err != nil {
+		return err
+	}
+	if rejectIfBadFirstIP {
 		logger.Warn("Rejecting any event with a bad first IP in the x-forwarded chain")
 	}
+	return nil
 }
 
-// Return true if this would have passed the original IP test on the edge (for version 3 events)
-func wasValidEdgeIp(xForwardedFor string) bool {
-	var clientIp string
+// wasValidEdgeIP returns true if this would have passed the original IP test
+// on the edge (for version 3 events)
+func wasValidEdgeIP(xForwardedFor string) bool {
+	var clientIP string
 	comma := strings.Index(xForwardedFor, ",")
 	if comma > -1 {
-		clientIp = xForwardedFor[:comma]
+		clientIP = xForwardedFor[:comma]
 	} else {
-		clientIp = xForwardedFor
+		clientIP = xForwardedFor
 	}
-	return net.ParseIP(clientIp) != nil
+	return net.ParseIP(clientIP) != nil
 }
 
 func (j *jsonLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, error) {
@@ -60,7 +66,7 @@ func (j *jsonLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, err
 		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, "", "")}, err
 	}
 
-	if j.rejectIfBadFirstIp && rawEvent.Version == 3 && !wasValidEdgeIp(rawEvent.XForwardedFor) {
+	if j.rejectIfBadFirstIP && rawEvent.Version == 3 && !wasValidEdgeIP(rawEvent.XForwardedFor) {
 		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, rawEvent.Uuid, strconv.FormatInt(rawEvent.ReceivedAt.Unix(), 10))},
 			fmt.Errorf("Event uuid %s had invalid first client IP", rawEvent.Uuid)
 	}
@@ -77,7 +83,7 @@ func (j *jsonLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, err
 	for i, e := range events {
 		m[i] = e
 		m[i].EventTime = json.Number(parsedEvent.Time())
-		m[i].ClientIp = rawEvent.ClientIp.String()
+		m[i].ClientIP = rawEvent.ClientIp.String()
 		m[i].Pstart = raw.StartTime()
 		if len(events) > 1 {
 			m[i].UUID = fmt.Sprintf("%s-%d", parsedEvent.UUID(), i)

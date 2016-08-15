@@ -10,6 +10,7 @@ import (
 	"github.com/twitchscience/spade/writer"
 )
 
+// RedshiftTransformer turns MixpanelEvents into WriteRequests using the given ConfigLoader.
 type RedshiftTransformer struct {
 	Configs ConfigLoader
 }
@@ -19,17 +20,18 @@ type nontrackedEvent struct {
 	Properties json.RawMessage `json:"properties"`
 }
 
+// NewRedshiftTransformer creates a new RedshiftTransformer using the given ConfigLoader.
 func NewRedshiftTransformer(configs ConfigLoader) Transformer {
 	return &RedshiftTransformer{
 		Configs: configs,
 	}
 }
 
-// MixpanelEvent -> WriteRequest
+// Consume transforms a MixpanelEvent into a WriteRequest.
 func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.WriteRequest {
 	version := t.Configs.GetVersionForEvent(event.Event)
 
-	if event.Failure != reporter.NONE {
+	if event.Failure != reporter.None {
 		return &writer.WriteRequest{
 			Category: event.Event,
 			Version:  version,
@@ -50,22 +52,12 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 			Record:   kv,
 			UUID:     event.UUID,
 			Source:   event.Properties,
-			Failure:  reporter.NONE,
+			Failure:  reporter.None,
 			Pstart:   event.Pstart,
 		}
 	}
 	switch err.(type) {
-	case TransformError:
-		return &writer.WriteRequest{
-			Category: event.Event,
-			Version:  version,
-			Line:     err.Error(),
-			UUID:     event.UUID,
-			Source:   event.Properties,
-			Failure:  reporter.UNABLE_TO_PARSE_DATA,
-			Pstart:   event.Pstart,
-		}
-	case NotTrackedError:
+	case ErrNotTracked:
 		dump, err := json.Marshal(&nontrackedEvent{
 			Event:      event.Event,
 			Properties: event.Properties,
@@ -79,10 +71,10 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 			Line:     string(dump),
 			UUID:     event.UUID,
 			Source:   event.Properties,
-			Failure:  reporter.NON_TRACKING_EVENT,
+			Failure:  reporter.NonTrackingEvent,
 			Pstart:   event.Pstart,
 		}
-	case SkippedColumnError: // Non critical error
+	case ErrSkippedColumn: // Non critical error
 		return &writer.WriteRequest{
 			Category: event.Event,
 			Version:  version,
@@ -90,7 +82,7 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 			Record:   kv,
 			UUID:     event.UUID,
 			Source:   event.Properties,
-			Failure:  reporter.SKIPPED_COLUMN,
+			Failure:  reporter.SkippedColumn,
 			Pstart:   event.Pstart,
 		}
 	default:
@@ -100,7 +92,7 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 			Line:     "",
 			UUID:     event.UUID,
 			Source:   event.Properties,
-			Failure:  reporter.EMPTY_REQUEST,
+			Failure:  reporter.EmptyRequest,
 			Pstart:   event.Pstart,
 		}
 	}
@@ -108,10 +100,10 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 
 func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, map[string]string, error) {
 	if event.Event == "" {
-		return "", nil, EmptyRequestError{fmt.Sprintf("%v is not being tracked", event.Event)}
+		return "", nil, ErrEmptyRequest
 	}
 
-	var possibleError error = nil
+	var possibleError error
 	columns, err := t.Configs.GetColumnsForEvent(event.Event)
 	if err != nil {
 		return "", nil, err
@@ -126,7 +118,9 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 	temp := make(map[string]interface{}, 15)
 	decoder := json.NewDecoder(bytes.NewReader(event.Properties))
 	decoder.UseNumber()
-	decoder.Decode(&temp)
+	if err := decoder.Decode(&temp); err != nil {
+		return "", nil, err
+	}
 	// Always replace the timestamp with server Time
 	if _, ok := temp["time"]; ok {
 		temp["client_time"] = temp["time"]
@@ -135,19 +129,19 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 
 	// Still allow clients to override the ip address.
 	if _, ok := temp["ip"]; !ok {
-		temp["ip"] = event.ClientIp
+		temp["ip"] = event.ClientIP
 	}
 
 	for n, column := range columns {
 		k, v, err := column.Format(temp)
 		// We should add reporting here to statsd
 		if err != nil {
-			possibleError = SkippedColumnError{fmt.Sprintf("Problem parsing into %v: %v\n", column, err)}
+			possibleError = ErrSkippedColumn{fmt.Sprintf("Problem parsing into %v: %v\n", column, err)}
 		}
 		if n != 0 {
-			tsvOutput.WriteRune('\t')
+			_, _ = tsvOutput.WriteRune('\t')
 		}
-		tsvOutput.WriteString(fmt.Sprintf("%q", v))
+		_, _ = tsvOutput.WriteString(fmt.Sprintf("%q", v))
 		kvOutput[k] = v
 	}
 	return tsvOutput.String(), kvOutput, possibleError

@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"testing"
+
 	"github.com/twitchscience/spade/reporter"
 )
 
@@ -41,7 +42,6 @@ func TestDecodeData(t *testing.T) {
 		t.Fatalf("got error: %v\n", err)
 	}
 }
-
 
 func TestURLSafeDecodeData(t *testing.T) {
 	_, err := DecodeBase64(&testShim{
@@ -89,7 +89,7 @@ func BenchmarkStringQueryUnescape(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		escaper.QueryUnescape(sample)
+		_, _ = escaper.QueryUnescape(sample)
 	}
 }
 
@@ -98,6 +98,6 @@ func BenchmarkByteQueryUnescape(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		escaper.QueryUnescape(sample)
+		_, _ = escaper.QueryUnescape(sample)
 	}
 }

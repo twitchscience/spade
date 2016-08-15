@@ -12,6 +12,7 @@ type parserEntry struct {
 	p    Parser
 }
 
+// TODO: Don't use a global?
 var parsers = []parserEntry{}
 
 // Register makes Parsers available to parse lines. Each Parser should
@@ -32,10 +33,6 @@ func Register(name string, p Parser) error {
 		p:    p,
 	})
 	return nil
-}
-
-func clearAll() {
-	parsers = []parserEntry{}
 }
 
 type fanoutParser struct {
@@ -65,25 +62,30 @@ func (f *fanoutParser) Parse(line Parseable) (events []MixpanelEvent, err error)
 	return
 }
 
+// BuildSpadeParser returns a fanoutParser that uses the global parsers list.
 func BuildSpadeParser(r reporter.Reporter) Parser {
 	return &fanoutParser{
 		reporter: r,
 	}
 }
 
+// Parseable is a byte stream to be parsed associated with a time.
 type Parseable interface {
 	Data() []byte
 	StartTime() time.Time
 }
 
+// Parser is an interface for turning Parseables into one or more MixpanelEvents.
 type Parser interface {
 	Parse(Parseable) ([]MixpanelEvent, error)
 }
 
+// URLEscaper is an interface for unescape URL query encoding in a byte stream.
 type URLEscaper interface {
 	QueryUnescape([]byte) ([]byte, error)
 }
 
+// ParseResult is a base 64-encoded byte array with a UUID and time attached.
 type ParseResult interface {
 	Data() []byte
 	UUID() string

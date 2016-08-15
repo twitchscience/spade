@@ -121,49 +121,49 @@ func (tf *testFetcher) ConfigDestination(d string) (io.WriteCloser, error) {
 }
 
 const (
-	FAIL_ON_FETCH int = 1 << iota
-	FAIL_ON_READ
-	FAIL_BAD_DATA
-	FAIL_CONFIG_DEST
-	FAIL_WRITE
+	FailOnFetch int = 1 << iota
+	FailOnRead
+	FailBadData
+	FailConfigDest
+	FailWrite
 )
 
 func makeTestFetcher(bitmask int) *testFetcher {
 	return &testFetcher{
-		failFetch:             bitmask&FAIL_ON_FETCH != 0,
-		failRead:              bitmask&FAIL_ON_READ != 0,
-		bogusData:             bitmask&FAIL_BAD_DATA != 0,
-		failConfigDestination: bitmask&FAIL_CONFIG_DEST != 0,
-		failWrite:             bitmask&FAIL_WRITE != 0,
+		failFetch:             bitmask&FailOnFetch != 0,
+		failRead:              bitmask&FailOnRead != 0,
+		bogusData:             bitmask&FailBadData != 0,
+		failConfigDestination: bitmask&FailConfigDest != 0,
+		failWrite:             bitmask&FailWrite != 0,
 	}
 }
 
 func TestFetchConfig(t *testing.T) {
-	f := makeTestFetcher(FAIL_ON_FETCH)
+	f := makeTestFetcher(FailOnFetch)
 	err := FetchConfig(f, "bar")
 	if err == nil {
 		t.Errorf("Expected testFetcher:%v to generate an error due to fetching issue", f)
 	}
 
-	f = makeTestFetcher(FAIL_ON_READ)
+	f = makeTestFetcher(FailOnRead)
 	err = FetchConfig(f, "bar")
 	if err == nil {
 		t.Errorf("Expected testFetcher:%v to generate an error due to reading issue", f)
 	}
 
-	f = makeTestFetcher(FAIL_BAD_DATA)
+	f = makeTestFetcher(FailBadData)
 	err = FetchConfig(f, "bar")
 	if err == nil {
 		t.Errorf("Expected testFetcher:%v to generate an error due to invalid data", f)
 	}
 
-	f = makeTestFetcher(FAIL_CONFIG_DEST)
+	f = makeTestFetcher(FailConfigDest)
 	err = FetchConfig(f, "bar")
 	if err == nil {
 		t.Errorf("Expected testFetcher:%v to generate an error due to config destination issue", f)
 	}
 
-	f = makeTestFetcher(FAIL_WRITE)
+	f = makeTestFetcher(FailWrite)
 	err = FetchConfig(f, "bar")
 	if err == nil {
 		t.Errorf("Expected testFetcher:%v to generate an error due to issue while writing", f)
