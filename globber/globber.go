@@ -38,6 +38,7 @@ type Config struct {
 	BufferLength int
 }
 
+// Validate returns an error if the config is invalid, nil otherwise.
 func (c *Config) Validate() error {
 	maxAge, err := time.ParseDuration(c.MaxAge)
 	if err != nil {
@@ -112,56 +113,55 @@ func (g *Globber) Close() {
 	g.Wait()
 }
 
-func (g *Globber) add(entry []byte) {
+func (g *Globber) add(entry []byte) error {
 	s := len(entry) + g.pending.Len()
 	if s > g.config.MaxSize {
-		g.complete()
+		if err := g.complete(); err != nil {
+			return fmt.Errorf("error completing glob: %s", err)
+		}
 	}
 
 	if g.pending.Len() == 0 {
 		g.timer.Reset(g.maxAge)
-		g.pending.WriteRune(prefix)
+		_, _ = g.pending.WriteRune(prefix)
 	} else {
-		g.pending.WriteRune(separator)
+		_, _ = g.pending.WriteRune(separator)
 	}
-	g.pending.Write(entry)
+	_, _ = g.pending.Write(entry)
+	return nil
 }
 
-func (g *Globber) complete() {
+func (g *Globber) complete() error {
 	if g.pending.Len() == 0 {
-		return
+		return nil
 	}
 
-	g.pending.WriteRune(postfix)
+	_, _ = g.pending.WriteRune(postfix)
 	err := g._complete()
 	if err != nil {
-		logger.WithError(err).Error("Failed to compress glob")
+		return fmt.Errorf("error compressing glob: %s", err)
 	}
+	return nil
 }
 
 func (g *Globber) _complete() error {
 	var compressed bytes.Buffer
+	var err error
 
-	err := compressed.WriteByte(version)
-	if err != nil {
-		return err
-	}
+	_ = compressed.WriteByte(version)
 
 	if g.compressor == nil {
-		g.compressor, err = flate.NewWriter(&compressed, flate.BestSpeed)
-		if err != nil {
+		if g.compressor, err = flate.NewWriter(&compressed, flate.BestSpeed); err != nil {
 			return err
 		}
 	} else {
 		g.compressor.Reset(&compressed)
 	}
-	_, err = g.compressor.Write(g.pending.Bytes())
-	if err != nil {
+	if _, err = g.compressor.Write(g.pending.Bytes()); err != nil {
 		return err
 	}
 
-	err = g.compressor.Close()
-	if err != nil {
+	if err = g.compressor.Close(); err != nil {
 		return err
 	}
 
@@ -170,18 +170,27 @@ func (g *Globber) _complete() error {
 	return nil
 }
 
+// TODO: propagate errors here back to main thread so we can exit?
 func (g *Globber) worker() {
 	defer g.Done()
-	defer g.complete()
+	defer func() {
+		if err := g.complete(); err != nil {
+			logger.WithError(err).Error("Failed to complete glob")
+		}
+	}()
 	for {
 		select {
 		case <-g.timer.C:
-			g.complete()
+			if err := g.complete(); err != nil {
+				logger.WithError(err).Error("Failed to complete glob")
+			}
 		case e, ok := <-g.incoming:
 			if !ok {
 				return
 			}
-			g.add(e)
+			if err := g.add(e); err != nil {
+				logger.WithError(err).Error("Failed to add to glob")
+			}
 		}
 	}
 }

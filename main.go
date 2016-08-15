@@ -20,7 +20,7 @@ import (
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
-	jsonLog "github.com/twitchscience/spade/parser/json_log"
+	jsonLog "github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/uploader"
 	"github.com/twitchscience/spade/writer"
@@ -46,7 +46,10 @@ var (
 )
 
 func init() {
-	jsonLog.Register(os.Getenv("REJECT_ON_BAD_FIRST_IP") != "")
+	if err := jsonLog.Register(os.Getenv("REJECT_ON_BAD_FIRST_IP") != ""); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to setup jsonLog parser: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 type parseRequest struct {
@@ -183,7 +186,10 @@ MainLoop:
 		case <-sigc:
 			break MainLoop
 		case <-rotation:
-			multee.Rotate()
+			if _, err := multee.Rotate(); err != nil {
+				logger.WithError(err).Error("multee.Rotate() failed")
+				break MainLoop
+			}
 			s := spadeReporter.Finalize()
 			logger.WithFields(map[string]interface{}{
 				"num_globs":  numGlobs,
@@ -227,8 +233,10 @@ MainLoop:
 	}
 
 	consumer.Close()
-	multee.Close()
 	processorPool.Close()
+	if err := multee.Close(); err != nil {
+		logger.WithError(err).Error("multee.Close() failed")
+	}
 	geoIPUpdater.Close()
 	auditLogger.Close()
 

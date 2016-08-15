@@ -1,33 +1,30 @@
 package transformer
 
-type TransformError struct {
+import (
+	"errors"
+)
+
+var (
+	// ErrEmptyRequest indicates the Event field is not set.
+	ErrEmptyRequest = errors.New("Event field is not set")
+)
+
+// ErrNotTracked indicates an event type is not tracked.
+type ErrNotTracked struct {
 	What string
 }
 
-type NotTrackedError struct {
+// ErrSkippedColumn indicates an event is missing one or more columns.
+type ErrSkippedColumn struct {
 	What string
 }
 
-type SkippedColumnError struct {
-	What string
-}
-
-type EmptyRequestError struct {
-	What string
-}
-
-func (t TransformError) Error() string {
+// Error returns information on which event type is not being tracked.
+func (t ErrNotTracked) Error() string {
 	return t.What
 }
 
-func (t NotTrackedError) Error() string {
-	return t.What
-}
-
-func (t EmptyRequestError) Error() string {
-	return t.What
-}
-
-func (t SkippedColumnError) Error() string {
+// Error returns information on one column which is missing.
+func (t ErrSkippedColumn) Error() string {
 	return t.What
 }

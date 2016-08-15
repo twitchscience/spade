@@ -16,7 +16,7 @@ import (
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"
-	"github.com/twitchscience/spade/table_config"
+	tableConfig "github.com/twitchscience/spade/tables"
 	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/writer"
 )
@@ -62,8 +62,8 @@ func createSpadeWriter(
 	return w
 }
 
-func createSchemaLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger) *table_config.DynamicLoader {
-	loader, err := table_config.NewDynamicLoader(fetcher, schemaReloadFrequency, schemaRetryDelay, stats)
+func createSchemaLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger) *tableConfig.DynamicLoader {
+	loader, err := tableConfig.NewDynamicLoader(fetcher, schemaReloadFrequency, schemaRetryDelay, stats)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create schema dynamic loader")
 	}
@@ -85,7 +85,7 @@ func createConsumer(session *session.Session, stats statsd.Statter) *consumer.Co
 }
 
 func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
-	u := geoip.NewUpdater(time.Now(), transformer.GeoIpDB, *config)
+	u := geoip.NewUpdater(time.Now(), transformer.GeoIPDB, *config)
 	logger.Go(u.UpdateLoop)
 	return u
 }

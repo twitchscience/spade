@@ -3,12 +3,13 @@ package processor
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/twitchscience/spade/parser"
-	nginx "github.com/twitchscience/spade/parser/server_log"
+	jsonLog "github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/reporter"
-	"github.com/twitchscience/spade/table_config"
+	tableConfig "github.com/twitchscience/spade/tables"
 	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/writer"
 
@@ -24,7 +25,7 @@ var (
 	expectedJSONBytes  = loadFile("test_resources/expected_byte_buffer.txt")
 	PST                = getPST()
 
-	_config = table_config.NewStaticLoader(
+	_config = tableConfig.NewStaticLoader(
 		map[string][]transformer.RedshiftType{
 			"login": []transformer.RedshiftType{
 				transformer.RedshiftType{
@@ -54,11 +55,11 @@ var (
 )
 
 func getPST() *time.Location {
-	PST, err := time.LoadLocation("America/Los_Angeles")
+	pst, err := time.LoadLocation("America/Los_Angeles")
 	if err != nil {
 		panic(err)
 	}
-	return PST
+	return pst
 }
 
 func loadFile(file string) string {
@@ -76,20 +77,19 @@ func loadFile(file string) string {
 type _panicParser struct{}
 
 func (p *_panicParser) Parse(parser.Parseable) ([]parser.MixpanelEvent, error) {
-	panic("paniced!")
+	panic("panicked!")
 }
 
 type _panicTransformer struct{}
 
 func (p *_panicTransformer) Consume(*parser.MixpanelEvent) *writer.WriteRequest {
-	panic("paniced!")
+	panic("panicked!")
 }
 
 type DummyWriter struct {
 }
 
-func (d *DummyWriter) Write(w *writer.WriteRequest) error {
-	return nil
+func (d *DummyWriter) Write(w *writer.WriteRequest) {
 }
 
 func (d *DummyWriter) Close() error {
@@ -101,11 +101,10 @@ type testWriter struct {
 	requests []*writer.WriteRequest
 }
 
-func (w *testWriter) Write(r *writer.WriteRequest) error {
+func (w *testWriter) Write(r *writer.WriteRequest) {
 	w.m.Lock()
 	defer w.m.Unlock()
 	w.requests = append(w.requests, r)
-	return nil
 }
 
 func (w *testWriter) Close() error {
@@ -121,9 +120,8 @@ type benchTestWriter struct {
 	r chan *writer.WriteRequest
 }
 
-func (w *benchTestWriter) Write(r *writer.WriteRequest) error {
+func (w *benchTestWriter) Write(r *writer.WriteRequest) {
 	w.r <- r
-	return nil
 }
 
 func (w *benchTestWriter) Close() error {
@@ -165,8 +163,8 @@ func buildTestPool(nConverters, nTransformers int, p parser.Parser, t transforme
 	transformers := make([]*RequestTransformer, nTransformers)
 	converters := make([]*RequestConverter, nConverters)
 
-	requestChannel := make(chan parser.Parseable, QUEUE_SIZE)
-	transport := make(chan parser.MixpanelEvent, QUEUE_SIZE)
+	requestChannel := make(chan parser.Parseable, QueueSize)
+	transport := make(chan parser.MixpanelEvent, QueueSize)
 
 	for i := 0; i < nConverters; i++ {
 		converters[i] = &RequestConverter{
@@ -206,12 +204,15 @@ func requestEqual(r1, r2 *writer.WriteRequest) bool {
 //  Tests
 //
 func init() {
-	nginx.Register() // TODO: replace with TestMain() in go 1.4
+	if err := jsonLog.Register(false); err != nil {
+		fmt.Fprintf(os.Stderr, "Could not register jsonLog: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func TestPanicRecoveryProcessing(t *testing.T) {
 	now := time.Now().In(PST)
-	rawLine := `10.1.40.26 [1382033155.388] "ip=0&data=eyJldmVudCIgOiJsb2dpbiJ9" uuid1`
+	rawLine := `{"clientIp": "10.1.40.26", "data": "eyJldmVudCIgOiJsb2dpbiJ9", "uuid": "uuid1"}`
 	_exampleRequest := &parseRequest{
 		[]byte(rawLine),
 		now,
@@ -222,7 +223,7 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 		Line:     "",
 		UUID:     "error",
 		Source:   []byte(rawLine),
-		Failure:  reporter.PANICED_IN_PROCESSING,
+		Failure:  reporter.PanickedInProcessing,
 		Pstart:   now,
 	}
 	expectedPT := writer.WriteRequest{
@@ -231,7 +232,7 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 		Line:     "",
 		UUID:     "error",
 		Source:   []byte{},
-		Failure:  reporter.PANICED_IN_PROCESSING,
+		Failure:  reporter.PanickedInProcessing,
 		Pstart:   now,
 	}
 
@@ -252,8 +253,8 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 	defer w.m.Unlock()
 
 	if len(w.requests) != 2 {
-		t.Logf("expeceted 2 results got %d", len(w.requests))
-		t.Fail()
+		t.Logf("expected 2 results got %d", len(w.requests))
+		t.FailNow()
 	}
 	if !requestEqual(&expectedPP, w.requests[0]) {
 		if !requestEqual(&expectedPP, w.requests[1]) {
@@ -273,7 +274,9 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 func TestEmptyPropertyProcessing(t *testing.T) {
 	now := time.Now().In(PST)
 	_exampleRequest := &parseRequest{
-		[]byte(`10.1.40.26 [1382033155.388] "ip=0&data=eyJldmVudCIgOiJsb2dpbiJ9" uuid1`),
+		[]byte(`{"receivedAt": "2013-10-17T18:05:55.338Z", "clientIp": "10.1.40.26", ` +
+			`"data": "eyJldmVudCI6ImxvZ2luIiwicHJvcGVydGllcyI6e319", "uuid": "uuid1", ` +
+			`"recordversion": 3}`),
 		now,
 	}
 	logTime := time.Unix(1382033155, 0)
@@ -282,8 +285,8 @@ func TestEmptyPropertyProcessing(t *testing.T) {
 		Version:  42,
 		Line:     "\"\"\t\"\"\t\"" + logTime.In(PST).Format(transformer.RedshiftDatetimeIngestString) + "\"\t\"\"",
 		UUID:     "uuid1",
-		Source:   nil,
-		Failure:  reporter.SKIPPED_COLUMN,
+		Source:   []byte("{}"),
+		Failure:  reporter.SkippedColumn,
 		Pstart:   now,
 	}
 
@@ -301,9 +304,9 @@ func TestEmptyPropertyProcessing(t *testing.T) {
 	w.m.Lock()
 	defer w.m.Unlock()
 
-	if len(w.requests) < 1 {
-		t.Logf("expeceted 2 results")
-		t.Fail()
+	if len(w.requests) != 1 {
+		t.Logf("expected 1 result got %d", len(w.requests))
+		t.FailNow()
 	}
 
 	if !requestEqual(&expected, w.requests[0]) {
@@ -338,9 +341,9 @@ func TestRequestProcessing(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Hopefully enough wait time...
 	w.m.Lock()
 	defer w.m.Unlock()
-	if len(w.requests) < 1 {
-		t.Logf("expeceted 2 results")
-		t.Fail()
+	if len(w.requests) != 1 {
+		t.Logf("expected 1 result got %d", len(w.requests))
+		t.FailNow()
 	}
 
 	if !requestEqual(&expected, w.requests[0]) {
@@ -361,7 +364,7 @@ func TestErrorRequestProcessing(t *testing.T) {
 		UUID:     "uuid1",
 		Source:   nil,
 		Pstart:   now,
-		Failure:  reporter.UNABLE_TO_PARSE_DATA,
+		Failure:  reporter.UnableToParseData,
 	}
 	w := &testWriter{
 		m: &sync.Mutex{},
@@ -375,9 +378,9 @@ func TestErrorRequestProcessing(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Hopefully enough wait time...
 	w.m.Lock()
 	defer w.m.Unlock()
-	if len(w.requests) < 1 {
-		t.Logf("expeceted 1 results")
-		t.Fail()
+	if len(w.requests) != 1 {
+		t.Logf("expected 1 result got %d", len(w.requests))
+		t.FailNow()
 	}
 
 	if !requestEqual(&expected, w.requests[0]) {
@@ -439,7 +442,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 	w.m.Lock()
 	defer w.m.Unlock()
 	if len(w.requests) != len(expected) {
-		t.Logf("expeceted %d results got %d\n", len(expected), len(w.requests))
+		t.Logf("expected %d results got %d\n", len(expected), len(w.requests))
 		t.Fail()
 	}
 
@@ -479,12 +482,12 @@ func BenchmarkRequestProcessing(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		wait.Add(1)
 		go func() {
-			for j := 0; j < QUEUE_SIZE*2; j++ {
+			for j := 0; j < QueueSize*2; j++ {
 				<-w.r
 			}
 			wait.Done()
 		}()
-		for j := 0; j < QUEUE_SIZE*2; j++ {
+		for j := 0; j < QueueSize*2; j++ {
 			rp.Process(_exampleRequest)
 		}
 		wait.Wait()

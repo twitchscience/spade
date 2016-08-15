@@ -36,7 +36,7 @@ func (s *testLoader) GetColumnsForEvent(eventName string) ([]RedshiftType, error
 	if transformArray, exists := s.Configs[eventName]; exists {
 		return transformArray, nil
 	}
-	return nil, NotTrackedError{fmt.Sprintf("%s is not being tracked", eventName)}
+	return nil, ErrNotTracked{fmt.Sprintf("%s is not being tracked", eventName)}
 }
 func (s *testLoader) GetVersionForEvent(eventName string) int {
 	if version, exists := s.Versions[eventName]; exists {
@@ -45,9 +45,9 @@ func (s *testLoader) GetVersionForEvent(eventName string) int {
 	return 0
 }
 
-func _transformer_runner(t *testing.T, input *parser.MixpanelEvent, expected *writer.WriteRequest) {
+func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writer.WriteRequest) {
 	log.SetOutput(bytes.NewBuffer(make([]byte, 0, 256))) // silence log output
-	var _config = &testLoader{
+	config := &testLoader{
 		Configs: map[string][]RedshiftType{
 			"login": []RedshiftType{
 				RedshiftType{intFormat(64), "times", "times"},
@@ -60,7 +60,7 @@ func _transformer_runner(t *testing.T, input *parser.MixpanelEvent, expected *wr
 			"login": 42,
 		},
 	}
-	var _transformer Transformer = NewRedshiftTransformer(_config)
+	_transformer := NewRedshiftTransformer(config)
 	if !reflect.DeepEqual(_transformer.Consume(input), expected) {
 		t.Logf("Got %v expected %v\n", *_transformer.Consume(input), expected)
 		t.Logf("%#v", _transformer.Consume(input).Record)
@@ -70,38 +70,38 @@ func _transformer_runner(t *testing.T, input *parser.MixpanelEvent, expected *wr
 
 func TestBadParseEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
-	var _badParseEvent *parser.MixpanelEvent = &parser.MixpanelEvent{
+	badParseEvent := &parser.MixpanelEvent{
 		Event: "login",
 		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
 			"name":     "kai.hayashi",
 			"now":      1382033155}`),
-		Failure: reporter.UNABLE_TO_PARSE_DATA,
+		Failure: reporter.UnableToParseData,
 		Pstart:  now,
 		UUID:    "uuid1",
 	}
-	_transformer_runner(t, _badParseEvent, &writer.WriteRequest{
-		Category: _badParseEvent.Event,
+	transformerRunner(t, badParseEvent, &writer.WriteRequest{
+		Category: badParseEvent.Event,
 		Version:  42,
 		Line:     "",
 		UUID:     "uuid1",
-		Source:   _badParseEvent.Properties,
-		Failure:  reporter.UNABLE_TO_PARSE_DATA,
-		Pstart:   _badParseEvent.Pstart,
+		Source:   badParseEvent.Properties,
+		Failure:  reporter.UnableToParseData,
+		Pstart:   badParseEvent.Pstart,
 	})
 }
 
 func TestTransformBadColumnEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
-	var _transformErrorEvent *parser.MixpanelEvent = &parser.MixpanelEvent{
+	transformErrorEvent := &parser.MixpanelEvent{
 		Event: "login",
 		Properties: []byte(`{
 			"times":    "sda",
 			"fraction": 0.1234,
 			"name":     "kai.hayashi",
 			"now":      1382033155}`),
-		Failure: reporter.NONE,
+		Failure: reporter.None,
 		Pstart:  now,
 		UUID:    "uuid1",
 	}
@@ -115,45 +115,45 @@ func TestTransformBadColumnEventConsume(t *testing.T) {
 			"fraction": 0.1234,
 			"name":     "kai.hayashi",
 			"now":      1382033155}`),
-		Failure: reporter.SKIPPED_COLUMN,
+		Failure: reporter.SkippedColumn,
 		Pstart:  now,
 		UUID:    "uuid1",
 	}
-	_transformer_runner(t, _transformErrorEvent, &expected)
+	transformerRunner(t, transformErrorEvent, &expected)
 }
 
 func TestEmptyEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
-	var _emptyEvent *parser.MixpanelEvent = &parser.MixpanelEvent{
+	emptyEvent := &parser.MixpanelEvent{
 		Event: "",
 		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
 			"name":     "kai.hayashi",
 			"now":      1382033155}`),
-		Failure: reporter.NONE,
+		Failure: reporter.None,
 		Pstart:  now,
 		UUID:    "uuid1",
 	}
-	_transformer_runner(t, _emptyEvent, &writer.WriteRequest{
+	transformerRunner(t, emptyEvent, &writer.WriteRequest{
 		Category: "Unknown",
 		Line:     "",
-		Source:   _emptyEvent.Properties,
-		Failure:  reporter.EMPTY_REQUEST,
-		Pstart:   _emptyEvent.Pstart,
+		Source:   emptyEvent.Properties,
+		Failure:  reporter.EmptyRequest,
+		Pstart:   emptyEvent.Pstart,
 		UUID:     "uuid1",
 	})
 }
 
 func TestMissingPropertyEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
-	var _emptyEvent *parser.MixpanelEvent = &parser.MixpanelEvent{
+	emptyEvent := &parser.MixpanelEvent{
 		Event: "login",
 		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
 			"name":     "kai.hayashi"}`),
-		Failure: reporter.NONE,
+		Failure: reporter.None,
 		Pstart:  now,
 		UUID:    "uuid1",
 	}
@@ -166,16 +166,16 @@ func TestMissingPropertyEventConsume(t *testing.T) {
 			"times":    42,
 			"fraction": 0.1234,
 			"name":     "kai.hayashi"}`),
-		Failure: reporter.SKIPPED_COLUMN,
+		Failure: reporter.SkippedColumn,
 		Pstart:  now,
 		UUID:    "uuid1",
 	}
-	_transformer_runner(t, _emptyEvent, &expected)
+	transformerRunner(t, emptyEvent, &expected)
 }
 
 func TestNotTrackedEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
-	var _notTrackedEvent *parser.MixpanelEvent = &parser.MixpanelEvent{
+	notTrackedEvent := &parser.MixpanelEvent{
 		Event: "NotTracked",
 		Properties: []byte(`{
 			"times":    42,
@@ -183,23 +183,23 @@ func TestNotTrackedEventConsume(t *testing.T) {
 			"name":     "kai.hayashi",
 			"now":      1382033155
 		}`),
-		Failure: reporter.NONE,
+		Failure: reporter.None,
 		Pstart:  now,
 		UUID:    "uuid1",
 	}
-	_transformer_runner(t, _notTrackedEvent, &writer.WriteRequest{
-		Category: _notTrackedEvent.Event,
+	transformerRunner(t, notTrackedEvent, &writer.WriteRequest{
+		Category: notTrackedEvent.Event,
 		Line:     `{"event":"NotTracked","properties":{"times":42,"fraction":0.1234,"name":"kai.hayashi","now":1382033155}}`,
-		Source:   _notTrackedEvent.Properties,
-		Failure:  reporter.NON_TRACKING_EVENT,
-		Pstart:   _notTrackedEvent.Pstart,
+		Source:   notTrackedEvent.Properties,
+		Failure:  reporter.NonTrackingEvent,
+		Pstart:   notTrackedEvent.Pstart,
 		UUID:     "uuid1",
 	})
 }
 
 func TestNormalEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
-	var _normalEvent *parser.MixpanelEvent = &parser.MixpanelEvent{
+	normalEvent := &parser.MixpanelEvent{
 		Event: "login",
 		Properties: []byte(`{
 			"times":    42,
@@ -207,7 +207,7 @@ func TestNormalEventConsume(t *testing.T) {
 			"name":     "kai.hayashi",
 			"now":      1382033155
 		}`),
-		Failure: reporter.NONE,
+		Failure: reporter.None,
 		Pstart:  now,
 		UUID:    "uuid1",
 	}
@@ -223,8 +223,8 @@ func TestNormalEventConsume(t *testing.T) {
 			"now":      1382033155
 		}`),
 		UUID:    "uuid1",
-		Failure: reporter.NONE,
+		Failure: reporter.None,
 		Pstart:  now,
 	}
-	_transformer_runner(t, _normalEvent, &expected)
+	transformerRunner(t, normalEvent, &expected)
 }

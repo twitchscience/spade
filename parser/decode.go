@@ -9,6 +9,7 @@ import (
 
 var multiEventEscape = []byte{'[', '{'}
 
+// DecodeBase64 base64 decodes and json unmarshals a ParseResult into MixpanelEvents.
 func DecodeBase64(matches ParseResult, escaper URLEscaper) ([]MixpanelEvent, error) {
 	data := matches.Data()
 	data, err := escaper.QueryUnescape(data)
@@ -47,8 +48,10 @@ func DecodeBase64(matches ParseResult, escaper URLEscaper) ([]MixpanelEvent, err
 	return events, nil
 }
 
+// ByteQueryUnescaper is a URL query decoder that operates with []byte instead of string.
 type ByteQueryUnescaper struct{}
 
+// QueryUnescape is like net/url.QueryUnescape but with only one encoding and with []byte.
 func (s *ByteQueryUnescaper) QueryUnescape(q []byte) ([]byte, error) {
 	return unescape(q)
 }

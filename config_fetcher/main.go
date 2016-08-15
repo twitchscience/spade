@@ -15,7 +15,7 @@ var (
 	schemaCacheFileName  = flag.String("schemaFile", "table_config.json", "The location of the fetched Schema")
 )
 
-func makeBluePrintUrl(proto, hostname string, port uint64) (string, error) {
+func makeBluePrintURL(proto, hostname string, port uint64) (string, error) {
 	if hostname == "" {
 		return "", fmt.Errorf("No hostname provided")
 	}
@@ -24,11 +24,11 @@ func makeBluePrintUrl(proto, hostname string, port uint64) (string, error) {
 
 func main() {
 	flag.Parse()
-	bpUrl, err := makeBluePrintUrl(*schemaServerProto, *schemaServerHostname, *schemaServerPort)
+	bpURL, err := makeBluePrintURL(*schemaServerProto, *schemaServerHostname, *schemaServerPort)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create blueprint URL")
 	}
-	err = fetcher.FetchConfig(fetcher.New(bpUrl), *schemaCacheFileName)
+	err = fetcher.FetchConfig(fetcher.New(bpURL), *schemaCacheFileName)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to fetch config")
 	}

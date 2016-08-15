@@ -12,11 +12,13 @@ import (
 
 const reportBuffer = 400000
 
+// StatsLogger is an interface to receive statsd stats.
 type StatsLogger interface {
 	Timing(string, time.Duration)
 	IncrBy(string, int)
 }
 
+// Reporter Records Results and returns stats on them.
 type Reporter interface {
 	Record(*Result)
 	IncrementExpected(int)
@@ -24,10 +26,12 @@ type Reporter interface {
 	Finalize() map[string]int
 }
 
+// Tracker Tracks Results in some external system.
 type Tracker interface {
 	Track(*Result)
 }
 
+// Result tracks an input record with identifiers, timing information, and failures.
 type Result struct {
 	Duration   time.Duration
 	FinishedAt time.Time
@@ -37,7 +41,8 @@ type Result struct {
 	Category   string
 }
 
-// For now NOT thread safe.
+// SpadeReporter is a Reporter that also sends stats to external Trackers.
+// It is NOT thread safe.
 type SpadeReporter struct {
 	Wait     *sync.WaitGroup
 	Trackers []Tracker
@@ -47,10 +52,12 @@ type SpadeReporter struct {
 	reset    chan bool
 }
 
+// SpadeStatsdTracker is a Tracker that reports to statsd.
 type SpadeStatsdTracker struct {
 	Stats StatsLogger
 }
 
+// SpadeUUIDTracker is a Tracker that reports to UUIDs to the spade audit log.
 type SpadeUUIDTracker struct {
 	Logger *gologging.UploadLogger
 }
@@ -66,6 +73,7 @@ type spadeAuditLog struct {
 	Failure    string
 }
 
+// BuildSpadeReporter builds a SpadeReporter on the given WaitGroup and Trackers.
 func BuildSpadeReporter(wait *sync.WaitGroup, trackers []Tracker) Reporter {
 	r := &SpadeReporter{
 		Wait:     wait,
@@ -86,7 +94,7 @@ func (r *SpadeReporter) crank() {
 			for _, t := range r.Trackers {
 				t.Track(result)
 			}
-			r.Stats[result.Failure.String()] += 1
+			r.Stats[result.Failure.String()]++
 			r.Wait.Done()
 		case responseChan := <-r.report:
 			c := make(map[string]int, len(r.Stats))
@@ -95,21 +103,24 @@ func (r *SpadeReporter) crank() {
 			}
 			responseChan <- c
 		case <-r.reset:
-			for k, _ := range r.Stats {
+			for k := range r.Stats {
 				delete(r.Stats, k)
 			}
 		}
 	}
 }
 
+// IncrementExpected adds the given number to the WaitGroup.
 func (r *SpadeReporter) IncrementExpected(n int) {
 	r.Wait.Add(n)
 }
 
+// Record sends the given result to all trackers and our stats report.
 func (r *SpadeReporter) Record(result *Result) {
 	r.record <- result
 }
 
+// Report returns the current stats report.
 func (r *SpadeReporter) Report() map[string]int {
 	responseChan := make(chan map[string]int)
 	defer close(responseChan)
@@ -117,19 +128,21 @@ func (r *SpadeReporter) Report() map[string]int {
 	return <-responseChan
 }
 
-// Be sure to call finalize only after all lines are parsed from log.
-// Finalize returns a copy of the reporter's stat map.
+// Finalize waits for processing to finish and returns a copy of the reporter's stat map.
+// Be sure to call Finalize only after all lines are parsed from log.
 func (r *SpadeReporter) Finalize() map[string]int {
 	r.Wait.Wait()
 	return r.Report()
 }
 
+// Reset resets our stat map.
 func (r *SpadeReporter) Reset() {
 	r.reset <- true
 }
 
+// Track sends the given result to statsd.
 func (s *SpadeStatsdTracker) Track(result *Result) {
-	if result.Failure == NONE || result.Failure == SKIPPED_COLUMN {
+	if result.Failure == None || result.Failure == SkippedColumn {
 		s.Stats.IncrBy(fmt.Sprintf("%s.success", result.Category), 1)
 	} else {
 		s.Stats.IncrBy(fmt.Sprintf("%s.fail", result.Category), 1)
@@ -137,6 +150,7 @@ func (s *SpadeStatsdTracker) Track(result *Result) {
 	s.Stats.Timing(fmt.Sprintf("%d", result.Failure), result.Duration)
 }
 
+// Track sends the result's UUID, timing, and error to the spade audit logger.
 func (s *SpadeUUIDTracker) Track(result *Result) {
 	newAuditLog := spadeAuditLog{
 		UUID:       result.UUID,

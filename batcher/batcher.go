@@ -24,6 +24,7 @@ type Config struct {
 	BufferLength int
 }
 
+// Validate returns an error if the config is invalid, nil otherwise.
 func (c *Config) Validate() error {
 	maxAge, err := time.ParseDuration(c.MaxAge)
 	if err != nil {

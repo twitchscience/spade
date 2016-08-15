@@ -28,7 +28,7 @@ type snsHarness struct {
 	notifier *notifier.SNSClient
 }
 
-func (d *snsHarness) SendMessage(r *uploader.UploadReceipt) error {
+func (s *snsHarness) SendMessage(r *uploader.UploadReceipt) error {
 	return nil
 }
 

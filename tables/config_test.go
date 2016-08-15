@@ -1,4 +1,4 @@
-package table_config
+package tables
 
 import (
 	"bytes"

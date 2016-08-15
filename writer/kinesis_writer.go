@@ -50,29 +50,25 @@ func (c *KinesisWriterConfig) Validate() error {
 	}
 
 	_, err = time.ParseDuration(c.RetryDelay)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
-// WriterStatter sends stats for a BatchWriter.
-type WriterStatter struct {
+// Statter sends stats for a BatchWriter.
+type Statter struct {
 	statter   statsd.Statter
 	statNames map[int]string
 }
 
-// NewWriterStatter returns a WriterStatter for the given stream.
-func NewWriterStatter(statter statsd.Statter, streamName string) *WriterStatter {
-	return &WriterStatter{
+// NewStatter returns a Statter for the given stream.
+func NewStatter(statter statsd.Statter, streamName string) *Statter {
+	return &Statter{
 		statter:   statter,
 		statNames: generateStatNames(streamName),
 	}
 }
 
-// IncStat increments a stat by an amount on the WriterStatter.
-func (w *WriterStatter) IncStat(stat int, amount int64) {
+// IncStat increments a stat by an amount on the Statter.
+func (w *Statter) IncStat(stat int, amount int64) {
 	if amount != 0 {
 		err := w.statter.Inc(w.statNames[stat], amount, 1)
 		if err != nil {
@@ -91,14 +87,14 @@ type BatchWriter interface {
 type StreamBatchWriter struct {
 	client  *kinesis.Kinesis
 	config  *KinesisWriterConfig
-	statter *WriterStatter
+	statter *Statter
 }
 
 // FirehoseBatchWriter writes batches to Kinesis Firehose
 type FirehoseBatchWriter struct {
 	client  *firehose.Firehose
 	config  *KinesisWriterConfig
-	statter *WriterStatter
+	statter *Statter
 }
 
 // KinesisWriter is a writer that writes events to kinesis
@@ -155,12 +151,12 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config K
 			})
 		session = session.Copy(&aws.Config{Credentials: credentials})
 	}
-	writerStatter := NewWriterStatter(statter, config.StreamName)
+	wStatter := NewStatter(statter, config.StreamName)
 	switch config.StreamType {
 	case "stream":
-		batchWriter = &StreamBatchWriter{kinesis.New(session), &config, writerStatter}
+		batchWriter = &StreamBatchWriter{kinesis.New(session), &config, wStatter}
 	case "firehose":
-		batchWriter = &FirehoseBatchWriter{firehose.New(session), &config, writerStatter}
+		batchWriter = &FirehoseBatchWriter{firehose.New(session), &config, wStatter}
 	default:
 		return nil, fmt.Errorf("unknown stream type: %s", config.StreamType)
 	}
@@ -198,9 +194,8 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config K
 // eventually be written to Kinesis as part of a flate
 // compressed json blob
 
-func (w *KinesisWriter) Write(req *WriteRequest) error {
+func (w *KinesisWriter) Write(req *WriteRequest) {
 	w.incoming <- req
-	return nil
 }
 
 func (w *KinesisWriter) submit(name string, columns map[string]string) {
@@ -219,13 +214,17 @@ func (w *KinesisWriter) submit(name string, columns map[string]string) {
 	}
 
 	if len(pruned) > 0 {
-		w.globber.Submit(struct {
+		err := w.globber.Submit(struct {
 			Name   string
 			Fields map[string]string
 		}{
 			Name:   name,
 			Fields: pruned,
 		})
+		if err != nil {
+			logger.WithError(err).WithField("name", name).Error(
+				"Failed to Submit to globber")
+		}
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"github.com/twitchscience/spade/reporter"
 )
 
+// RequestConverter parses Parseables that come in into MixpanelEvents.
 type RequestConverter struct {
 	r      reporter.Reporter
 	in     chan parser.Parseable
@@ -13,21 +14,24 @@ type RequestConverter struct {
 	parser parser.Parser
 }
 
+// Process parses the given Parseable into a list of events.
 func (p *RequestConverter) Process(r parser.Parseable) (events []parser.MixpanelEvent, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			events = []parser.MixpanelEvent{
-				*parser.MakePanicedEvent(r),
+				*parser.MakePanickedEvent(r),
 			}
 		}
 	}()
 	return p.parser.Parse(r)
 }
 
+// Close closes the RequestConverter by stopping the Listen() method.
 func (p *RequestConverter) Close() {
 	p.closer <- true
 }
 
+// Listen sits in a loop Processing requests until the RequestConverter is Closed.
 func (p *RequestConverter) Listen() {
 	for {
 		select {

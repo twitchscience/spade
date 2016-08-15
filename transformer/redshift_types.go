@@ -25,40 +25,41 @@ import (
 // for time transformers. Transform generators allow the user to define how
 // the transformer should parse a inbound property.
 
-// All times are in PST.
+// PST is the timezone used for everything.
 var PST = getPST()
 
 func getPST() *time.Location {
-	PST, err := time.LoadLocation("America/Los_Angeles")
+	pst, err := time.LoadLocation("America/Los_Angeles")
 	if err != nil {
 		panic(err)
 	}
-	return PST
+	return pst
 }
 
-// A RedshiftType combines a way to get the input to the ColumnTransformer.
+// RedshiftType combines a way to get the input to the ColumnTransformer.
 // Basically it performs Transformer(Event[EventProperty]) -> Column.
 type RedshiftType struct {
-	Transformer  ColumnTranformer
+	Transformer  ColumnTransformer
 	InboundName  string
 	OutboundName string
 }
 
+// Format finds the column to transform and returns the outbound column name and transformed value.
 func (r *RedshiftType) Format(eventProperties map[string]interface{}) (string, string, error) {
 	if p, ok := eventProperties[r.InboundName]; ok {
 		value, err := r.Transformer(p)
 		return r.OutboundName, value, err
 	}
-	return "", "", ColumnNotFoundError
+	return "", "", ErrColumnNotFound
 }
 
-// Returns us a Transformer for a given string
-func GetTransform(t_type string) ColumnTranformer {
-	if t, ok := transformMap[t_type]; ok {
+// GetTransform returns us a Transformer for a given string.
+func GetTransform(tType string) ColumnTransformer {
+	if t, ok := transformMap[tType]; ok {
 		return t
 	}
-	if t_type[0] == 'f' { // were building a transform function
-		transformParams := strings.Split(t_type, "@")
+	if tType[0] == 'f' { // were building a transform function
+		transformParams := strings.Split(tType, "@")
 		if len(transformParams) < 3 {
 			return nil
 		}
@@ -72,7 +73,7 @@ func GetTransform(t_type string) ColumnTranformer {
 
 // New types should register here
 var (
-	transformMap = map[string]ColumnTranformer{
+	transformMap = map[string]ColumnTransformer{
 		"int":                intFormat(32),
 		"bigint":             intFormat(64),
 		"float":              floatFormat,
@@ -85,28 +86,30 @@ var (
 		"ipAsnInteger":       ipAsnIntFormat,
 		"stringToIntegerMD5": hashTransformer,
 	}
-	transformGeneratorMap = map[string]func(string) ColumnTranformer{
+	transformGeneratorMap = map[string]func(string) ColumnTransformer{
 		"timestamp": genTimeFormat,
 	}
-	exportedTransformGenerators = []string{"f@timestamp@unix"}
 )
 
 // Probably want to change this to be a static type of error
 func genError(offender interface{}, t string) error {
-	return errors.New(fmt.Sprintf("Failed to parse %v as a %s", offender, t))
+	return fmt.Errorf("Failed to parse %v as a %s", offender, t)
 }
 
 var (
-	UnknownTransformError                 = errors.New("Unrecognized transform")
-	ColumnNotFoundError                   = errors.New("Property Not Found")
-	GeoIpDB               geoip.GeoLookup = loadDB()
+	// ErrUnknownTransform is when the transform from blueprint is unknown.
+	ErrUnknownTransform = errors.New("Unrecognized transform")
+	// ErrColumnNotFound is when a property from blueprint is not on an event.
+	ErrColumnNotFound = errors.New("Property Not Found")
+	// GeoIPDB is a Geo IP database, automatically kept updated.
+	GeoIPDB = loadDB()
 )
 
 func loadDB() geoip.GeoLookup {
 	dbloc, asnloc := os.Getenv("GEO_IP_DB"), os.Getenv("ASN_IP_DB")
-	g, load_err := geoip.NewGeoMMIp(dbloc, asnloc)
-	if load_err != nil {
-		logger.WithError(load_err).WithFields(map[string]interface{} {
+	g, loadErr := geoip.NewGeoMMIp(dbloc, asnloc)
+	if loadErr != nil {
+		logger.WithError(loadErr).WithFields(map[string]interface{}{
 			"db_location":  dbloc,
 			"asn_location": asnloc,
 		}).Error("Failed to load GeoIP DB, using no-op DB instead")
@@ -115,22 +118,26 @@ func loadDB() geoip.GeoLookup {
 	return g
 }
 
+// SetGeoDB initializes the global GeoIPDB with the given DB locations.
 func SetGeoDB(geoloc string, asnloc string) error {
-	g, load_err := geoip.NewGeoMMIp(geoloc, asnloc)
-	if load_err != nil {
-		return errors.New(fmt.Sprintf("Could not find geoIP db at %s or %s, using noop db instead\n",
-			geoloc, asnloc))
+	g, loadErr := geoip.NewGeoMMIp(geoloc, asnloc)
+	if loadErr != nil {
+		return fmt.Errorf("Could not find geoIP db at %s or %s, using noop db instead\n",
+			geoloc, asnloc)
 	}
-	GeoIpDB = g
+	GeoIPDB = g
 	return nil
 }
 
-type ColumnTranformer func(interface{}) (string, error)
+// ColumnTransformer takes an event property and transforms it to a string.
+type ColumnTransformer func(interface{}) (string, error)
 
 const (
+	// RedshiftDatetimeIngestString is the format of timestamps that Redshift understands.
 	RedshiftDatetimeIngestString = "2006-01-02 15:04:05.999"
 	fiveDigitYearCutoff          = 13140000000
 	timeLowerBound               = 1000000000
+	// FloatLowerBound is the minimum float value to allow.
 	// Redshift and Go appear to differ on floating point representation
 	// we use 10^-300 here as a stop gap estimation.
 	FloatLowerBound = 10e-300
@@ -206,7 +213,7 @@ func unixTimeFormat(target interface{}) (string, error) {
 	return time.Unix(int64(seconds), int64(nanos)).In(PST).Format(RedshiftDatetimeIngestString), nil
 }
 
-func genTimeFormat(format string) ColumnTranformer {
+func genTimeFormat(format string) ColumnTransformer {
 	if format == "unix" {
 		return unixTimeFormat
 	}
@@ -252,7 +259,7 @@ func ipCityFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Ip City")
 	}
-	return GeoIpDB.GetCity(str), nil
+	return GeoIPDB.GetCity(str), nil
 }
 
 func ipCountryFormat(target interface{}) (string, error) {
@@ -260,7 +267,7 @@ func ipCountryFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Ip Country")
 	}
-	return GeoIpDB.GetCountry(str), nil
+	return GeoIPDB.GetCountry(str), nil
 }
 
 func ipRegionFormat(target interface{}) (string, error) {
@@ -268,7 +275,7 @@ func ipRegionFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Ip Region")
 	}
-	return GeoIpDB.GetRegion(str), nil
+	return GeoIPDB.GetRegion(str), nil
 }
 
 func ipAsnFormat(target interface{}) (string, error) {
@@ -276,7 +283,7 @@ func ipAsnFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Ip Asn")
 	}
-	return GeoIpDB.GetAsn(str), nil
+	return GeoIPDB.GetAsn(str), nil
 }
 
 func ipAsnIntFormat(target interface{}) (string, error) {
@@ -284,7 +291,7 @@ func ipAsnIntFormat(target interface{}) (string, error) {
 	if !ok {
 		return "", genError(target, "Ip Asn")
 	}
-	asnString := GeoIpDB.GetAsn(str)
+	asnString := GeoIPDB.GetAsn(str)
 	if !strings.HasPrefix(asnString, "AS") {
 		return "", genError(target, "Ip Asn")
 	}

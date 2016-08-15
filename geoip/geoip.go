@@ -7,6 +7,7 @@ import (
 	geo "github.com/abh/geoip"
 )
 
+// GeoLookup defines functions to get properties of an IP address and Reload databases.
 type GeoLookup interface {
 	GetRegion(string) string
 	GetCountry(string) string
@@ -15,8 +16,9 @@ type GeoLookup interface {
 	Reload() error
 }
 
+// GeoMMIP is a GeoLookup backed by MaxMind.
 // Can build out a cache maybe?
-type GeoMMIp struct {
+type GeoMMIP struct {
 	geos   *geo.GeoIP
 	asn    *geo.GeoIP
 	geoLoc string
@@ -24,10 +26,9 @@ type GeoMMIp struct {
 	sync.RWMutex
 }
 
-var nop GeoLookup = &NoopGeoIp{}
-
-func NewGeoMMIp(geoLoc string, asnLoc string) (*GeoMMIp, error) {
-	g := GeoMMIp{
+// NewGeoMMIp returns a GeoMMIP using the given geo and asn database locations.
+func NewGeoMMIp(geoLoc string, asnLoc string) (*GeoMMIP, error) {
+	g := GeoMMIP{
 		geoLoc: geoLoc,
 		asnLoc: asnLoc,
 	}
@@ -35,11 +36,8 @@ func NewGeoMMIp(geoLoc string, asnLoc string) (*GeoMMIp, error) {
 	return &g, err
 }
 
-func Noop() GeoLookup {
-	return nop
-}
-
-func (g *GeoMMIp) Reload() error {
+// Reload reloads the configured databases.
+func (g *GeoMMIP) Reload() error {
 	g.Lock()
 	defer g.Unlock()
 
@@ -56,7 +54,7 @@ func (g *GeoMMIp) Reload() error {
 	return nil
 }
 
-func (g *GeoMMIp) getGeosRecord(ip string) *geo.GeoIPRecord {
+func (g *GeoMMIP) getGeosRecord(ip string) *geo.GeoIPRecord {
 	g.RLock()
 	loc := g.geos.GetRecord(ip)
 	g.RUnlock()
@@ -64,7 +62,8 @@ func (g *GeoMMIp) getGeosRecord(ip string) *geo.GeoIPRecord {
 
 }
 
-func (g *GeoMMIp) GetRegion(ip string) string {
+// GetRegion returns the region associated with the ip.
+func (g *GeoMMIP) GetRegion(ip string) string {
 	loc := g.getGeosRecord(ip)
 	if loc == nil {
 		return ""
@@ -72,7 +71,8 @@ func (g *GeoMMIp) GetRegion(ip string) string {
 	return fmt.Sprintf("%s", loc.Region)
 }
 
-func (g *GeoMMIp) GetCountry(ip string) string {
+// GetCountry returns the country associated with the ip.
+func (g *GeoMMIP) GetCountry(ip string) string {
 	loc := g.getGeosRecord(ip)
 	if loc == nil {
 		return ""
@@ -80,7 +80,8 @@ func (g *GeoMMIp) GetCountry(ip string) string {
 	return fmt.Sprintf("%s", loc.CountryCode)
 }
 
-func (g *GeoMMIp) GetCity(ip string) string {
+// GetCity returns the city associated with the ip.
+func (g *GeoMMIP) GetCity(ip string) string {
 	loc := g.getGeosRecord(ip)
 	if loc == nil {
 		return ""
@@ -88,31 +89,45 @@ func (g *GeoMMIp) GetCity(ip string) string {
 	return fmt.Sprintf("%s", loc.City)
 }
 
-func (g *GeoMMIp) GetAsn(ip string) string {
+// GetAsn returns the ASN associated with the ip.
+func (g *GeoMMIP) GetAsn(ip string) string {
 	g.RLock()
 	loc, _ := g.asn.GetName(ip)
 	g.RUnlock()
 	return fmt.Sprintf("%s", loc)
 }
 
-type NoopGeoIp struct{}
+// NoopGeoIP is a GeoLookup that always returns empty strings.
+type NoopGeoIP struct{}
 
-func (g *NoopGeoIp) GetRegion(ip string) string {
+var nop GeoLookup = &NoopGeoIP{}
+
+// Noop returns a GeoLookup that always returns empty strings.
+func Noop() GeoLookup {
+	return nop
+}
+
+// GetRegion returns an empty string.
+func (g *NoopGeoIP) GetRegion(ip string) string {
 	return ""
 }
 
-func (g *NoopGeoIp) GetCountry(ip string) string {
+// GetCountry returns an empty string.
+func (g *NoopGeoIP) GetCountry(ip string) string {
 	return ""
 }
 
-func (g *NoopGeoIp) GetAsn(ip string) string {
+// GetAsn returns an empty string.
+func (g *NoopGeoIP) GetAsn(ip string) string {
 	return ""
 }
 
-func (g *NoopGeoIp) GetCity(ip string) string {
+// GetCity returns an empty string.
+func (g *NoopGeoIP) GetCity(ip string) string {
 	return ""
 }
 
-func (g *NoopGeoIp) Reload() error {
+// Reload does nothing.
+func (g *NoopGeoIP) Reload() error {
 	return nil
 }

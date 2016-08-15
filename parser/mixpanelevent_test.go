@@ -15,19 +15,19 @@ import (
 type mixpanelEventType int
 
 const (
-	BAD_ENCODING mixpanelEventType = iota
-	PANIC
-	ERROR
-	ERROR_LONG_UUID
-	ERROR_EMPTY_UUID
-	ERROR_EMPTY_TIME
-	ERROR_INVALID_TIME
+	BadEncoding mixpanelEventType = iota
+	Panic
+	Error
+	ErrorLongUUID
+	ErrorEmptyUUID
+	ErrorEmptyTime
+	ErrorInvalidTime
 )
 
 var (
 	epoch    = time.Unix(0, 0)
 	uuid     = "123abc"
-	longUuid = randomString(68)
+	longUUID = randomString(68)
 	when     = fmt.Sprintf("%d", receivedAt.Unix()) // from parser_test.go
 )
 
@@ -42,19 +42,19 @@ func randomString(n int) string {
 
 func makeEvent(t mixpanelEventType) *MixpanelEvent {
 	switch t {
-	case BAD_ENCODING:
-		return MakeBadEncodedEvent()
-	case PANIC:
-		return MakePanicedEvent(&logLine{})
-	case ERROR:
+	case BadEncoding:
+		return makeBadEncodedEvent()
+	case Panic:
+		return MakePanickedEvent(&logLine{})
+	case Error:
 		return MakeErrorEvent(&logLine{}, uuid, when)
-	case ERROR_LONG_UUID:
-		return MakeErrorEvent(&logLine{}, longUuid, when)
-	case ERROR_EMPTY_UUID:
+	case ErrorLongUUID:
+		return MakeErrorEvent(&logLine{}, longUUID, when)
+	case ErrorEmptyUUID:
 		return MakeErrorEvent(&logLine{}, "", when)
-	case ERROR_EMPTY_TIME:
+	case ErrorEmptyTime:
 		return MakeErrorEvent(&logLine{}, uuid, "")
-	case ERROR_INVALID_TIME:
+	case ErrorInvalidTime:
 		return MakeErrorEvent(&logLine{}, uuid, "abc")
 	}
 	return nil
@@ -66,80 +66,80 @@ func TestMixpanelEvent(t *testing.T) {
 		pstart    time.Time
 		eventTime json.Number
 		uuid      string
-		clientIp  string
+		clientIP  string
 		eventName string
 		rawProps  json.RawMessage
 		failMode  reporter.FailMode
 	}{
 		{
-			t:         BAD_ENCODING,
+			t:         BadEncoding,
 			pstart:    epoch, // method uses time.Now()
 			eventTime: json.Number("0"),
 			uuid:      "error",
-			clientIp:  "",
+			clientIP:  "",
 			eventName: "Unknown",
 			rawProps:  json.RawMessage{},
-			failMode:  reporter.FAILED_TRANSPORT,
+			failMode:  reporter.FailedTransport,
 		},
 		{
-			t:         PANIC,
+			t:         Panic,
 			pstart:    receivedAt, // from parser_test.go
 			eventTime: json.Number("0"),
 			uuid:      "error",
-			clientIp:  "",
+			clientIP:  "",
 			eventName: "Unknown",
 			rawProps:  json.RawMessage([]byte{}),
-			failMode:  reporter.PANICED_IN_PROCESSING,
+			failMode:  reporter.PanickedInProcessing,
 		},
 		{
-			t:         ERROR,
+			t:         Error,
 			pstart:    receivedAt, // from parser_test.go
 			eventTime: json.Number(when),
 			uuid:      uuid,
-			clientIp:  "",
+			clientIP:  "",
 			eventName: "Unknown",
 			rawProps:  json.RawMessage{},
-			failMode:  reporter.UNABLE_TO_PARSE_DATA,
+			failMode:  reporter.UnableToParseData,
 		},
 		{
-			t:         ERROR_LONG_UUID,
-			pstart:    receivedAt, // from parser_test.go
-			eventTime: json.Number(when),
-			uuid:      "error",
-			clientIp:  "",
-			eventName: "Unknown",
-			rawProps:  json.RawMessage{},
-			failMode:  reporter.UNABLE_TO_PARSE_DATA,
-		},
-		{
-			t:         ERROR_EMPTY_UUID,
+			t:         ErrorLongUUID,
 			pstart:    receivedAt, // from parser_test.go
 			eventTime: json.Number(when),
 			uuid:      "error",
-			clientIp:  "",
+			clientIP:  "",
 			eventName: "Unknown",
 			rawProps:  json.RawMessage{},
-			failMode:  reporter.UNABLE_TO_PARSE_DATA,
+			failMode:  reporter.UnableToParseData,
 		},
 		{
-			t:         ERROR_EMPTY_TIME,
+			t:         ErrorEmptyUUID,
+			pstart:    receivedAt, // from parser_test.go
+			eventTime: json.Number(when),
+			uuid:      "error",
+			clientIP:  "",
+			eventName: "Unknown",
+			rawProps:  json.RawMessage{},
+			failMode:  reporter.UnableToParseData,
+		},
+		{
+			t:         ErrorEmptyTime,
 			pstart:    receivedAt, // from parser_test.go
 			eventTime: json.Number("0"),
 			uuid:      uuid,
-			clientIp:  "",
+			clientIP:  "",
 			eventName: "Unknown",
 			rawProps:  json.RawMessage{},
-			failMode:  reporter.UNABLE_TO_PARSE_DATA,
+			failMode:  reporter.UnableToParseData,
 		},
 		{
-			t:         ERROR_INVALID_TIME,
+			t:         ErrorInvalidTime,
 			pstart:    receivedAt, // from parser_test.go
 			eventTime: json.Number("0"),
 			uuid:      uuid,
-			clientIp:  "",
+			clientIP:  "",
 			eventName: "Unknown",
 			rawProps:  json.RawMessage{},
-			failMode:  reporter.UNABLE_TO_PARSE_DATA,
+			failMode:  reporter.UnableToParseData,
 		},
 	}
 
@@ -154,8 +154,8 @@ func TestMixpanelEvent(t *testing.T) {
 		if tt.uuid != me.UUID {
 			t.Fatalf("mixpanelevent: Expected UUID of %s, got %s", tt.uuid, me.UUID)
 		}
-		if tt.clientIp != me.ClientIp {
-			t.Fatalf("mixpanelevent: Expected ClientIp of %s, got %s", tt.clientIp, me.ClientIp)
+		if tt.clientIP != me.ClientIP {
+			t.Fatalf("mixpanelevent: Expected ClientIP of %s, got %s", tt.clientIP, me.ClientIP)
 		}
 		if tt.eventName != me.Event {
 			t.Fatalf("mixpanelevent: Expected Event of %s, got %s", tt.eventName, me.Event)
@@ -166,5 +166,17 @@ func TestMixpanelEvent(t *testing.T) {
 		if tt.failMode != me.Failure {
 			t.Fatalf("mixpanelevent: Expected Failure of %s, got %s", tt.failMode, me.Failure)
 		}
+	}
+}
+
+func makeBadEncodedEvent() *MixpanelEvent {
+	return &MixpanelEvent{
+		Pstart:     time.Now(),
+		EventTime:  json.Number("0"),
+		UUID:       "error",
+		ClientIP:   "",
+		Event:      "Unknown",
+		Properties: json.RawMessage{},
+		Failure:    reporter.FailedTransport,
 	}
 }

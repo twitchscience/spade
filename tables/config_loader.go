@@ -1,4 +1,4 @@
-package table_config
+package tables
 
 import (
 	"fmt"
@@ -12,11 +12,13 @@ import (
 	"github.com/twitchscience/spade/transformer"
 )
 
+// StaticLoader is a static set of transformers and versions.
 type StaticLoader struct {
 	configs  map[string][]transformer.RedshiftType
 	versions map[string]int
 }
 
+// NewStaticLoader creates a StaticLoader from the given configs and versions.
 func NewStaticLoader(config map[string][]transformer.RedshiftType, versions map[string]int) *StaticLoader {
 	return &StaticLoader{
 		configs:  config,
@@ -24,6 +26,7 @@ func NewStaticLoader(config map[string][]transformer.RedshiftType, versions map[
 	}
 }
 
+// DynamicLoader fetches configs on an interval, with stats on the fetching process.
 type DynamicLoader struct {
 	fetcher    fetcher.ConfigFetcher
 	reloadTime time.Duration
@@ -34,6 +37,7 @@ type DynamicLoader struct {
 	stats      reporter.StatsLogger
 }
 
+// NewDynamicLoader returns a new DynamicLoader, performing the first fetch.
 func NewDynamicLoader(
 	fetcher fetcher.ConfigFetcher,
 	reloadTime,
@@ -58,17 +62,19 @@ func NewDynamicLoader(
 	return &d, nil
 }
 
+// GetColumnsForEvent returns the transformers for the given event.
 func (s *StaticLoader) GetColumnsForEvent(eventName string) ([]transformer.RedshiftType, error) {
 	if transformArray, exists := s.configs[eventName]; exists {
 		return transformArray, nil
 	}
-	return nil, transformer.NotTrackedError{
+	return nil, transformer.ErrNotTracked{
 		What: fmt.Sprintf("%s is not being tracked", eventName),
 	}
 }
 
-func (d *StaticLoader) GetVersionForEvent(eventName string) int {
-	if version, exists := d.versions[eventName]; exists {
+// GetVersionForEvent returns the current version of the given event.
+func (s *StaticLoader) GetVersionForEvent(eventName string) int {
+	if version, exists := s.versions[eventName]; exists {
 		return version
 	}
 	return 0
@@ -106,10 +112,12 @@ func (d *DynamicLoader) pullConfigIn() (map[string][]transformer.RedshiftType, m
 	return newConfigs, newVersions, nil
 }
 
+// Close stops the DynamicLoader's fetching process.
 func (d *DynamicLoader) Close() {
 	d.closer <- true
 }
 
+// GetColumnsForEvent returns the transformers for the given event.
 func (d *DynamicLoader) GetColumnsForEvent(eventName string) ([]transformer.RedshiftType, error) {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
@@ -117,11 +125,12 @@ func (d *DynamicLoader) GetColumnsForEvent(eventName string) ([]transformer.Reds
 	if transformArray, exists := d.configs[eventName]; exists {
 		return transformArray, nil
 	}
-	return nil, transformer.NotTrackedError{
+	return nil, transformer.ErrNotTracked{
 		What: fmt.Sprintf("%s is not being tracked", eventName),
 	}
 }
 
+// GetVersionForEvent returns the current version of the given event.
 func (d *DynamicLoader) GetVersionForEvent(eventName string) int {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
@@ -131,6 +140,7 @@ func (d *DynamicLoader) GetVersionForEvent(eventName string) int {
 	return 0
 }
 
+// Crank is a blocking function that refreshes the config on an interval.
 func (d *DynamicLoader) Crank() {
 	// Jitter reload
 	tick := time.NewTicker(d.reloadTime + time.Duration(rand.Intn(100))*time.Millisecond)
@@ -142,10 +152,10 @@ func (d *DynamicLoader) Crank() {
 			newConfig, newVersions, err := d.pullConfigIn()
 			if err != nil {
 				logger.WithError(err).Error("Failed to refresh config")
-				d.stats.Timing("config.error", time.Now().Sub(now))
+				d.stats.Timing("config.error", time.Since(now))
 				continue
 			}
-			d.stats.Timing("config.success", time.Now().Sub(now))
+			d.stats.Timing("config.success", time.Since(now))
 
 			d.lock.Lock()
 			d.configs = newConfig
