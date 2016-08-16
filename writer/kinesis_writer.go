@@ -302,18 +302,20 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 		Records:    records,
 	}
 
+	var err error
 	for attempt := 1; attempt <= w.config.MaxAttemptsPerRecord; attempt++ {
 		w.statter.IncStat(statPutRecordsAttempted, 1)
 		w.statter.IncStat(statPutRecordsLength, int64(len(records)))
 
-		res, err := w.client.PutRecords(args)
+		var res *kinesis.PutRecordsOutput
+		res, err = w.client.PutRecords(args)
 
 		if err != nil {
 			logger.WithError(err).WithFields(map[string]interface{}{
 				"attempt":      attempt,
 				"max_attempts": w.config.MaxAttemptsPerRecord,
 				"stream":       w.config.StreamName,
-			}).Error("Failed to put records")
+			}).Warn("Failed to put records")
 			w.statter.IncStat(statPutRecordsErrors, 1)
 			time.Sleep(retryDelay)
 			continue
@@ -354,6 +356,7 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 	logger.WithField("failures", len(args.Records)).
 		WithField("attempts", len(records)).
 		WithField("stream", w.config.StreamName).
+		WithError(err).
 		Error("Failed to send records to Kinesis")
 	w.statter.IncStat(statRecordsDropped, int64(len(args.Records)))
 }
@@ -386,18 +389,20 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 		Records:            records,
 	}
 
+	var err error
 	for attempt := 1; attempt <= w.config.MaxAttemptsPerRecord; attempt++ {
 		w.statter.IncStat(statPutRecordsAttempted, 1)
 		w.statter.IncStat(statPutRecordsLength, int64(len(records)))
 
-		res, err := w.client.PutRecordBatch(args)
+		var res *firehose.PutRecordBatchOutput
+		res, err = w.client.PutRecordBatch(args)
 
 		if err != nil {
 			logger.WithError(err).WithFields(map[string]interface{}{
 				"attempt":      attempt,
 				"max_attempts": w.config.MaxAttemptsPerRecord,
 				"stream":       w.config.StreamName,
-			}).Error("Failed to put record batch")
+			}).Warn("Failed to put record batch")
 			w.statter.IncStat(statPutRecordsErrors, 1)
 			time.Sleep(retryDelay)
 			continue
@@ -438,6 +443,7 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 	logger.WithField("failures", len(args.Records)).
 		WithField("attempts", len(records)).
 		WithField("stream", w.config.StreamName).
+		WithError(err).
 		Error("Failed to send records to Firehose")
 	w.statter.IncStat(statRecordsDropped, int64(len(args.Records)))
 }
