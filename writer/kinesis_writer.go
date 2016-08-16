@@ -28,16 +28,18 @@ type KinesisWriterConfig struct {
 	MaxAttemptsPerRecord int
 	RetryDelay           string
 
-	Events map[string]struct {
-		Filter string
-		Fields []string
+	Events map[string]*struct {
+		Filter     string
+		FilterFunc func(map[string]string) bool
+		Fields     []string
 	}
 
 	Globber globber.Config
 	Batcher batcher.Config
 }
 
-// Validate returns an error if the config is not valid, or nil if it is
+// Validate returns an error if the config is not valid, or nil if it is.
+// It also sets the FilterFunc on Events with Filters.
 func (c *KinesisWriterConfig) Validate() error {
 	err := c.Globber.Validate()
 	if err != nil {
@@ -49,8 +51,23 @@ func (c *KinesisWriterConfig) Validate() error {
 		return fmt.Errorf("batcher config invalid: %s", err)
 	}
 
+	for _, e := range c.Events {
+		if e.Filter != "" {
+			e.FilterFunc = filterFuncs[e.Filter]
+			if e.FilterFunc == nil {
+				return fmt.Errorf("batcher config invalid: %s", err)
+			}
+		}
+	}
+
 	_, err = time.ParseDuration(c.RetryDelay)
 	return err
+}
+
+var filterFuncs = map[string]func(map[string]string) bool{
+	"isVod": func(fields map[string]string) bool {
+		return fields["vod_id"] != "" && fields["vod_type"] != "clip"
+	},
 }
 
 // Statter sends stats for a BatchWriter.
@@ -201,6 +218,9 @@ func (w *KinesisWriter) Write(req *WriteRequest) {
 func (w *KinesisWriter) submit(name string, columns map[string]string) {
 	event, ok := w.config.Events[name]
 	if !ok {
+		return
+	}
+	if event.FilterFunc != nil && !event.FilterFunc(columns) {
 		return
 	}
 
