@@ -14,7 +14,6 @@ import (
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
-	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"
 	tableConfig "github.com/twitchscience/spade/tables"
 	"github.com/twitchscience/spade/transformer"
@@ -24,8 +23,6 @@ import (
 const (
 	schemaReloadFrequency = 5 * time.Minute
 	schemaRetryDelay      = 2 * time.Second
-	parserPoolSize        = 10
-	transformerPoolSize   = 10
 )
 
 func createSpadeReporter(stats reporter.StatsLogger, auditLogger *gologging.UploadLogger) reporter.Reporter {
@@ -70,10 +67,6 @@ func createSchemaLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogge
 
 	logger.Go(loader.Crank)
 	return loader
-}
-
-func createProcessorPool(loader transformer.ConfigLoader, reporter reporter.Reporter) *processor.SpadeProcessorPool {
-	return processor.BuildProcessorPool(parserPoolSize, transformerPoolSize, loader, reporter)
 }
 
 func createConsumer(session *session.Session, stats statsd.Statter) *consumer.Consumer {

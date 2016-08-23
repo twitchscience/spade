@@ -8,19 +8,31 @@ import (
 	"github.com/twitchscience/spade/writer"
 )
 
+const (
+	nConverters   = 10
+	nTransformers = 10
+)
+
 // QueueSize is the size of the buffer on the input and output channels for the pool.
 const QueueSize = 400000
+
+type Pool interface {
+	StartListeners()
+	Process(parser.Parseable)
+	Close()
+}
 
 // SpadeProcessorPool is pool of RequestConverters and RequestTransformers.
 type SpadeProcessorPool struct {
 	in           chan parser.Parseable
 	converters   []*RequestConverter
 	transformers []*RequestTransformer
+	writer       writer.SpadeWriter
 }
 
 // BuildProcessorPool builds a new SpadeProcessorPool.
-func BuildProcessorPool(nConverters, nTransformers int,
-	configs transformer.ConfigLoader, rep reporter.Reporter) *SpadeProcessorPool {
+func BuildProcessorPool(configs transformer.ConfigLoader, rep reporter.Reporter,
+	writer writer.SpadeWriter) *SpadeProcessorPool {
 
 	transformers := make([]*RequestTransformer, nTransformers)
 	converters := make([]*RequestConverter, nConverters)
@@ -50,6 +62,7 @@ func BuildProcessorPool(nConverters, nTransformers int,
 		in:           requestChannel,
 		converters:   converters,
 		transformers: transformers,
+		writer:       writer,
 	}
 }
 
@@ -64,12 +77,12 @@ func (p *SpadeProcessorPool) Close() {
 	}
 }
 
-// Listen starts up the converters and transformers, writing to the given writer.
-func (p *SpadeProcessorPool) Listen(writer writer.SpadeWriter) {
+// StartListeners starts up goroutines for the converters and transformers.
+func (p *SpadeProcessorPool) StartListeners() {
 	for _, worker := range p.transformers {
 		w := worker
 		logger.Go(func() {
-			w.Listen(writer)
+			w.Listen(p.writer)
 		})
 	}
 	for _, worker := range p.converters {

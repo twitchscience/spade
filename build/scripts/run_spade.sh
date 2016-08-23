@@ -4,6 +4,11 @@ set -e -u -o pipefail
 SPADE_DIR="/opt/science/spade"
 
 export GOMAXPROCS="3" # we need 3 or more for spade to run well..
+CORE_COUNT=`grep -c ^processor /proc/cpuinfo`
+if [[ $CORE_COUNT -gt $GOMAXPROCS ]];
+then
+    export GOMAXPROCS=$CORE_COUNT
+fi
 
 export GEO_IP_DB="${SPADE_DIR}/config/GeoIPCity.dat"
 export ASN_IP_DB="${SPADE_DIR}/config/GeoLiteASNum.dat"

@@ -27,20 +27,20 @@ var (
 
 	_config = tableConfig.NewStaticLoader(
 		map[string][]transformer.RedshiftType{
-			"login": []transformer.RedshiftType{
-				transformer.RedshiftType{
+			"login": {
+				{
 					Transformer: transformer.GetTransform("float"),
 					InboundName: "sampling_factor",
 				},
-				transformer.RedshiftType{
+				{
 					Transformer: transformer.GetTransform("varchar"),
 					InboundName: "distinct_id",
 				},
-				transformer.RedshiftType{
+				{
 					Transformer: transformer.GetTransform("f@timestamp@unix"),
 					InboundName: "time",
 				},
-				transformer.RedshiftType{
+				{
 					Transformer: transformer.GetTransform("f@timestamp@unix"),
 					InboundName: "client_time",
 				},
@@ -159,7 +159,8 @@ func (p *parseRequest) StartTime() time.Time {
 //
 //  Helper test functions
 //
-func buildTestPool(nConverters, nTransformers int, p parser.Parser, t transformer.Transformer) *SpadeProcessorPool {
+func buildTestPool(nConverters, nTransformers int, p parser.Parser, t transformer.Transformer,
+	w writer.SpadeWriter) *SpadeProcessorPool {
 	transformers := make([]*RequestTransformer, nTransformers)
 	converters := make([]*RequestConverter, nConverters)
 
@@ -187,6 +188,7 @@ func buildTestPool(nConverters, nTransformers int, p parser.Parser, t transforme
 		in:           requestChannel,
 		converters:   converters,
 		transformers: transformers,
+		writer:       w,
 	}
 }
 
@@ -240,12 +242,12 @@ func TestPanicRecoveryProcessing(t *testing.T) {
 		m:        &sync.Mutex{},
 		requests: make([]*writer.WriteRequest, 0, 2),
 	}
-	pP := buildTestPool(1, 1, &_panicParser{}, _transformer)
-	pP.Listen(w)
+	pP := buildTestPool(1, 1, &_panicParser{}, _transformer, w)
+	pP.StartListeners()
 	pP.Process(_exampleRequest)
 
-	pT := buildTestPool(1, 1, _parser, &_panicTransformer{})
-	pT.Listen(w)
+	pT := buildTestPool(1, 1, _parser, &_panicTransformer{}, w)
+	pT.StartListeners()
 	pT.Process(_exampleRequest)
 
 	time.Sleep(time.Second) // Hopefully enough wait time...
@@ -296,8 +298,8 @@ func TestEmptyPropertyProcessing(t *testing.T) {
 		requests: make([]*writer.WriteRequest, 0, 1),
 	}
 
-	p := buildTestPool(1, 1, _parser, _transformer)
-	p.Listen(w)
+	p := buildTestPool(1, 1, _parser, _transformer, w)
+	p.StartListeners()
 	p.Process(_exampleRequest)
 
 	time.Sleep(100 * time.Millisecond) // Hopefully enough wait time...
@@ -334,8 +336,8 @@ func TestRequestProcessing(t *testing.T) {
 
 		requests: make([]*writer.WriteRequest, 0, 1),
 	}
-	p := buildTestPool(1, 1, _parser, _transformer)
-	p.Listen(w)
+	p := buildTestPool(1, 1, _parser, _transformer, w)
+	p.StartListeners()
 	p.Process(_exampleRequest)
 
 	time.Sleep(100 * time.Millisecond) // Hopefully enough wait time...
@@ -371,8 +373,8 @@ func TestErrorRequestProcessing(t *testing.T) {
 
 		requests: make([]*writer.WriteRequest, 0, 1),
 	}
-	p := buildTestPool(1, 1, _parser, _transformer)
-	p.Listen(w)
+	p := buildTestPool(1, 1, _parser, _transformer, w)
+	p.StartListeners()
 	p.Process(_exampleRequest)
 
 	time.Sleep(100 * time.Millisecond) // Hopefully enough wait time...
@@ -396,7 +398,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 		now,
 	}
 	expected := map[string]*writer.WriteRequest{
-		"uuid1-0": &writer.WriteRequest{
+		"uuid1-0": {
 			Category: "login",
 			Version:  42,
 			Line:     "\"0.1500000059604645\"\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t\"2013-10-17 11:05:55\"\t\"2013-09-30 17:00:02\"",
@@ -404,7 +406,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 			Source:   []byte(expectedJSONBytes),
 			Pstart:   now,
 		},
-		"uuid1-1": &writer.WriteRequest{
+		"uuid1-1": {
 			Category: "login",
 			Version:  42,
 			Line:     "\"0.1500000059604645\"\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t\"2013-10-17 11:05:55\"\t\"2013-09-30 17:00:02\"",
@@ -412,7 +414,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 			Source:   []byte(expectedJSONBytes),
 			Pstart:   now,
 		},
-		"uuid1-2": &writer.WriteRequest{
+		"uuid1-2": {
 			Category: "login",
 			Version:  42,
 			Line:     "\"0.1500000059604645\"\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t\"2013-10-17 11:05:55\"\t\"2013-09-30 17:00:02\"",
@@ -420,7 +422,7 @@ func TestMultiRequestProcessing(t *testing.T) {
 			Source:   []byte(expectedJSONBytes),
 			Pstart:   now,
 		},
-		"uuid1-3": &writer.WriteRequest{
+		"uuid1-3": {
 			Category: "login",
 			Version:  42,
 			Line:     "\"0.1500000059604645\"\t\"FFFF8047-0398-40FF-FF89-5B3FFFFFF0E7\"\t\"2013-10-17 11:05:55\"\t\"2013-09-30 17:00:02\"",
@@ -434,8 +436,8 @@ func TestMultiRequestProcessing(t *testing.T) {
 
 		requests: make([]*writer.WriteRequest, 0, 1),
 	}
-	p := buildTestPool(5, 30, _parser, _transformer)
-	p.Listen(w)
+	p := buildTestPool(5, 30, _parser, _transformer, w)
+	p.StartListeners()
 	p.Process(_exampleRequest)
 
 	time.Sleep(time.Second) // Hopefully enough wait time...
@@ -473,8 +475,8 @@ func BenchmarkRequestProcessing(b *testing.B) {
 		r: make(chan *writer.WriteRequest),
 	}
 
-	rp := buildTestPool(15, 30, _parser, _transformer)
-	rp.Listen(w)
+	rp := buildTestPool(15, 30, _parser, _transformer, w)
+	rp.StartListeners()
 
 	b.ReportAllocs()
 	b.ResetTimer()
