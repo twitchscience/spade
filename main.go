@@ -21,6 +21,7 @@ import (
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	jsonLog "github.com/twitchscience/spade/parser/json"
+	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/uploader"
 	"github.com/twitchscience/spade/writer"
@@ -170,8 +171,9 @@ func main() {
 
 	fetcher := fetcher.New(config.BlueprintSchemasURL)
 	schemaLoader := createSchemaLoader(fetcher, reporterStats)
-	processorPool := createProcessorPool(schemaLoader, spadeReporter)
-	processorPool.Listen(multee)
+
+	processorPool := processor.BuildProcessorPool(schemaLoader, spadeReporter, multee)
+	processorPool.StartListeners()
 	consumer := createConsumer(session, stats)
 	rotation := time.Tick(rotationCheckFrequency)
 	sigc := make(chan os.Signal, 1)
