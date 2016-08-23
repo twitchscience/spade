@@ -244,6 +244,11 @@
 			"Rev": "d77da356e56a7428ad25149ca77381849a6a5232"
 		},
 		{
+			"ImportPath": "github.com/stretchr/testify/require",
+			"Comment": "v1.1.3-19-gd77da35",
+			"Rev": "d77da356e56a7428ad25149ca77381849a6a5232"
+		},
+		{
 			"ImportPath": "github.com/stvp/rollbar",
 			"Comment": "v0.4.0-6-g3eb4713",
 			"Rev": "3eb4713e2655cd1be805795be31b3f85b74b05fd"
@@ -308,16 +313,6 @@
 		{
 			"ImportPath": "golang.org/x/sys/unix",
 			"Rev": "b518c298ac9dc94b6ac0757394f50d10c5dfa25a"
-		},
-		{
-			"ImportPath": "github.com/stretchr/testify/vendor/github.com/davecgh/go-spew/spew",
-			"Comment": "v1.1.3-19-gd77da35",
-			"Rev": "d77da356e56a7428ad25149ca77381849a6a5232"
-		},
-		{
-			"ImportPath": "github.com/stretchr/testify/vendor/github.com/pmezard/go-difflib/difflib",
-			"Comment": "v1.1.3-19-gd77da35",
-			"Rev": "d77da356e56a7428ad25149ca77381849a6a5232"
 		}
 	]
 }

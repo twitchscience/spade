@@ -1,14 +1,11 @@
 package main
 
 import (
-	"bytes"
-	"compress/flate"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -18,8 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/patrickmn/go-cache"
 	"github.com/twitchscience/aws_utils/logger"
-	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
+	"github.com/twitchscience/spade/deglobber"
 	jsonLog "github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"
@@ -51,57 +48,6 @@ func init() {
 		fmt.Fprintf(os.Stderr, "failed to setup jsonLog parser: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-type parseRequest struct {
-	data  []byte
-	start time.Time
-}
-
-func (p *parseRequest) Data() []byte {
-	return p.data
-}
-
-func (p *parseRequest) StartTime() time.Time {
-	return p.start
-}
-
-func expandGlob(glob []byte) ([]*spade.Event, error) {
-	// Hack in just for kick over, test if the array is json
-	var e spade.Event
-	err := json.Unmarshal(glob, &e)
-	if err == nil && e.Version == 3 {
-		return []*spade.Event{&e}, nil
-	}
-	// End hack
-	compressed := bytes.NewBuffer(glob)
-
-	v, err := compressed.ReadByte()
-	if err != nil {
-		return nil, fmt.Errorf("Error reading version byte: %s", err)
-	}
-	if v != compressionVersion {
-		return nil, fmt.Errorf("Unknown version, got %v expected %v", v, compressionVersion)
-	}
-
-	deflator := flate.NewReader(compressed)
-	defer func() {
-		_ = deflator.Close()
-	}()
-
-	var decompressed bytes.Buffer
-	_, err = io.Copy(&decompressed, deflator)
-	if err != nil {
-		return nil, fmt.Errorf("Error decompressiong: %v", err)
-	}
-
-	var events []*spade.Event
-	err = json.Unmarshal(decompressed.Bytes(), &events)
-	if err != nil {
-		return nil, fmt.Errorf("Error Unmarhalling: %v", err)
-	}
-
-	return events, nil
 }
 
 func main() {
@@ -174,14 +120,22 @@ func main() {
 
 	processorPool := processor.BuildProcessorPool(schemaLoader, spadeReporter, multee)
 	processorPool.StartListeners()
+	duplicateCache := cache.New(duplicateCacheExpiry, duplicateCacheCleanupFrequency)
+	deglobberPool := deglobber.NewPool(deglobber.DeglobberPoolConfig{
+		ProcessorPool:      processorPool,
+		Stats:              stats,
+		DuplicateCache:     duplicateCache,
+		PoolSize:           runtime.NumCPU(),
+		CompressionVersion: compressionVersion,
+		SpadeReporter:      spadeReporter,
+	})
+	deglobberPool.Start()
 	consumer := createConsumer(session, stats)
 	rotation := time.Tick(rotationCheckFrequency)
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT)
-	duplicateCache := cache.New(duplicateCacheExpiry, duplicateCacheCleanupFrequency)
 
 	numGlobs := 0
-	numEvents := 0
 MainLoop:
 	for {
 		select {
@@ -194,9 +148,8 @@ MainLoop:
 			}
 			s := spadeReporter.Finalize()
 			logger.WithFields(map[string]interface{}{
-				"num_globs":  numGlobs,
-				"num_events": numEvents,
-				"stats":      s,
+				"num_globs": numGlobs,
+				"stats":     s,
 			}).Info("Processed data rotated to output")
 		case record := <-consumer.C:
 			if record.Error != nil {
@@ -205,36 +158,12 @@ MainLoop:
 			}
 
 			numGlobs++
-			events, err := expandGlob(record.Data)
-			if err != nil {
-				logger.WithError(err).Error("Failed to expand glob")
-				continue MainLoop
-			}
-
-			if len(events) == 0 {
-				continue MainLoop
-			}
-
-			_ = stats.Inc("record.count", 1, 1.0)
-			uuid := events[0].Uuid
-			if _, found := duplicateCache.Get(uuid); found {
-				logger.WithField("uuid", uuid).Info("Ignoring duplicate UUID")
-				_ = stats.Inc("record.dupe", 1, 1.0)
-			} else {
-				numEvents += len(events)
-				for _, e := range events {
-					now := time.Now()
-					_ = stats.TimingDuration("record.age", now.Sub(e.ReceivedAt), 1.0)
-					spadeReporter.IncrementExpected(1)
-					d, _ := spade.Marshal(e)
-					processorPool.Process(&parseRequest{data: d, start: time.Now()})
-				}
-			}
-			duplicateCache.Set(uuid, 0, cache.DefaultExpiration)
+			deglobberPool.Submit(record.Data)
 		}
 	}
 
 	consumer.Close()
+	deglobberPool.Close()
 	processorPool.Close()
 	if err := multee.Close(); err != nil {
 		logger.WithError(err).Error("multee.Close() failed")
