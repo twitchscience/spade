@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/twitchscience/spade/reporter"
 )
 
 type errorParser struct{}
@@ -60,19 +58,6 @@ func TestRegisterAndClearing(t *testing.T) {
 	}
 }
 
-type testReporter struct {
-	cnt int
-}
-
-func (t *testReporter) Record(_ *reporter.Result) {}
-func (t *testReporter) IncrementExpected(i int) {
-	t.cnt += i
-}
-func (t *testReporter) Reset() {}
-func (t *testReporter) Finalize() map[string]int {
-	return make(map[string]int, 1)
-}
-
 var receivedAt = time.Now()
 
 type logLine struct{}
@@ -88,7 +73,7 @@ func (l *logLine) StartTime() time.Time {
 func TestNoParserCall(t *testing.T) {
 	clearAll() // TODO: move to TestMain() when we move to go 1.4
 
-	fop := BuildSpadeParser(&testReporter{})
+	fop := BuildSpadeParser()
 	mes, err := fop.Parse(&logLine{})
 	if err == nil {
 		t.Fatalf("parser: expected error, didn't get one")
@@ -111,8 +96,7 @@ func TestParseCall(t *testing.T) {
 		{parser: &multiEventParser{}, expectedEvents: 2, expectError: false},
 	}
 
-	tr := &testReporter{}
-	fop := BuildSpadeParser(tr)
+	fop := BuildSpadeParser()
 	for _, tt := range tests {
 		clearAll()
 		assert.NoError(t, Register("current_parser", tt.parser))
@@ -126,19 +110,12 @@ func TestParseCall(t *testing.T) {
 		if len(mes) != tt.expectedEvents {
 			t.Fatalf("parser: unexpected number of events. Expected %d, got %d", tt.expectedEvents, len(mes))
 		}
-		if tt.expectedEvents > 1 && tr.cnt != (tt.expectedEvents-1) {
-			t.Fatalf(
-				"reporter: expected parser to increment expectation. Expected %d, got %d",
-				(tt.expectedEvents - 1),
-				tr.cnt,
-			)
-		}
 	}
 }
 
 func setupParsers(t *testing.T, ps ...Parser) Parser {
 	clearAll()
-	fop := BuildSpadeParser(&testReporter{})
+	fop := BuildSpadeParser()
 	for i, p := range ps {
 		assert.NoError(t, Register(fmt.Sprintf("parser%d", i), p))
 	}

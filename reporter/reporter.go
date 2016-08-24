@@ -3,7 +3,6 @@ package reporter
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/twitchscience/aws_utils/logger"
@@ -21,9 +20,7 @@ type StatsLogger interface {
 // Reporter Records Results and returns stats on them.
 type Reporter interface {
 	Record(*Result)
-	IncrementExpected(int)
-	Reset()
-	Finalize() map[string]int
+	Report() map[string]int
 }
 
 // Tracker Tracks Results in some external system.
@@ -44,9 +41,8 @@ type Result struct {
 // SpadeReporter is a Reporter that also sends stats to external Trackers.
 // It is NOT thread safe.
 type SpadeReporter struct {
-	Wait     *sync.WaitGroup
 	Trackers []Tracker
-	Stats    map[string]int
+	stats    map[string]int
 	record   chan *Result
 	report   chan chan map[string]int
 	reset    chan bool
@@ -73,12 +69,11 @@ type spadeAuditLog struct {
 	Failure    string
 }
 
-// BuildSpadeReporter builds a SpadeReporter on the given WaitGroup and Trackers.
-func BuildSpadeReporter(wait *sync.WaitGroup, trackers []Tracker) Reporter {
+// BuildSpadeReporter builds a SpadeReporter on the given Trackers and starts its goroutine.
+func BuildSpadeReporter(trackers []Tracker) Reporter {
 	r := &SpadeReporter{
-		Wait:     wait,
 		Trackers: trackers,
-		Stats:    make(map[string]int),
+		stats:    make(map[string]int),
 		record:   make(chan *Result, reportBuffer),
 		report:   make(chan chan map[string]int),
 		reset:    make(chan bool),
@@ -94,25 +89,15 @@ func (r *SpadeReporter) crank() {
 			for _, t := range r.Trackers {
 				t.Track(result)
 			}
-			r.Stats[result.Failure.String()]++
-			r.Wait.Done()
+			r.stats[result.Failure.String()]++
 		case responseChan := <-r.report:
-			c := make(map[string]int, len(r.Stats))
-			for k, v := range r.Stats {
+			c := make(map[string]int, len(r.stats))
+			for k, v := range r.stats {
 				c[k] = v
 			}
 			responseChan <- c
-		case <-r.reset:
-			for k := range r.Stats {
-				delete(r.Stats, k)
-			}
 		}
 	}
-}
-
-// IncrementExpected adds the given number to the WaitGroup.
-func (r *SpadeReporter) IncrementExpected(n int) {
-	r.Wait.Add(n)
 }
 
 // Record sends the given result to all trackers and our stats report.
@@ -126,18 +111,6 @@ func (r *SpadeReporter) Report() map[string]int {
 	defer close(responseChan)
 	r.report <- responseChan
 	return <-responseChan
-}
-
-// Finalize waits for processing to finish and returns a copy of the reporter's stat map.
-// Be sure to call Finalize only after all lines are parsed from log.
-func (r *SpadeReporter) Finalize() map[string]int {
-	r.Wait.Wait()
-	return r.Report()
-}
-
-// Reset resets our stat map.
-func (r *SpadeReporter) Reset() {
-	r.reset <- true
 }
 
 // Track sends the given result to statsd.

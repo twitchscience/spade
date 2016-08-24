@@ -3,8 +3,6 @@ package parser
 import (
 	"fmt"
 	"time"
-
-	"github.com/twitchscience/spade/reporter"
 )
 
 type parserEntry struct {
@@ -35,9 +33,7 @@ func Register(name string, p Parser) error {
 	return nil
 }
 
-type fanoutParser struct {
-	reporter reporter.Reporter
-}
+type fanoutParser struct{}
 
 func (f *fanoutParser) Parse(line Parseable) (events []MixpanelEvent, err error) {
 	numParsers := len(parsers)
@@ -52,9 +48,6 @@ func (f *fanoutParser) Parse(line Parseable) (events []MixpanelEvent, err error)
 		} else {
 			events = mes
 			err = e
-			if len(events) > 1 {
-				f.reporter.IncrementExpected(len(events) - 1)
-			}
 			// return the first successful parse
 			break
 		}
@@ -63,10 +56,8 @@ func (f *fanoutParser) Parse(line Parseable) (events []MixpanelEvent, err error)
 }
 
 // BuildSpadeParser returns a fanoutParser that uses the global parsers list.
-func BuildSpadeParser(r reporter.Reporter) Parser {
-	return &fanoutParser{
-		reporter: r,
-	}
+func BuildSpadeParser() Parser {
+	return &fanoutParser{}
 }
 
 // Parseable is a byte stream to be parsed associated with a time.

@@ -43,7 +43,7 @@ func BuildProcessorPool(configs transformer.ConfigLoader, rep reporter.Reporter,
 	for i := 0; i < nConverters; i++ {
 		converters[i] = &RequestConverter{
 			r:      rep,
-			parser: parser.BuildSpadeParser(rep),
+			parser: parser.BuildSpadeParser(),
 			in:     requestChannel,
 			out:    transport,
 			closer: make(chan bool),

@@ -127,7 +127,6 @@ func main() {
 		DuplicateCache:     duplicateCache,
 		PoolSize:           runtime.NumCPU(),
 		CompressionVersion: compressionVersion,
-		SpadeReporter:      spadeReporter,
 	})
 	deglobberPool.Start()
 	consumer := createConsumer(session, stats)
@@ -146,10 +145,9 @@ MainLoop:
 				logger.WithError(err).Error("multee.Rotate() failed")
 				break MainLoop
 			}
-			s := spadeReporter.Finalize()
 			logger.WithFields(map[string]interface{}{
 				"num_globs": numGlobs,
-				"stats":     s,
+				"stats":     spadeReporter.Report(),
 			}).Info("Processed data rotated to output")
 		case record := <-consumer.C:
 			if record.Error != nil {

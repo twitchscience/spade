@@ -3,7 +3,6 @@ package main
 // I need a better name for this file
 
 import (
-	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -27,7 +26,6 @@ const (
 
 func createSpadeReporter(stats reporter.StatsLogger, auditLogger *gologging.UploadLogger) reporter.Reporter {
 	return reporter.BuildSpadeReporter(
-		&sync.WaitGroup{},
 		[]reporter.Tracker{
 			&reporter.SpadeStatsdTracker{Stats: stats},
 			&reporter.SpadeUUIDTracker{Logger: auditLogger},

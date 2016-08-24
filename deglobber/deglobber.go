@@ -15,7 +15,6 @@ import (
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/processor"
-	"github.com/twitchscience/spade/reporter"
 )
 
 type parseRequest struct {
@@ -49,7 +48,6 @@ type DeglobberPoolConfig struct {
 	ProcessorPool      processor.Pool
 	Stats              statsd.Statter
 	DuplicateCache     *cache.Cache
-	SpadeReporter      reporter.Reporter
 	PoolSize           int
 	CompressionVersion byte
 }
@@ -137,7 +135,6 @@ func (dp *DeglobberPool) crank() {
 			for _, e := range events {
 				now := time.Now()
 				_ = dp.config.Stats.TimingDuration("record.age", now.Sub(e.ReceivedAt), 1.0)
-				dp.config.SpadeReporter.IncrementExpected(1)
 				d, _ := spade.Marshal(e)
 				dp.config.ProcessorPool.Process(&parseRequest{data: d, start: time.Now()})
 			}
