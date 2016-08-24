@@ -51,7 +51,7 @@ var (
 		},
 	)
 	_transformer = transformer.NewRedshiftTransformer(_config)
-	_parser      = parser.BuildSpadeParser(&dummyReporter{})
+	_parser      = parser.BuildSpadeParser()
 )
 
 func getPST() *time.Location {
@@ -131,15 +131,6 @@ func (w *benchTestWriter) Close() error {
 
 func (w *benchTestWriter) Rotate() (bool, error) {
 	return true, nil
-}
-
-type dummyReporter struct{}
-
-func (d *dummyReporter) Record(c *reporter.Result) {}
-func (d *dummyReporter) IncrementExpected(n int)   {}
-func (d *dummyReporter) Reset()                    {}
-func (d *dummyReporter) Finalize() map[string]int {
-	return make(map[string]int)
 }
 
 type parseRequest struct {

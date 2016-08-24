@@ -13,7 +13,6 @@ import (
 
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/parser"
-	"github.com/twitchscience/spade/reporter"
 )
 
 var (
@@ -75,7 +74,6 @@ func TestCrank(t *testing.T) {
 		CompressionVersion: 1,
 		Stats:              &statsd.NoopClient{},
 		ProcessorPool:      &mpp,
-		SpadeReporter:      &reporter.NoopReporter{},
 		DuplicateCache:     dc,
 		PoolSize:           1,
 	})
