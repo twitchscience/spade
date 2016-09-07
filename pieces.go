@@ -67,8 +67,12 @@ func createSchemaLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogge
 	return loader
 }
 
-func createConsumer(session *session.Session, stats statsd.Statter) *consumer.Consumer {
-	consumer, err := consumer.New(session, stats, config.Consumer)
+func createPipe(session *session.Session, stats statsd.Statter, replay bool) consumer.ResultPipe {
+	if replay {
+		return consumer.NewStandardInputPipe()
+	}
+
+	consumer, err := consumer.NewKinesisPipe(session, stats, config.Consumer)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create consumer")
 	}

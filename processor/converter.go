@@ -10,7 +10,7 @@ type RequestConverter struct {
 	r      reporter.Reporter
 	in     chan parser.Parseable
 	out    chan<- parser.MixpanelEvent
-	closer chan bool
+	done   chan bool
 	parser parser.Parser
 }
 
@@ -26,23 +26,19 @@ func (p *RequestConverter) Process(r parser.Parseable) (events []parser.Mixpanel
 	return p.parser.Parse(r)
 }
 
-// Close closes the RequestConverter by stopping the Listen() method.
-func (p *RequestConverter) Close() {
-	p.closer <- true
+// Wait waits for the input channel to flush.
+func (p *RequestConverter) Wait() {
+	<-p.done
 }
 
 // Listen sits in a loop Processing requests until the RequestConverter is Closed.
 func (p *RequestConverter) Listen() {
-	for {
-		select {
-		case request := <-p.in:
-			// ignore the error here beause the event will have status to report it.
-			events, _ := p.Process(request)
-			for _, event := range events {
-				p.out <- event
-			}
-		case <-p.closer:
-			return
+	for request := range p.in {
+		/* #nosec */ // any errors will be contained in the relevant events
+		events, _ := p.Process(request)
+		for _, event := range events {
+			p.out <- event
 		}
 	}
+	p.done <- true
 }

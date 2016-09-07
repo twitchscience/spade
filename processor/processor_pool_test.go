@@ -163,15 +163,15 @@ func buildTestPool(nConverters, nTransformers int, p parser.Parser, t transforme
 			parser: p,
 			in:     requestChannel,
 			out:    transport,
-			closer: make(chan bool),
+			done:   make(chan bool),
 		}
 	}
 
 	for i := 0; i < nTransformers; i++ {
 		transformers[i] = &RequestTransformer{
-			t:      t,
-			in:     transport,
-			closer: make(chan bool),
+			t:    t,
+			in:   transport,
+			done: make(chan bool),
 		}
 	}
 

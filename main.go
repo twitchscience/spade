@@ -41,6 +41,7 @@ const (
 var (
 	_dir        = flag.String("spade_dir", ".", "where does spade_log live?")
 	statsPrefix = flag.String("stat_prefix", "processor", "statsd prefix")
+	replay      = flag.Bool("replay", false, "take plaintext events (as in spade-edge-prod) from standard input")
 )
 
 func init() {
@@ -121,15 +122,18 @@ func main() {
 	processorPool := processor.BuildProcessorPool(schemaLoader, spadeReporter, multee)
 	processorPool.StartListeners()
 	duplicateCache := cache.New(duplicateCacheExpiry, duplicateCacheCleanupFrequency)
-	deglobberPool := deglobber.NewPool(deglobber.DeglobberPoolConfig{
+	deglobberPool := deglobber.NewPool(deglobber.PoolConfig{
 		ProcessorPool:      processorPool,
 		Stats:              stats,
 		DuplicateCache:     duplicateCache,
 		PoolSize:           runtime.NumCPU(),
 		CompressionVersion: compressionVersion,
+		ReplayMode:         *replay,
 	})
 	deglobberPool.Start()
-	consumer := createConsumer(session, stats)
+
+	resultPipe := createPipe(session, stats, *replay)
+
 	rotation := time.Tick(rotationCheckFrequency)
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT)
@@ -149,7 +153,12 @@ MainLoop:
 				"num_globs": numGlobs,
 				"stats":     spadeReporter.Report(),
 			}).Info("Processed data rotated to output")
-		case record := <-consumer.C:
+		case record, ok := <-resultPipe.ReadChannel():
+			if !ok {
+				logger.Info("Read channel closed")
+				break MainLoop
+			}
+
 			if record.Error != nil {
 				logger.WithError(record.Error).Error("Consumer failed")
 				break MainLoop
@@ -160,7 +169,7 @@ MainLoop:
 		}
 	}
 
-	consumer.Close()
+	resultPipe.Close()
 	deglobberPool.Close()
 	processorPool.Close()
 	if err := multee.Close(); err != nil {

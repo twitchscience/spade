@@ -1,4 +1,4 @@
-// deglobber uncompresses and unglobs events and checks for duplicates
+// Package deglobber decompresses and unglobs events and checks for duplicates.
 package deglobber
 
 import (
@@ -30,40 +30,34 @@ func (p *parseRequest) StartTime() time.Time {
 	return p.start
 }
 
-// Pool receives byte streams, transforms them, and sends them downstream.
-type Pool interface {
-	Submit([]byte)
-	Close()
-}
-
-// DeglobberPool is a Pool that turns byte streams into lists of events, then sends them
-// to a processor.Pool. It also handles deduping globs.
-type DeglobberPool struct {
+// Pool turns byte streams into lists of events, then sends them to a processor.Pool. It also handles deduping globs.
+type Pool struct {
 	globs  chan []byte
-	config DeglobberPoolConfig
+	config PoolConfig
 	wg     sync.WaitGroup
 }
 
-type DeglobberPoolConfig struct {
+// PoolConfig collects the configuration information for a Pool.
+type PoolConfig struct {
 	ProcessorPool      processor.Pool
 	Stats              statsd.Statter
 	DuplicateCache     *cache.Cache
 	PoolSize           int
 	CompressionVersion byte
+	ReplayMode         bool
 }
 
 // NewPool returns a pool for turning globs into lists of events.
-func NewPool(config DeglobberPoolConfig) *DeglobberPool {
-	dp := DeglobberPool{
+func NewPool(config PoolConfig) *Pool {
+	 return &Pool{
 		globs:  make(chan []byte, 1),
 		config: config,
 		wg:     sync.WaitGroup{},
 	}
-	return &dp
 }
 
 // Start starts the pool's goroutines.
-func (dp *DeglobberPool) Start() {
+func (dp *Pool) Start() {
 	for i := 0; i < dp.config.PoolSize; i++ {
 		dp.wg.Add(1)
 		logger.Go(dp.crank)
@@ -71,17 +65,17 @@ func (dp *DeglobberPool) Start() {
 }
 
 // Submit submits a glob to the pool for processing.
-func (dp *DeglobberPool) Submit(glob []byte) {
+func (dp *Pool) Submit(glob []byte) {
 	dp.globs <- glob
 }
 
 // Close stops all processing goroutines.
-func (dp *DeglobberPool) Close() {
+func (dp *Pool) Close() {
 	close(dp.globs)
 	dp.wg.Wait()
 }
 
-func (dp *DeglobberPool) expandGlob(glob []byte) (events []*spade.Event, err error) {
+func (dp *Pool) expandGlob(glob []byte) (events []*spade.Event, err error) {
 	compressed := bytes.NewBuffer(glob)
 
 	v, err := compressed.ReadByte()
@@ -113,9 +107,33 @@ func (dp *DeglobberPool) expandGlob(glob []byte) (events []*spade.Event, err err
 	return
 }
 
-func (dp *DeglobberPool) crank() {
+func (dp *Pool) processEvent(e *spade.Event) {
+	now := time.Now()
+	if err := dp.config.Stats.TimingDuration("record.age", now.Sub(e.ReceivedAt), 1.0); err != nil {
+		logger.WithError(err).Error("Failed to submit timing")
+	}
+	d, err := spade.Marshal(e)
+	if err != nil {
+		logger.WithError(err).WithField("event", e).Error("Failed to marshal event")
+	}
+	dp.config.ProcessorPool.Process(&parseRequest{data: d, start: time.Now()})
+}
+
+func (dp *Pool) crank() {
 	defer dp.wg.Done()
 	for glob := range dp.globs {
+		if dp.config.ReplayMode {
+			// In replay mode, the "glob" is really only one uncompressed event
+			var event spade.Event
+			err := json.Unmarshal(glob, &event)
+			if err != nil {
+				logger.WithError(err).Error("Failed to unmarshall event")
+				continue
+			}
+			dp.processEvent(&event)
+			continue
+		}
+
 		events, err := dp.expandGlob(glob)
 		if err != nil {
 			logger.WithError(err).Error("Failed to expand glob")
@@ -126,17 +144,21 @@ func (dp *DeglobberPool) crank() {
 			continue
 		}
 
-		_ = dp.config.Stats.Inc("record.count", 1, 1.0)
+		err = dp.config.Stats.Inc("record.count", 1, 1.0)
+		if err != nil {
+			logger.WithError(err).Error("Stats update failed")
+		}
+
 		uuid := events[0].Uuid
 		if _, found := dp.config.DuplicateCache.Get(uuid); found {
 			logger.WithField("uuid", uuid).Info("Ignoring duplicate UUID")
-			_ = dp.config.Stats.Inc("record.dupe", 1, 1.0)
+			err := dp.config.Stats.Inc("record.dupe", 1, 1.0)
+			if err != nil {
+				logger.WithError(err).Error("Stats update failed")
+			}
 		} else {
 			for _, e := range events {
-				now := time.Now()
-				_ = dp.config.Stats.TimingDuration("record.age", now.Sub(e.ReceivedAt), 1.0)
-				d, _ := spade.Marshal(e)
-				dp.config.ProcessorPool.Process(&parseRequest{data: d, start: time.Now()})
+				dp.processEvent(e)
 			}
 		}
 		dp.config.DuplicateCache.Set(uuid, 0, cache.DefaultExpiration)
