@@ -8,14 +8,14 @@ import (
 
 // RequestTransformer transforms MixpanelEvents and writes them out to a SpadeWriter.
 type RequestTransformer struct {
-	t      transformer.Transformer
-	in     <-chan parser.MixpanelEvent
-	closer chan bool
+	t    transformer.Transformer
+	in   <-chan parser.MixpanelEvent
+	done chan bool
 }
 
 // Close stops the transformer's Listen() method.
 func (p *RequestTransformer) Close() {
-	p.closer <- true
+	<-p.done
 }
 
 // Process transforms the given event into a WriteRequest.
@@ -31,12 +31,8 @@ func (p *RequestTransformer) Process(e *parser.MixpanelEvent) (request *writer.W
 
 // Listen listens for incoming events, transforms them, and writes them to the SpadeWriter.
 func (p *RequestTransformer) Listen(w writer.SpadeWriter) {
-	for {
-		select {
-		case <-p.closer:
-			return
-		case event := <-p.in:
-			w.Write(p.Process(&event))
-		}
+	for event := range p.in {
+		w.Write(p.Process(&event))
 	}
+	p.done <- true
 }

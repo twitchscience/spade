@@ -16,6 +16,7 @@ const (
 // QueueSize is the size of the buffer on the input and output channels for the pool.
 const QueueSize = 400000
 
+// Pool takes in parser.Parseable objects, produces MixpanelEvents from them, and writes those events to S3.
 type Pool interface {
 	StartListeners()
 	Process(parser.Parseable)
@@ -26,6 +27,7 @@ type Pool interface {
 type SpadeProcessorPool struct {
 	in           chan parser.Parseable
 	converters   []*RequestConverter
+	transport    chan parser.MixpanelEvent
 	transformers []*RequestTransformer
 	writer       writer.SpadeWriter
 }
@@ -46,21 +48,22 @@ func BuildProcessorPool(configs transformer.ConfigLoader, rep reporter.Reporter,
 			parser: parser.BuildSpadeParser(),
 			in:     requestChannel,
 			out:    transport,
-			closer: make(chan bool),
+			done:   make(chan bool),
 		}
 	}
 
 	for i := 0; i < nTransformers; i++ {
 		transformers[i] = &RequestTransformer{
-			t:      transformer.NewRedshiftTransformer(configs),
-			in:     transport,
-			closer: make(chan bool),
+			t:    transformer.NewRedshiftTransformer(configs),
+			in:   transport,
+			done: make(chan bool),
 		}
 	}
 
 	return &SpadeProcessorPool{
 		in:           requestChannel,
 		converters:   converters,
+		transport:    transport,
 		transformers: transformers,
 		writer:       writer,
 	}
@@ -69,9 +72,11 @@ func BuildProcessorPool(configs transformer.ConfigLoader, rep reporter.Reporter,
 // Close closes all converters and trnasformers in the pool.
 // Important: Ensure pool is drained before calling close.
 func (p *SpadeProcessorPool) Close() {
+	close(p.in)
 	for _, worker := range p.converters {
-		worker.Close()
+		worker.Wait()
 	}
+	close(p.transport)
 	for _, worker := range p.transformers {
 		worker.Close()
 	}

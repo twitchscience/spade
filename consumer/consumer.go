@@ -1,6 +1,7 @@
 package consumer
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"sync"
@@ -25,7 +26,7 @@ type Config struct {
 	// (Optional) Time for Kinsumer to sleep if there are no new records
 	ThrottleDelay string
 
-	// (Optional) Delay before the checkpoint for each shard is commited to the database
+	// (Optional) Delay before the checkpoint for each shard is committed to the database
 	CommitFrequency string
 
 	// (Optional) How frequently the list of shards are checked
@@ -35,14 +36,55 @@ type Config struct {
 	BufferSize int
 }
 
-// Result is the next data/error to be consumed from the kinsumer.
+// Result is the next data/error to be consumed from the kinsumer or standard input.
 type Result struct {
 	Data  []byte
 	Error error
 }
 
-// Consumer is an object that consumes events from Kinesis
-type Consumer struct {
+// ResultPipe consumes input from somewhere and provides Results through its ReadChannel.
+type ResultPipe interface {
+	// ReadChannel provides a channel from which the Results are read.
+	ReadChannel() <-chan *Result
+
+	// Close cleans up any resources associated with the pipe.
+	Close()
+}
+
+// StandardInputPipe is a ResultPipe that consumes plaintext events from standard input.
+type StandardInputPipe struct {
+	channel <-chan *Result
+}
+
+// NewStandardInputPipe sets up a StandardInputPipe.
+func NewStandardInputPipe() *StandardInputPipe {
+	channel := make(chan *Result)
+	logger.Go(func() {
+		defer close(channel)
+
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			bytes := append([]byte(nil), scanner.Bytes()...) // scanner reuses its buffer
+			err := scanner.Err()
+			channel <- &Result{Data: bytes, Error: err}
+			if err != nil {
+				return
+			}
+		}
+	})
+	return &StandardInputPipe{channel: channel}
+}
+
+// ReadChannel provides results which are single, uncompressed, decoded events.
+func (c *StandardInputPipe) ReadChannel() <-chan *Result {
+	return c.channel
+}
+
+// Close does nothing, as standard input closes automatically on EOF.
+func (c *StandardInputPipe) Close() {}
+
+// KinesisPipe is a ResultPipe that consumes globs of events from Kinesis.
+type KinesisPipe struct {
 	// C is used to read records off the kinsumer queue
 	C <-chan *Result
 
@@ -101,15 +143,19 @@ func configToKinsumerConfig(config Config) (kinsumer.Config, error) {
 	return kinsumerConfig, nil
 }
 
-// New returns a newly created Consumer
-func New(session *session.Session, stats statsd.Statter, config Config) (*Consumer, error) {
+// NewKinesisPipe returns a newly created KinesisPipe.
+func NewKinesisPipe(session *session.Session, stats statsd.Statter, config Config) (*KinesisPipe, error) {
 	kinsumerConfig, err := configToKinsumerConfig(config)
 	if err != nil {
 		return nil, err
 	}
 
 	kinsumerConfig = kinsumerConfig.WithStats(kstatsd.NewWithStatter(stats))
-	hostname, _ := os.Hostname()
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+
 	kinsumer, err := kinsumer.NewWithSession(
 		session,
 		config.StreamName,
@@ -117,7 +163,6 @@ func New(session *session.Session, stats statsd.Statter, config Config) (*Consum
 		hostname,
 		kinsumerConfig,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +173,7 @@ func New(session *session.Session, stats statsd.Statter, config Config) (*Consum
 	}
 
 	channel := make(chan *Result)
-	c := &Consumer{
+	c := &KinesisPipe{
 		kinsumer: kinsumer,
 		send:     channel,
 		C:        channel,
@@ -142,7 +187,7 @@ func New(session *session.Session, stats statsd.Statter, config Config) (*Consum
 	return c, nil
 }
 
-func (c *Consumer) crank() {
+func (c *KinesisPipe) crank() {
 	for {
 		d, err := c.kinsumer.Next()
 		select {
@@ -153,8 +198,13 @@ func (c *Consumer) crank() {
 	}
 }
 
-// Close closes down the kinesis consumption
-func (c *Consumer) Close() {
+// ReadChannel provides Results which are base-64 encoded, compressed lists of JSON records.
+func (c *KinesisPipe) ReadChannel() <-chan *Result {
+	return c.C
+}
+
+// Close closes down Kinesis consumption.
+func (c *KinesisPipe) Close() {
 	if c.kinsumer != nil {
 		c.kinsumer.Stop()
 		close(c.closer)

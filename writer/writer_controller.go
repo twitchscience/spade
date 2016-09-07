@@ -42,6 +42,11 @@ func getInt64FromEnv(target string, def int64) int64 {
 type SpadeWriter interface {
 	Write(*WriteRequest)
 	Close() error
+
+	// Rotate requests a rotation from the SpadeWriter, which *may* write to S3 or Kinesis depending on timing and
+	// amount of information already buffered.  This should be called periodically, as this is the only time a
+	// SpadeWriter will write to its sink (except on Close).  It returns a bool indicating whether all sinks were
+	// written to and one of the errors which arose in writing (if any).
 	Rotate() (bool, error)
 }
 

@@ -47,7 +47,7 @@ func compressBytes(t *testing.T, compressionVersion byte, data []byte) []byte {
 
 // Test that the glob is correctly decompressed.
 func TestExpandGlobNominal(t *testing.T) {
-	dp := NewPool(DeglobberPoolConfig{
+	dp := NewPool(PoolConfig{
 		CompressionVersion: 1,
 	})
 	events, err := dp.expandGlob(compressBytes(t, 1, testMsg1))
@@ -59,7 +59,7 @@ func TestExpandGlobNominal(t *testing.T) {
 
 // Test that a bad decompression version causes an error.
 func TestExpandGlobBadVersion(t *testing.T) {
-	dp := NewPool(DeglobberPoolConfig{
+	dp := NewPool(PoolConfig{
 		CompressionVersion: 2,
 	})
 	_, err := dp.expandGlob(compressBytes(t, 1, testMsg1))
@@ -70,7 +70,7 @@ func TestExpandGlobBadVersion(t *testing.T) {
 func TestCrank(t *testing.T) {
 	mpp := mockProcessorPool{}
 	dc := cache.New(time.Minute, time.Minute)
-	dp := NewPool(DeglobberPoolConfig{
+	dp := NewPool(PoolConfig{
 		CompressionVersion: 1,
 		Stats:              &statsd.NoopClient{},
 		ProcessorPool:      &mpp,
