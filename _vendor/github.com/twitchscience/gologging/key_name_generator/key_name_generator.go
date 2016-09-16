@@ -25,6 +25,12 @@ type ProcessorKeyNameGenerator struct {
 	Info *InstanceInfo
 }
 
+// Fulfills the aws_utils/uploader.S3KeyNameGenerator interface.
+type ReplayKeyNameGenerator struct {
+	Info   *InstanceInfo
+	RunTag string
+}
+
 func (gen *EdgeKeyNameGenerator) GetKeyName(filename string) string {
 	now := time.Now()
 	b := make([]byte, 8)
@@ -38,8 +44,7 @@ func (gen *EdgeKeyNameGenerator) GetKeyName(filename string) string {
 	)
 }
 
-func (gen *ProcessorKeyNameGenerator) GetKeyName(filename string) string {
-	now := time.Now()
+func getRedshiftKeyName(filename string, info *InstanceInfo, now time.Time, runTag string) string {
 	path := strings.LastIndex(filename, "/") + 1
 	ext := strings.Index(filename, ".")
 	if ext < 0 {
@@ -53,11 +58,20 @@ func (gen *ProcessorKeyNameGenerator) GetKeyName(filename string) string {
 	}
 
 	return fmt.Sprintf("%s/%s/%s/%s/%s.%d.log.gz",
-		now.Format("20060102"),
+		runTag,
 		filename[path:ext],
 		filename[vStart:vEnd],
-		gen.Info.AutoScaleGroup,
-		gen.Info.Node,
+		info.AutoScaleGroup,
+		info.Node,
 		now.Unix(),
 	)
+}
+
+func (gen *ProcessorKeyNameGenerator) GetKeyName(filename string) string {
+	now := time.Now()
+	return getRedshiftKeyName(filename, gen.Info, now, now.Format("20060102"))
+}
+
+func (gen *ReplayKeyNameGenerator) GetKeyName(filename string) string {
+	return getRedshiftKeyName(filename, gen.Info, time.Now(), gen.RunTag)
 }
