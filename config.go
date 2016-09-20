@@ -82,7 +82,6 @@ func validateConfig() error {
 	for _, str := range []string{
 		config.BlueprintSchemasURL,
 		config.ProcessorErrorTopicARN,
-		config.AceTopicARN,
 		config.AceErrorTopicARN,
 		config.NonTrackedTopicARN,
 		config.NonTrackedErrorTopicARN,
@@ -99,6 +98,11 @@ func validateConfig() error {
 			return errors.New("Empty string found for required config option.")
 		}
 	}
+
+	if !*replay && config.AceTopicARN == "" {
+		return errors.New("Empty string found for required config option.")
+	}
+
 	for _, i := range []int64{
 		config.SQSPollInterval,
 		config.MaxLogBytes,
