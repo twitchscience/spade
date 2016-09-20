@@ -42,6 +42,7 @@ var (
 	_dir        = flag.String("spade_dir", ".", "where does spade_log live?")
 	statsPrefix = flag.String("stat_prefix", "processor", "statsd prefix")
 	replay      = flag.Bool("replay", false, "take plaintext events (as in spade-edge-prod) from standard input")
+	runTag      = flag.String("run_tag", "", "override YYYYMMDD tag with new prefix (usually for replay)")
 )
 
 func init() {
@@ -107,7 +108,7 @@ func main() {
 	auditLogger := newAuditLogger(sns, s3Uploader)
 	reporterStats := reporter.WrapCactusStatter(stats, 0.1)
 	spadeReporter := createSpadeReporter(reporterStats, auditLogger)
-	spadeUploaderPool := uploader.BuildUploaderForRedshift(redshiftUploaderNumWorkers, sns, s3Uploader, config.AceBucketName, config.AceTopicARN, config.AceErrorTopicARN)
+	spadeUploaderPool := uploader.BuildUploaderForRedshift(redshiftUploaderNumWorkers, sns, s3Uploader, config.AceBucketName, config.AceTopicARN, config.AceErrorTopicARN, *runTag, *replay)
 	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(blueprintUploaderNumWorkers, sns, s3Uploader, config.NonTrackedBucketName, config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN)
 
 	multee := &writer.Multee{}

@@ -25,8 +25,24 @@ type SNSNotifierHarness struct {
 	notifier *notifier.SNSClient
 }
 
-// BuildSNSNotifierHarness builds an SNSNotifierHarness writing to the given ARN.
-func BuildSNSNotifierHarness(sns snsiface.SNSAPI, topicARN string) *SNSNotifierHarness {
+// SendMessage sends information to SNS about file uploaded to S3.
+func (s *SNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
+	return s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, extractEventVersion(message.Path))
+}
+
+// NullNotifierHarness is a stub SNS client that does nothing.  In replay mode, we don't need to notify anyone of the
+// newly uploaded files.
+type NullNotifierHarness struct{}
+
+func (n *NullNotifierHarness) SendMessage(_ *uploader.UploadReceipt) error {
+	return nil
+}
+
+func buildNotifierHarness(sns snsiface.SNSAPI, topicARN string, replay bool) uploader.NotifierHarness {
+	if replay {
+		return &NullNotifierHarness{}
+	}
+
 	client := notifier.BuildSNSClient(sns)
 	client.Signer.RegisterMessageType("uploadNotify", func(args ...interface{}) (string, error) {
 		if len(args) != 3 {
@@ -44,15 +60,7 @@ func BuildSNSNotifierHarness(sns snsiface.SNSAPI, topicARN string) *SNSNotifierH
 		}
 		return string(jsonMessage), nil
 	})
-	return &SNSNotifierHarness{
-		topicARN: topicARN,
-		notifier: client,
-	}
-}
-
-// SendMessage sends information to SNS about file uploaded to S3.
-func (s *SNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
-	return s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, extractEventVersion(message.Path))
+	return &SNSNotifierHarness{topicARN: topicARN, notifier: client}
 }
 
 func extractEventName(filename string) string {
@@ -162,6 +170,7 @@ type buildUploaderInput struct {
 	sns              snsiface.SNSAPI
 	s3Uploader       s3manageriface.UploaderAPI
 	keyNameGenerator uploader.S3KeyNameGenerator
+	nullNotifier     bool
 }
 
 func buildUploader(input *buildUploaderInput) *uploader.UploaderPool {
@@ -171,14 +180,22 @@ func buildUploader(input *buildUploaderInput) *uploader.UploaderPool {
 			notifier: notifier.BuildSNSClient(input.sns),
 			topicARN: input.errorTopicARN,
 		},
-		BuildSNSNotifierHarness(input.sns, input.topicARN),
+		buildNotifierHarness(input.sns, input.topicARN, input.nullNotifier),
 		uploader.NewFactory(input.bucketName, input.keyNameGenerator, input.s3Uploader),
 	)
 }
 
+func redshiftKeyNameGenerator(info *gen.InstanceInfo, runTag string, replay bool) uploader.S3KeyNameGenerator {
+	if replay {
+		return &gen.ReplayKeyNameGenerator{Info: info, RunTag: runTag}
+	} else {
+		return &gen.ProcessorKeyNameGenerator{Info: info}
+	}
+}
+
 // BuildUploaderForRedshift builds an Uploader that uploads files to s3 and notifies sns.
 func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI,
-	aceBucketName, aceTopicARN, aceErrorTopicARN string) *uploader.UploaderPool {
+	aceBucketName, aceTopicARN, aceErrorTopicARN, runTag string, replay bool) *uploader.UploaderPool {
 	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
 
 	return buildUploader(&buildUploaderInput{
@@ -188,7 +205,8 @@ func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3
 		numWorkers:       numWorkers,
 		sns:              sns,
 		s3Uploader:       s3Uploader,
-		keyNameGenerator: &gen.ProcessorKeyNameGenerator{Info: info},
+		keyNameGenerator: redshiftKeyNameGenerator(info, runTag, replay),
+		nullNotifier:     replay,
 	})
 }
 
