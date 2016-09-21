@@ -116,9 +116,9 @@ func (r *SpadeReporter) Report() map[string]int {
 // Track sends the given result to statsd.
 func (s *SpadeStatsdTracker) Track(result *Result) {
 	if result.Failure == None || result.Failure == SkippedColumn {
-		s.Stats.IncrBy(fmt.Sprintf("%s.success", result.Category), 1)
+		s.Stats.IncrBy(fmt.Sprintf("tracking.%s.success", result.Category), 1)
 	} else {
-		s.Stats.IncrBy(fmt.Sprintf("%s.fail", result.Category), 1)
+		s.Stats.IncrBy(fmt.Sprintf("tracking.%s.fail", result.Category), 1)
 	}
 	s.Stats.Timing(fmt.Sprintf("%d", result.Failure), result.Duration)
 }

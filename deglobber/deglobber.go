@@ -49,7 +49,7 @@ type PoolConfig struct {
 
 // NewPool returns a pool for turning globs into lists of events.
 func NewPool(config PoolConfig) *Pool {
-	 return &Pool{
+	return &Pool{
 		globs:  make(chan []byte, 1),
 		config: config,
 		wg:     sync.WaitGroup{},
@@ -109,7 +109,7 @@ func (dp *Pool) expandGlob(glob []byte) (events []*spade.Event, err error) {
 
 func (dp *Pool) processEvent(e *spade.Event) {
 	now := time.Now()
-	if err := dp.config.Stats.TimingDuration("record.age", now.Sub(e.ReceivedAt), 1.0); err != nil {
+	if err := dp.config.Stats.TimingDuration("event.age", now.Sub(e.ReceivedAt), 0.1); err != nil {
 		logger.WithError(err).Error("Failed to submit timing")
 	}
 	d, err := spade.Marshal(e)
@@ -137,6 +137,10 @@ func (dp *Pool) crank() {
 		events, err := dp.expandGlob(glob)
 		if err != nil {
 			logger.WithError(err).Error("Failed to expand glob")
+			err = dp.config.Stats.Inc("record.failures", 1, 1.0)
+			if err != nil {
+				logger.WithError(err).Error("Stats update failed")
+			}
 			continue
 		}
 
