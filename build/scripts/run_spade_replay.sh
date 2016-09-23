@@ -3,7 +3,7 @@ set -e -u -o pipefail
 
 RUN_TAG="$1"
 
-SPADE_DIR="/opt/science/spade"
+SPADE_DIR="/opt/science/replay"
 source "${SPADE_DIR}/bin/run_spade_base.sh"
 
 exec ${SPADE_DIR}/bin/spade -replay \
