@@ -35,6 +35,7 @@ const (
 	rotationCheckFrequency              = 2 * time.Second
 	duplicateCacheExpiry                = 5 * time.Minute
 	duplicateCacheCleanupFrequency      = 1 * time.Minute
+	networkTimeout                      = 6200 * time.Millisecond
 	compressionVersion             byte = 1
 )
 
@@ -63,13 +64,13 @@ func main() {
 	// aws resources
 	session := session.New(&aws.Config{
 		HTTPClient: &http.Client{
-			Timeout: 6200 * time.Millisecond,
+			Timeout: networkTimeout,
 			Transport: &http.Transport{
 				Dial: (&net.Dialer{
-					Timeout:   6200 * time.Millisecond,
+					Timeout:   networkTimeout,
 					KeepAlive: 30 * time.Second,
 				}).Dial,
-				TLSHandshakeTimeout: 6200 * time.Millisecond,
+				TLSHandshakeTimeout: networkTimeout,
 				MaxIdleConnsPerHost: 100,
 			},
 		},
