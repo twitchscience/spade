@@ -301,19 +301,19 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
-			"Rev": "d7b8291a9ed3a4134248bb1f23e2ddf91db2f81b"
+			"Rev": "1b1f46e747aae6f8194b71eb5eff15c9e2101e6d"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/scoop_protocol",
-			"Rev": "d7b8291a9ed3a4134248bb1f23e2ddf91db2f81b"
+			"Rev": "1b1f46e747aae6f8194b71eb5eff15c9e2101e6d"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/spade",
-			"Rev": "d7b8291a9ed3a4134248bb1f23e2ddf91db2f81b"
+			"Rev": "1b1f46e747aae6f8194b71eb5eff15c9e2101e6d"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/transformer",
-			"Rev": "d7b8291a9ed3a4134248bb1f23e2ddf91db2f81b"
+			"Rev": "1b1f46e747aae6f8194b71eb5eff15c9e2101e6d"
 		},
 		{
 			"ImportPath": "golang.org/x/sys/unix",
