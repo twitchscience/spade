@@ -49,11 +49,11 @@ func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writ
 	log.SetOutput(bytes.NewBuffer(make([]byte, 0, 256))) // silence log output
 	config := &testLoader{
 		Configs: map[string][]RedshiftType{
-			"login": []RedshiftType{
-				RedshiftType{intFormat(64), "times", "times"},
-				RedshiftType{floatFormat, "fraction", "fraction"},
-				RedshiftType{varcharFormat, "name", "name"},
-				RedshiftType{unixTimeFormat, "now", "now"},
+			"login": {
+				{intFormat(64), "times", "times"},
+				{floatFormat, "fraction", "fraction"},
+				{varcharFormat, "name", "name"},
+				{genUnixTimeFormat(PST), "now", "now"},
 			},
 		},
 		Versions: map[string]int{

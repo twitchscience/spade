@@ -194,28 +194,32 @@ func floatFormat(target interface{}) (string, error) {
 	return strconv.FormatFloat(f, 'f', -1, 64), nil
 }
 
-func unixTimeFormat(target interface{}) (string, error) {
-	t, ok := target.(json.Number)
-	if !ok {
-		return "", genError(target, "Time: unix")
-	}
-	i, err := t.Float64()
-	if err != nil {
-		return "", err
-	}
+func genUnixTimeFormat(timezone *time.Location) ColumnTransformer {
+	return func(target interface{}) (string, error) {
+		t, ok := target.(json.Number)
+		if !ok {
+			return "", genError(target, "Time: unix")
+		}
+		i, err := t.Float64()
+		if err != nil {
+			return "", err
+		}
 
-	seconds := math.Trunc(i)
-	nanos := (i - seconds) * float64(time.Second)
-	// we also error if the year will be converted into a > 4 digit number
-	if seconds < timeLowerBound || seconds > fiveDigitYearCutoff {
-		return "", genError(target, "Time: unix")
+		seconds := math.Trunc(i)
+		nanos := (i - seconds) * float64(time.Second)
+		// we also error if the year will be converted into a > 4 digit number
+		if seconds < timeLowerBound || seconds > fiveDigitYearCutoff {
+			return "", genError(target, "Time: unix")
+		}
+		return time.Unix(int64(seconds), int64(nanos)).In(timezone).Format(RedshiftDatetimeIngestString), nil
 	}
-	return time.Unix(int64(seconds), int64(nanos)).In(PST).Format(RedshiftDatetimeIngestString), nil
 }
 
 func genTimeFormat(format string) ColumnTransformer {
 	if format == "unix" {
-		return unixTimeFormat
+		return genUnixTimeFormat(PST)
+	} else if format == "unix-utc" {
+		return genUnixTimeFormat(time.UTC)
 	}
 	return func(target interface{}) (string, error) {
 		str, ok := target.(string)

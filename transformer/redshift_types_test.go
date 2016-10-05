@@ -5,12 +5,13 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/twitchscience/scoop_protocol/transformer"
 )
 
 var (
-	exportedTransformGenerators = []string{"f@timestamp@unix"}
+	exportedTransformGenerators = []string{"f@timestamp@unix", "f@timestamp@unix-utc"}
 )
 
 func _typeRunner(t *testing.T, input interface{}, _type RedshiftType,
@@ -88,10 +89,22 @@ func TestVarCharConversion(t *testing.T) {
 	_typeRunner(t, json.Number("1234.0"), normalVarChar, "", true)
 }
 
-func TestTimestampConversion(t *testing.T) {
-	unixDateTime := RedshiftType{unixTimeFormat, "_", "_"}
+func TestUnixTimestampConversion(t *testing.T) {
+	unixDateTime := RedshiftType{genUnixTimeFormat(PST), "_", "_"}
 	_typeRunner(t, json.Number("1382033155.045"), unixDateTime, "2013-10-17 11:05:55.045", false)
 	_typeRunner(t, json.Number("1382033155"), unixDateTime, "2013-10-17 11:05:55", false)
+	_typeRunner(t, json.Number("138203315"), unixDateTime, "", true)
+	_typeRunner(t, "asd", unixDateTime, "", true)
+
+	otherDateTime := RedshiftType{genTimeFormat("2006-01-02 15:04:05"), "_", "_"}
+	_typeRunner(t, "2013-10-17 11:05:55", otherDateTime, "2013-10-17 11:05:55", false)
+	_typeRunner(t, "2013-10-17 105:55", otherDateTime, "", true)
+}
+
+func TestUnixUTCTimestampConversion(t *testing.T) {
+	unixDateTime := RedshiftType{genUnixTimeFormat(time.UTC), "_", "_"}
+	_typeRunner(t, json.Number("1382033155.045"), unixDateTime, "2013-10-17 18:05:55.045", false)
+	_typeRunner(t, json.Number("1382033155"), unixDateTime, "2013-10-17 18:05:55", false)
 	_typeRunner(t, json.Number("138203315"), unixDateTime, "", true)
 	_typeRunner(t, "asd", unixDateTime, "", true)
 
