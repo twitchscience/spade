@@ -14,6 +14,10 @@ type Config struct {
 	// MaxSize is the max combined size of the batch
 	MaxSize int
 
+	// MaxEntries is the max number of entries that can be batched together
+	// if batches does not have an entry limit, set MaxEntries as -1
+	MaxEntries int
+
 	// MaxAge is the max age of the oldest entry in the glob
 	MaxAge string
 
@@ -39,6 +43,10 @@ func (c *Config) Validate() error {
 		return errors.New("MaxSize must be a positive value")
 	}
 
+	if c.MaxEntries <= 0 && c.MaxEntries != -1 {
+		return errors.New("MaxEntries must be a positive value or -1")
+	}
+
 	if c.BufferLength == 0 {
 		return errors.New("BufferLength must be a positive value")
 	}
@@ -53,13 +61,14 @@ type Complete func([][]byte)
 // A Batcher will batch togther a slice of byte slices, based
 // on a size and timer criteria
 type Batcher struct {
-	config      Config
-	completor   Complete
-	incoming    chan []byte
-	pending     [][]byte
-	pendingSize int
-	timer       *time.Timer
-	maxAge      time.Duration
+	config         Config
+	completor      Complete
+	incoming       chan []byte
+	pending        [][]byte
+	pendingSize    int
+	pendingEntries int
+	timer          *time.Timer
+	maxAge         time.Duration
 
 	sync.WaitGroup
 }
@@ -99,7 +108,8 @@ func (b *Batcher) Close() {
 
 func (b *Batcher) add(entry []byte) {
 	s := len(entry) + b.pendingSize
-	if s > b.config.MaxSize {
+	if s > b.config.MaxSize ||
+		(b.config.MaxEntries != -1 && b.pendingEntries >= b.config.MaxEntries) {
 		b.complete()
 	}
 
@@ -109,7 +119,7 @@ func (b *Batcher) add(entry []byte) {
 
 	b.pending = append(b.pending, entry)
 	b.pendingSize += len(entry)
-
+	b.pendingEntries++
 }
 
 func (b *Batcher) complete() {
@@ -120,6 +130,7 @@ func (b *Batcher) complete() {
 	b.completor(b.pending)
 	b.pending = nil
 	b.pendingSize = 0
+	b.pendingEntries = 0
 }
 
 func (b *Batcher) worker() {

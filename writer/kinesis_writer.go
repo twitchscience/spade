@@ -24,6 +24,7 @@ type KinesisWriterConfig struct {
 	StreamName           string
 	StreamRole           string
 	StreamType           string // StreamType should be either "stream" or "firehose"
+	Compress             bool   // true if compress data with flate, false to output json
 	BufferSize           int
 	MaxAttemptsPerRecord int
 	RetryDelay           string
@@ -187,7 +188,6 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config K
 	w.batcher, err = batcher.New(config.Batcher, func(b [][]byte) {
 		w.batches <- b
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,6 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config K
 	w.globber, err = globber.New(config.Globber, func(b []byte) {
 		w.batcher.Submit(b)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -234,16 +233,22 @@ func (w *KinesisWriter) submit(name string, columns map[string]string) {
 	}
 
 	if len(pruned) > 0 {
-		err := w.globber.Submit(struct {
-			Name   string
-			Fields map[string]string
-		}{
-			Name:   name,
-			Fields: pruned,
-		})
-		if err != nil {
-			logger.WithError(err).WithField("name", name).Error(
-				"Failed to Submit to globber")
+		// if we want data compressed, we send it to globber
+		if w.config.Compress {
+			err := w.globber.Submit(struct {
+				Name   string
+				Fields map[string]string
+			}{
+				Name:   name,
+				Fields: pruned,
+			})
+			if err != nil {
+				logger.WithError(err).WithField("name", name).Error(
+					"Failed to Submit to globber")
+			}
+		} else {
+			e, _ := json.Marshal(pruned)
+			w.batcher.Submit(e)
 		}
 	}
 }
@@ -295,6 +300,12 @@ type record struct {
 	Data    []byte
 }
 
+type jsonRecord struct {
+	UUID    string
+	Version int
+	Data    map[string]string
+}
+
 // SendBatch writes the given batch to a stream, configured by the KinesisWriter
 func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 	if len(batch) == 0 {
@@ -304,11 +315,24 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 	records := make([]*kinesis.PutRecordsRequestEntry, len(batch))
 	for i, e := range batch {
 		UUID := uuid.NewV4()
-		data, _ := json.Marshal(&record{
-			UUID:    UUID.String(),
-			Version: version,
-			Data:    e,
-		})
+		var data []byte
+		if w.config.Compress {
+			// if we are sending compressed data, send it as is
+			data, _ = json.Marshal(&record{
+				UUID:    UUID.String(),
+				Version: version,
+				Data:    e,
+			})
+		} else {
+			// if sending uncompressed json, remarshal batch into new objects
+			var unpacked map[string]string
+			_ = json.Unmarshal(e, &unpacked)
+			data, _ = json.Marshal(&jsonRecord{
+				UUID:    UUID.String(),
+				Version: version,
+				Data:    unpacked,
+			})
+		}
 		records[i] = &kinesis.PutRecordsRequestEntry{
 			PartitionKey: aws.String(UUID.String()),
 			Data:         data,
@@ -390,11 +414,24 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 	records := make([]*firehose.Record, len(batch))
 	for i, e := range batch {
 		UUID := uuid.NewV4()
-		data, _ := json.Marshal(&record{
-			UUID:    UUID.String(),
-			Version: version,
-			Data:    e,
-		})
+		var data []byte
+		if w.config.Compress {
+			// if we are sending compressed data, send it as is
+			data, _ = json.Marshal(&record{
+				UUID:    UUID.String(),
+				Version: version,
+				Data:    e,
+			})
+		} else {
+			// if sending uncompressed json, remarshal batch into new objects
+			var unpacked map[string]string
+			_ = json.Unmarshal(e, &unpacked)
+			data, _ = json.Marshal(&jsonRecord{
+				UUID:    UUID.String(),
+				Version: version,
+				Data:    unpacked,
+			})
+		}
 		// Add '\n' as a record separator
 		data = append(data, '\n')
 		records[i] = &firehose.Record{
