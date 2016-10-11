@@ -2,7 +2,6 @@ package gologging
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/twitchscience/aws_utils/uploader"
@@ -66,7 +65,7 @@ func (w *FileLogS3Writer) Close() {
 }
 
 func StartS3LogWriter(uploader *uploader.UploaderPool, info *gen.InstanceInfo, coordinator *RotateCoordinator) (*FileLogS3Writer, error) {
-	filename := fmt.Sprintf("%s/%s.%d.log.gz", info.LoggingDir, info.Service, os.Getpid())
+	filename := fmt.Sprintf("%s/%s.log.gz", info.LoggingDir, info.Service)
 	stackInterrupt := make(chan bool)
 	interrupt := make(chan bool)
 	writeStack, err := file_writer.BuildWriterStack(
