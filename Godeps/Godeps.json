@@ -281,15 +281,15 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/file_writer",
-			"Rev": "466a4eb9056b2ca7a77712d799728911322507b2"
+			"Rev": "1f8978ab7c8dfd6ca8fbb721181bce72c88c5388"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/gologging",
-			"Rev": "466a4eb9056b2ca7a77712d799728911322507b2"
+			"Rev": "1f8978ab7c8dfd6ca8fbb721181bce72c88c5388"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/key_name_generator",
-			"Rev": "466a4eb9056b2ca7a77712d799728911322507b2"
+			"Rev": "1f8978ab7c8dfd6ca8fbb721181bce72c88c5388"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/kinsumer",
