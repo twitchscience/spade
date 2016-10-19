@@ -6,6 +6,8 @@ then
     export GOMAXPROCS=$CORE_COUNT
 fi
 
+source /etc/environment
+
 export GEO_IP_DB="${SPADE_DIR}/config/GeoIPCity.dat"
 export ASN_IP_DB="${SPADE_DIR}/config/GeoLiteASNum.dat"
 SPADE_DATA_DIR="${SPADE_DIR}/data"
