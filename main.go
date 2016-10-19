@@ -145,6 +145,7 @@ MainLoop:
 	for {
 		select {
 		case <-sigc:
+			logger.Info("Sigint received -- shutting down")
 			break MainLoop
 		case <-rotation:
 			if _, err := multee.Rotate(); err != nil {
@@ -193,5 +194,6 @@ MainLoop:
 	spadeUploaderPool.Close()
 
 	blueprintUploaderPool.Close()
+	logger.Info("Exiting main cleanly.")
 	logger.Wait()
 }
