@@ -90,7 +90,7 @@ type ProcessorErrorHandler struct {
 
 // SendError sends the sending error to an topic.
 func (p *ProcessorErrorHandler) SendError(err error) {
-	logger.WithError(err).Error("")
+	logger.WithError(err).Error("Error sending message to topic")
 	e := p.notifier.SendMessage("error", p.topicARN, err)
 	if e != nil {
 		logger.WithError(e).Error("Failed to send error")
