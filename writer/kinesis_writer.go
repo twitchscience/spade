@@ -18,6 +18,11 @@ import (
 	"github.com/twitchscience/spade/globber"
 )
 
+const (
+	// RedshiftDatetimeIngestString is the format of timestamps that Redshift understands.
+	RedshiftDatetimeIngestString = "2006-01-02 15:04:05.999"
+)
+
 // KinesisWriterConfig is used to configure a KinesisWriter
 // and its nested globber and batcher objects
 type KinesisWriterConfig struct {
@@ -295,15 +300,17 @@ func (w *KinesisWriter) sendWorker() {
 const version = 1
 
 type record struct {
-	UUID    string
-	Version int
-	Data    []byte
+	UUID      string
+	Version   int
+	Data      []byte
+	CreatedAt string
 }
 
 type jsonRecord struct {
-	UUID    string
-	Version int
-	Data    map[string]string
+	UUID      string
+	Version   int
+	Data      map[string]string
+	CreatedAt string
 }
 
 // SendBatch writes the given batch to a stream, configured by the KinesisWriter
@@ -319,18 +326,20 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 		if w.config.Compress {
 			// if we are sending compressed data, send it as is
 			data, _ = json.Marshal(&record{
-				UUID:    UUID.String(),
-				Version: version,
-				Data:    e,
+				UUID:      UUID.String(),
+				Version:   version,
+				Data:      e,
+				CreatedAt: time.Now().UTC().Format(RedshiftDatetimeIngestString),
 			})
 		} else {
 			// if sending uncompressed json, remarshal batch into new objects
 			var unpacked map[string]string
 			_ = json.Unmarshal(e, &unpacked)
 			data, _ = json.Marshal(&jsonRecord{
-				UUID:    UUID.String(),
-				Version: version,
-				Data:    unpacked,
+				UUID:      UUID.String(),
+				Version:   version,
+				Data:      unpacked,
+				CreatedAt: time.Now().UTC().Format(RedshiftDatetimeIngestString),
 			})
 		}
 		records[i] = &kinesis.PutRecordsRequestEntry{
