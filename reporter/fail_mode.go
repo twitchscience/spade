@@ -17,30 +17,24 @@ const (
 	FailedTransport
 )
 
+var failMessages = map[FailMode]string{
+	None:                 "Success",
+	SkippedColumn:        "Missing One or More Columns",
+	UnableToParseData:    "Malformed Data",
+	NonTrackingEvent:     "Untracked Event",
+	BadColumnConversion:  "Badly Typed Columns",
+	FailedWrite:          "Failed To Write",
+	EmptyRequest:         "Empty Request",
+	UnknownError:         "Unknown Failure",
+	PanickedInProcessing: "Panicked in Processing",
+	FailedTransport:      "Failed in Transport",
+}
+
 // Return a human-readable string describing the given FailMode.
 func (m FailMode) String() string {
-	switch m {
-	case None:
-		return "Success"
-	case SkippedColumn:
-		return "Missing One or More Columns"
-	case UnableToParseData:
-		return "Malformed Data"
-	case NonTrackingEvent:
-		return "Untracked Event"
-	case BadColumnConversion:
-		return "Badly Typed Columns"
-	case FailedWrite:
-		return "Failed To Write"
-	case EmptyRequest:
-		return "Empty Request"
-	case UnknownError:
-		return "Unknown Failure"
-	case PanickedInProcessing:
-		return "Panicked in Processing"
-	case FailedTransport:
-		return "Failed in Transport"
-	default:
+	msg, ok := failMessages[m]
+	if !ok {
 		return "Unknown Failure"
 	}
+	return msg
 }

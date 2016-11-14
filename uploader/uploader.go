@@ -34,6 +34,7 @@ func (s *SNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error 
 // newly uploaded files.
 type NullNotifierHarness struct{}
 
+// SendMessage is a noop
 func (n *NullNotifierHarness) SendMessage(_ *uploader.UploadReceipt) error {
 	return nil
 }
@@ -188,9 +189,8 @@ func buildUploader(input *buildUploaderInput) *uploader.UploaderPool {
 func redshiftKeyNameGenerator(info *gen.InstanceInfo, runTag string, replay bool) uploader.S3KeyNameGenerator {
 	if replay {
 		return &gen.ReplayKeyNameGenerator{Info: info, RunTag: runTag}
-	} else {
-		return &gen.ProcessorKeyNameGenerator{Info: info}
 	}
+	return &gen.ProcessorKeyNameGenerator{Info: info}
 }
 
 // BuildUploaderForRedshift builds an Uploader that uploads files to s3 and notifies sns.

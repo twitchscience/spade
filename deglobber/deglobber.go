@@ -119,6 +119,13 @@ func (dp *Pool) processEvent(e *spade.Event) {
 	dp.config.ProcessorPool.Process(&parseRequest{data: d, start: time.Now()})
 }
 
+func (dp *Pool) statHelper(stat string) {
+	err := dp.config.Stats.Inc(stat, 1, 1.0)
+	if err != nil {
+		logger.WithError(err).Error("Stats update failed")
+	}
+}
+
 func (dp *Pool) crank() {
 	defer dp.wg.Done()
 	for glob := range dp.globs {
@@ -137,10 +144,7 @@ func (dp *Pool) crank() {
 		events, err := dp.expandGlob(glob)
 		if err != nil {
 			logger.WithError(err).Error("Failed to expand glob")
-			err = dp.config.Stats.Inc("record.failures", 1, 1.0)
-			if err != nil {
-				logger.WithError(err).Error("Stats update failed")
-			}
+			dp.statHelper("record.failures")
 			continue
 		}
 
@@ -148,18 +152,12 @@ func (dp *Pool) crank() {
 			continue
 		}
 
-		err = dp.config.Stats.Inc("record.count", 1, 1.0)
-		if err != nil {
-			logger.WithError(err).Error("Stats update failed")
-		}
+		dp.statHelper("record.count")
 
 		uuid := events[0].Uuid
 		if _, found := dp.config.DuplicateCache.Get(uuid); found {
 			logger.WithField("uuid", uuid).Info("Ignoring duplicate UUID")
-			err := dp.config.Stats.Inc("record.dupe", 1, 1.0)
-			if err != nil {
-				logger.WithError(err).Error("Stats update failed")
-			}
+			dp.statHelper("record.dupe")
 		} else {
 			for _, e := range events {
 				dp.processEvent(e)
