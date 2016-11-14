@@ -79,7 +79,10 @@ func New(config Config, completor Complete) (*Batcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid config: %s", err)
 	}
-	maxAge, _ := time.ParseDuration(config.MaxAge)
+	maxAge, err := time.ParseDuration(config.MaxAge)
+	if err != nil {
+		return nil, fmt.Errorf("config MaxAge failed parsing as a duration: %s", err)
+	}
 
 	b := &Batcher{
 		config:    config,

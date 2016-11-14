@@ -58,12 +58,12 @@ func (s *ByteQueryUnescaper) QueryUnescape(q []byte) ([]byte, error) {
 
 func unescape(s []byte) ([]byte, error) {
 	// Count %, check that they're well-formed.
-	n := 0
+	numPercents := 0
 	hasPlus := false
 	for i := 0; i < len(s); {
 		switch s[i] {
 		case '%':
-			n++
+			numPercents++
 			if i+2 >= len(s) || !ishex(s[i+1]) || !ishex(s[i+2]) {
 				s = s[i:]
 				if len(s) > 3 {
@@ -80,11 +80,11 @@ func unescape(s []byte) ([]byte, error) {
 		}
 	}
 
-	if n == 0 && !hasPlus {
+	if numPercents == 0 && !hasPlus {
 		return s, nil
 	}
 
-	t := make([]byte, len(s)-2*n)
+	t := make([]byte, len(s)-2*numPercents)
 	j := 0
 	for i := 0; i < len(s); {
 		switch s[i] {

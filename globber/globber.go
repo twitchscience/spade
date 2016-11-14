@@ -80,7 +80,10 @@ func New(config Config, completor Complete) (*Globber, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid config: %s", err)
 	}
-	maxAge, _ := time.ParseDuration(config.MaxAge)
+	maxAge, err := time.ParseDuration(config.MaxAge)
+	if err != nil {
+		return nil, fmt.Errorf("config MaxAge failed parsing as a duration: %s", err)
+	}
 
 	g := &Globber{
 		config:    config,
@@ -113,6 +116,7 @@ func (g *Globber) Close() {
 	g.Wait()
 }
 
+/* #nosec */
 func (g *Globber) add(entry []byte) error {
 	s := len(entry) + g.pending.Len()
 	if s > g.config.MaxSize {
@@ -136,6 +140,7 @@ func (g *Globber) complete() error {
 		return nil
 	}
 
+	/* #nosec */
 	_, _ = g.pending.WriteRune(postfix)
 	err := g._complete()
 	if err != nil {
@@ -148,6 +153,7 @@ func (g *Globber) _complete() error {
 	var compressed bytes.Buffer
 	var err error
 
+	/* #nosec */
 	_ = compressed.WriteByte(version)
 
 	if g.compressor == nil {
