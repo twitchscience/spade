@@ -65,7 +65,7 @@ type writerController struct {
 	NonTrackedWriter SpadeWriter
 
 	inbound    chan *WriteRequest
-	closeChan  chan chan error
+	closeChan  chan error
 	rotateChan chan chan rotateResult
 
 	maxLogBytes   int64
@@ -93,7 +93,7 @@ func NewWriterController(
 		blueprintUploader: blueprintUploaderPool,
 
 		inbound:    make(chan *WriteRequest, inboundChannelBuffer),
-		closeChan:  make(chan chan error),
+		closeChan:  make(chan error),
 		rotateChan: make(chan chan rotateResult),
 
 		maxLogBytes:   maxLogBytes,
@@ -122,12 +122,14 @@ func (c *writerController) Write(req *WriteRequest) {
 func (c *writerController) Listen() {
 	for {
 		select {
-		case send := <-c.closeChan:
-			send <- c.close()
-			return
 		case send := <-c.rotateChan:
 			send <- c.rotate()
-		case req := <-c.inbound:
+		case req, ok:= <-c.inbound:
+			if !ok {
+				c.closeChan <- c.close()
+				return
+			}
+
 			if err := c.route(req); err != nil {
 				logger.WithError(err).Error("Error routing write request")
 			}
@@ -190,10 +192,8 @@ func (c *writerController) initNonTrackedWriter() error {
 }
 
 func (c *writerController) Close() error {
-	receive := make(chan error)
-	defer close(receive)
-	c.closeChan <- receive
-	return <-receive
+	close(c.inbound)
+	return <-c.closeChan
 }
 
 func (c *writerController) close() error {
@@ -208,10 +208,10 @@ func (c *writerController) close() error {
 }
 
 func (c *writerController) Rotate() (bool, error) {
-	recieve := make(chan rotateResult)
-	defer close(recieve)
-	c.rotateChan <- recieve
-	result := <-recieve
+	receive := make(chan rotateResult)
+	defer close(receive)
+	c.rotateChan <- receive
+	result := <-receive
 	return result.allDone, result.err
 }
 

@@ -106,11 +106,11 @@ func main() {
 	})
 
 	geoIPUpdater := createGeoipUpdater(config.Geoip)
-	auditLogger := newAuditLogger(sns, s3Uploader)
+	auditLogger := newAuditLogger(sns, s3Uploader, *replay)
 	reporterStats := reporter.WrapCactusStatter(stats, 0.1)
 	spadeReporter := createSpadeReporter(reporterStats, auditLogger)
 	spadeUploaderPool := uploader.BuildUploaderForRedshift(redshiftUploaderNumWorkers, sns, s3Uploader, config.AceBucketName, config.AceTopicARN, config.AceErrorTopicARN, *runTag, *replay)
-	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(blueprintUploaderNumWorkers, sns, s3Uploader, config.NonTrackedBucketName, config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN)
+	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(blueprintUploaderNumWorkers, sns, s3Uploader, config.NonTrackedBucketName, config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN, *replay)
 
 	multee := &writer.Multee{}
 	spadeWriter := createSpadeWriter(*_dir, spadeReporter, spadeUploaderPool, blueprintUploaderPool, config.MaxLogBytes, config.MaxLogAgeSecs)
@@ -172,6 +172,8 @@ MainLoop:
 		}
 	}
 
+	logger.Info("Main loop exited, shutting down")
+
 	resultPipe.Close()
 	deglobberPool.Close()
 	processorPool.Close()
@@ -192,8 +194,8 @@ MainLoop:
 	}
 
 	spadeUploaderPool.Close()
-
 	blueprintUploaderPool.Close()
+
 	logger.Info("Exiting main cleanly.")
 	logger.Wait()
 }

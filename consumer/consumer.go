@@ -3,6 +3,7 @@ package consumer
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -62,13 +63,15 @@ func NewStandardInputPipe() *StandardInputPipe {
 	logger.Go(func() {
 		defer close(channel)
 
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			bytes := append([]byte(nil), scanner.Bytes()...) // scanner reuses its buffer
-			err := scanner.Err()
-			channel <- &Result{Data: bytes, Error: err}
-			if err != nil {
-				return
+		// bufio.NewScanner would be simpler here, but some of our lines are
+		// too long for it.
+		reader := bufio.NewReader(os.Stdin)
+		var bytes []byte
+		var err error
+		for err == nil {
+			bytes, err = reader.ReadBytes('\n')
+			if err != io.EOF {
+				channel <- &Result{Data: bytes, Error: err}
 			}
 		}
 	})
