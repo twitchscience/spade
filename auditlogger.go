@@ -39,19 +39,40 @@ func (s *snsHarness) SendError(er error) {
 	}
 }
 
-func newAuditLogger(sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI) *gologging.UploadLogger {
+type nullHarness struct {}
+
+func (n *nullHarness) SendMessage(r *uploader.UploadReceipt) error {
+	return nil
+}
+
+type nullErrorHarness struct {}
+
+func (n *nullErrorHarness) SendError(er error) {}
+
+func newAuditLogger(sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI, replay bool) *gologging.UploadLogger {
 	rotateCoordinator := gologging.NewRotateCoordinator(maxLinesPerLog, rotateTime)
 	instanceInfo := key_name_generator.BuildInstanceInfo(&key_name_generator.EnvInstanceFetcher{}, "spade_processor_audit", *loggingDir)
-	harness := &snsHarness{
-		topicARN: config.ProcessorErrorTopicARN,
-		notifier: notifier.BuildSNSClient(sns),
+
+	var notifierHarness uploader.NotifierHarness
+	var errorHarness uploader.ErrorNotifierHarness
+	if replay {
+		notifierHarness = &nullHarness{}
+		errorHarness = &nullErrorHarness{}
+	} else {
+		harness := &snsHarness{
+			topicARN: config.ProcessorErrorTopicARN,
+			notifier: notifier.BuildSNSClient(sns),
+		}
+		notifierHarness = harness
+		errorHarness = harness
 	}
+
 	l, err := gologging.StartS3Logger(
 		rotateCoordinator,
 		instanceInfo,
-		harness,
+		notifierHarness,
 		uploader.NewFactory(config.AuditBucketName, &key_name_generator.EdgeKeyNameGenerator{Info: instanceInfo}, s3Uploader),
-		harness,
+		errorHarness,
 		numWorkers,
 	)
 

@@ -1,4 +1,5 @@
 #!/bin/bash --
+set -euo pipefail
 export GOMAXPROCS="3" # we need 3 or more for spade to run well..
 CORE_COUNT=`grep -c ^processor /proc/cpuinfo`
 if [[ $CORE_COUNT -gt $GOMAXPROCS ]];

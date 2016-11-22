@@ -61,9 +61,20 @@
       "destination": "/opt/science/{{user `project`}}/config"
     },
     {
+      "type": "file",
+      "source": "build/requirements-replay.txt",
+      "destination": "/opt/science/{{user `project`}}/requirements-replay.txt"
+    },
+    {
+      "type": "file",
+      "source": "replay.py",
+      "destination": "/opt/science/{{user `project`}}/bin/replay.py"
+    },
+    {
       "type": "shell",
-      "inline":
-      [
+      "inline": [
+        "sudo run_apt_get_install.sh libpq-dev",
+        "sudo pip install --upgrade -r /opt/science/{{user `project`}}/requirements-replay.txt",
         "sudo chmod +x /opt/science/{{user `project`}}/bin/*",
         "sudo rm /opt/science/{{user `project`}}/config/upstart/spade.conf",
         "for f in /opt/science/{{user `project`}}/config/upstart/*.conf; do sudo ln -s $f /etc/init/$(basename $f); done"

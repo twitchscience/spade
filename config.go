@@ -78,13 +78,17 @@ func loadConfig() {
 	}
 }
 
+func checkNonempty(str string) error {
+	if str == "" {
+		return errors.New("Empty string found for required config option.")
+	} else {
+		return nil
+	}
+}
+
 func validateConfig() error {
 	for _, str := range []string{
 		config.BlueprintSchemasURL,
-		config.ProcessorErrorTopicARN,
-		config.AceErrorTopicARN,
-		config.NonTrackedTopicARN,
-		config.NonTrackedErrorTopicARN,
 		config.AceBucketName,
 		config.NonTrackedBucketName,
 		config.AuditBucketName,
@@ -94,13 +98,23 @@ func validateConfig() error {
 		config.RollbarToken,
 		config.RollbarEnvironment,
 	} {
-		if str == "" {
-			return errors.New("Empty string found for required config option.")
+		if err := checkNonempty(str); err != nil {
+			return err
 		}
 	}
 
-	if !*replay && config.AceTopicARN == "" {
-		return errors.New("Empty string found for required config option.")
+	if !*replay {
+		for _, str := range []string{
+			config.ProcessorErrorTopicARN,
+			config.AceTopicARN,
+			config.AceErrorTopicARN,
+			config.NonTrackedTopicARN,
+			config.NonTrackedErrorTopicARN,
+		} {
+			if err := checkNonempty(str); err != nil {
+				return err
+			}
+		}
 	}
 
 	for _, i := range []int64{

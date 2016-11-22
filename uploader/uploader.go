@@ -98,6 +98,25 @@ func (p *ProcessorErrorHandler) SendError(err error) {
 	}
 }
 
+// NullErrorHandler logs errors but does not send an SNS message.
+type NullErrorHandler struct {}
+
+// SendError logs the given error.
+func (n *NullErrorHandler) SendError(err error) {
+	logger.WithError(err).Error("")
+}
+
+func buildErrorHandler(sns snsiface.SNSAPI, errorTopicArn string, nullNotifier bool) uploader.ErrorNotifierHarness {
+	if nullNotifier {
+		return &NullErrorHandler{}
+	} else {
+		return &ProcessorErrorHandler{
+			notifier: notifier.BuildSNSClient(sns),
+			topicARN: errorTopicArn,
+		}
+	}
+}
+
 // SafeGzipUpload validates a file is a valid gzip file and then uploads it.
 func SafeGzipUpload(uploaderPool *uploader.UploaderPool, path string) {
 	if isValidGzip(path) {
@@ -163,6 +182,14 @@ func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) er
 	})
 }
 
+func buildInstanceInfo(replay bool) *gen.InstanceInfo {
+	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
+	if replay {
+		info.Node = os.Getenv("HOST")
+	}
+	return info
+}
+
 type buildUploaderInput struct {
 	bucketName       string
 	topicARN         string
@@ -177,10 +204,7 @@ type buildUploaderInput struct {
 func buildUploader(input *buildUploaderInput) *uploader.UploaderPool {
 	return uploader.StartUploaderPool(
 		input.numWorkers,
-		&ProcessorErrorHandler{
-			notifier: notifier.BuildSNSClient(input.sns),
-			topicARN: input.errorTopicARN,
-		},
+		buildErrorHandler(input.sns, input.errorTopicARN, input.nullNotifier),
 		buildNotifierHarness(input.sns, input.topicARN, input.nullNotifier),
 		uploader.NewFactory(input.bucketName, input.keyNameGenerator, input.s3Uploader),
 	)
@@ -196,7 +220,6 @@ func redshiftKeyNameGenerator(info *gen.InstanceInfo, runTag string, replay bool
 // BuildUploaderForRedshift builds an Uploader that uploads files to s3 and notifies sns.
 func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI,
 	aceBucketName, aceTopicARN, aceErrorTopicARN, runTag string, replay bool) *uploader.UploaderPool {
-	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
 
 	return buildUploader(&buildUploaderInput{
 		bucketName:       aceBucketName,
@@ -205,15 +228,14 @@ func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3
 		numWorkers:       numWorkers,
 		sns:              sns,
 		s3Uploader:       s3Uploader,
-		keyNameGenerator: redshiftKeyNameGenerator(info, runTag, replay),
+		keyNameGenerator: redshiftKeyNameGenerator(buildInstanceInfo(replay), runTag, replay),
 		nullNotifier:     replay,
 	})
 }
 
 // BuildUploaderForBlueprint builds an Uploader that uploads non-tracked events to s3 and notifies sns.
 func BuildUploaderForBlueprint(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI,
-	nonTrackedBucketName, nonTrackedTopicARN, nonTrackedErrorTopicARN string) *uploader.UploaderPool {
-	info := gen.BuildInstanceInfo(&gen.EnvInstanceFetcher{}, "spade_processor", "")
+	nonTrackedBucketName, nonTrackedTopicARN, nonTrackedErrorTopicARN string, replay bool) *uploader.UploaderPool {
 
 	return buildUploader(&buildUploaderInput{
 		bucketName:       nonTrackedBucketName,
@@ -222,6 +244,7 @@ func BuildUploaderForBlueprint(numWorkers int, sns snsiface.SNSAPI, s3Uploader s
 		numWorkers:       numWorkers,
 		sns:              sns,
 		s3Uploader:       s3Uploader,
-		keyNameGenerator: &gen.EdgeKeyNameGenerator{Info: info},
+		keyNameGenerator: &gen.EdgeKeyNameGenerator{Info: buildInstanceInfo(replay)},
+		nullNotifier:     replay,
 	})
 }
