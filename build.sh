@@ -33,4 +33,7 @@ packer                                          \
      -var "use_private_ip=${USE_PRIVATE_IP}"    \
      -var "binary_dir"=${GOPATH}/bin            \
      -var "scripts_dir"=build/scripts           \
-     build/packer.json
+     build/packer.json | tee build.log
+
+AMIREF=`grep 'amazon-ebs,artifact,0,id,' build.log`
+echo ${AMIREF##*:} > amireference
