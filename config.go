@@ -36,8 +36,6 @@ var config struct {
 	AceBucketName string
 	// NonTrackedBucketName is the name of the s3 bucket to put nontracked events into
 	NonTrackedBucketName string
-	// AuditBucketName is the name of the s3 bucket to put audits into
-	AuditBucketName string
 	// MaxLogBytes is the max number of log bytes before file rotation
 	MaxLogBytes int64
 	// MaxLogAgeSecs is the max number of seconds between log rotations
@@ -73,17 +71,19 @@ func loadConfig() {
 	}
 
 	if *printConfig {
-		b, _ := json.MarshalIndent(config, "", "\t")
-		entry.WithField("config", string(b)).Info("Configuration")
+		if b, err := json.MarshalIndent(config, "", "\t"); err != nil {
+			entry.WithError(err).Error("Failed to marshal config")
+		} else {
+			entry.WithField("config", string(b)).Info("Configuration")
+		}
 	}
 }
 
 func checkNonempty(str string) error {
 	if str == "" {
 		return errors.New("Empty string found for required config option.")
-	} else {
-		return nil
 	}
+	return nil
 }
 
 func validateConfig() error {
@@ -91,7 +91,6 @@ func validateConfig() error {
 		config.BlueprintSchemasURL,
 		config.AceBucketName,
 		config.NonTrackedBucketName,
-		config.AuditBucketName,
 		config.Geoip.ConfigBucket,
 		config.Geoip.IPCityKey,
 		config.Geoip.IPASNKey,

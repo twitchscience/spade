@@ -15,8 +15,11 @@ import (
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/patrickmn/go-cache"
 	"github.com/twitchscience/aws_utils/logger"
+	aws_uploader "github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
+	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/deglobber"
+	"github.com/twitchscience/spade/geoip"
 	jsonLog "github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"
@@ -25,8 +28,6 @@ import (
 
 	"os"
 	"os/signal"
-
-	"github.com/cactus/go-statsd-client/statsd"
 )
 
 const (
@@ -53,14 +54,22 @@ func init() {
 	}
 }
 
-func main() {
-	flag.Parse()
-	loadConfig()
-	logger.InitWithRollbar("info", config.RollbarToken, config.RollbarEnvironment)
-	logger.Info("Starting processor")
-	logger.CaptureDefault()
-	defer logger.LogPanic()
+type spadeProcessor struct {
+	geoIPUpdater  *geoip.Updater
+	spadeReporter reporter.Reporter
 
+	resultPipe            consumer.ResultPipe
+	deglobberPool         *deglobber.Pool
+	processorPool         processor.Pool
+	multee                *writer.Multee
+	spadeUploaderPool     *aws_uploader.UploaderPool
+	blueprintUploaderPool *aws_uploader.UploaderPool
+
+	rotation <-chan time.Time
+	sigc     chan os.Signal
+}
+
+func newProcessor() *spadeProcessor {
 	// aws resources
 	session := session.New(&aws.Config{
 		HTTPClient: &http.Client{
@@ -79,122 +88,123 @@ func main() {
 	sns := sns.New(session)
 	s3Uploader := s3manager.NewUploader(session)
 
-	// Set up statsd monitoring
-	// - If the env is not set up we wil use a noop connection
-	statsdHostport := os.Getenv("STATSD_HOSTPORT")
-	var stats statsd.Statter
-	if statsdHostport == "" {
-		stats, _ = statsd.NewNoop()
-	} else {
-		var err error
-		if stats, err = statsd.New(statsdHostport, *statsPrefix); err != nil {
-			logger.WithError(err).Fatal("Statsd configuration error")
-		}
-		logger.WithField("statsd_host_port", statsdHostport).Info("Connected to statsd")
-	}
+	stats := createStatsdStatter()
+	startELBHealthCheckListener()
 
-	// Listener for ELB health check
-	healthMux := http.NewServeMux()
-	healthMux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	logger.Go(func() {
-		err := http.ListenAndServe(net.JoinHostPort("", "8080"), healthMux)
-		if err != nil {
-			logger.WithError(err).Error("Failure listening to port 8080 with healthMux")
-		}
-	})
-
-	geoIPUpdater := createGeoipUpdater(config.Geoip)
-	auditLogger := newAuditLogger(sns, s3Uploader, *replay)
 	reporterStats := reporter.WrapCactusStatter(stats, 0.1)
-	spadeReporter := createSpadeReporter(reporterStats, auditLogger)
-	spadeUploaderPool := uploader.BuildUploaderForRedshift(redshiftUploaderNumWorkers, sns, s3Uploader, config.AceBucketName, config.AceTopicARN, config.AceErrorTopicARN, *runTag, *replay)
-	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(blueprintUploaderNumWorkers, sns, s3Uploader, config.NonTrackedBucketName, config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN, *replay)
+	spadeReporter := createSpadeReporter(reporterStats)
+	spadeUploaderPool := uploader.BuildUploaderForRedshift(
+		redshiftUploaderNumWorkers, sns, s3Uploader, config.AceBucketName,
+		config.AceTopicARN, config.AceErrorTopicARN, *runTag, *replay)
+	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(
+		blueprintUploaderNumWorkers, sns, s3Uploader, config.NonTrackedBucketName,
+		config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN, *replay)
 
 	multee := &writer.Multee{}
-	spadeWriter := createSpadeWriter(*_dir, spadeReporter, spadeUploaderPool, blueprintUploaderPool, config.MaxLogBytes, config.MaxLogAgeSecs)
-	kinesisWriters := createKinesisWriters(session, stats)
-	multee.Add(spadeWriter)
-	multee.AddMany(kinesisWriters)
+	multee.Add(createSpadeWriter(
+		*_dir, spadeReporter, spadeUploaderPool, blueprintUploaderPool,
+		config.MaxLogBytes, config.MaxLogAgeSecs))
+	multee.AddMany(createKinesisWriters(session, stats))
 
-	fetcher := fetcher.New(config.BlueprintSchemasURL)
-	schemaLoader := createSchemaLoader(fetcher, reporterStats)
-
-	processorPool := processor.BuildProcessorPool(schemaLoader, spadeReporter, multee)
+	processorPool := processor.BuildProcessorPool(
+		createSchemaLoader(fetcher.New(config.BlueprintSchemasURL), reporterStats),
+		spadeReporter, multee)
 	processorPool.StartListeners()
-	duplicateCache := cache.New(duplicateCacheExpiry, duplicateCacheCleanupFrequency)
+
 	deglobberPool := deglobber.NewPool(deglobber.PoolConfig{
 		ProcessorPool:      processorPool,
 		Stats:              stats,
-		DuplicateCache:     duplicateCache,
+		DuplicateCache:     cache.New(duplicateCacheExpiry, duplicateCacheCleanupFrequency),
 		PoolSize:           runtime.NumCPU(),
 		CompressionVersion: compressionVersion,
 		ReplayMode:         *replay,
 	})
 	deglobberPool.Start()
 
-	resultPipe := createPipe(session, stats, *replay)
-
-	rotation := time.Tick(rotationCheckFrequency)
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT)
+	return &spadeProcessor{
+		geoIPUpdater:          createGeoipUpdater(config.Geoip),
+		spadeReporter:         spadeReporter,
+		resultPipe:            createPipe(session, stats, *replay),
+		deglobberPool:         deglobberPool,
+		processorPool:         processorPool,
+		multee:                multee,
+		spadeUploaderPool:     spadeUploaderPool,
+		blueprintUploaderPool: blueprintUploaderPool,
+		rotation:              time.Tick(rotationCheckFrequency),
+		sigc:                  sigc,
+	}
+}
 
+func (s *spadeProcessor) run() {
 	numGlobs := 0
-MainLoop:
 	for {
 		select {
-		case <-sigc:
+		case <-s.sigc:
 			logger.Info("Sigint received -- shutting down")
-			break MainLoop
-		case <-rotation:
-			if _, err := multee.Rotate(); err != nil {
+			return
+		case <-s.rotation:
+			if _, err := s.multee.Rotate(); err != nil {
 				logger.WithError(err).Error("multee.Rotate() failed")
-				break MainLoop
+				return
 			}
 			logger.WithFields(map[string]interface{}{
 				"num_globs": numGlobs,
-				"stats":     spadeReporter.Report(),
+				"stats":     s.spadeReporter.Report(),
 			}).Info("Processed data rotated to output")
-		case record, ok := <-resultPipe.ReadChannel():
+		case record, ok := <-s.resultPipe.ReadChannel():
 			if !ok {
 				logger.Info("Read channel closed")
-				break MainLoop
+				return
+			} else if err := record.Error; err != nil {
+				logger.WithError(err).Error("Consumer failed")
+				return
+			} else {
+				s.deglobberPool.Submit(record.Data)
+				numGlobs++
 			}
-
-			if record.Error != nil {
-				logger.WithError(record.Error).Error("Consumer failed")
-				break MainLoop
-			}
-
-			numGlobs++
-			deglobberPool.Submit(record.Data)
 		}
 	}
+}
 
-	logger.Info("Main loop exited, shutting down")
-
-	resultPipe.Close()
-	deglobberPool.Close()
-	processorPool.Close()
-	if err := multee.Close(); err != nil {
+func (s *spadeProcessor) shutdown() {
+	s.resultPipe.Close()
+	s.deglobberPool.Close()
+	s.processorPool.Close()
+	if err := s.multee.Close(); err != nil {
 		logger.WithError(err).Error("multee.Close() failed")
 	}
-	geoIPUpdater.Close()
-	auditLogger.Close()
+	s.geoIPUpdater.Close()
 
-	err := uploader.ClearEventsFolder(spadeUploaderPool, *_dir+"/"+writer.EventsDir+"/")
+	err := uploader.ClearEventsFolder(s.spadeUploaderPool, *_dir+"/"+writer.EventsDir+"/")
 	if err != nil {
 		logger.WithError(err).Error("Failed to clear events directory")
 	}
 
-	err = uploader.ClearEventsFolder(blueprintUploaderPool, *_dir+"/"+writer.NonTrackedDir+"/")
+	err = uploader.ClearEventsFolder(s.blueprintUploaderPool, *_dir+"/"+writer.NonTrackedDir+"/")
 	if err != nil {
 		logger.WithError(err).Error("Failed to clear untracked events directory")
 	}
 
-	spadeUploaderPool.Close()
-	blueprintUploaderPool.Close()
+	s.spadeUploaderPool.Close()
+	s.blueprintUploaderPool.Close()
+
+}
+
+func main() {
+	flag.Parse()
+	loadConfig()
+	logger.InitWithRollbar("info", config.RollbarToken, config.RollbarEnvironment)
+	logger.Info("Starting processor")
+	logger.CaptureDefault()
+	defer logger.LogPanic()
+
+	s := newProcessor()
+	s.run()
+
+	logger.Info("Main loop exited, shutting down")
+	s.shutdown()
 
 	logger.Info("Exiting main cleanly.")
 	logger.Wait()

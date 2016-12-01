@@ -3,13 +3,15 @@ package main
 // I need a better name for this file
 
 import (
+	"net"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/uploader"
-	"github.com/twitchscience/gologging/gologging"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
@@ -24,13 +26,40 @@ const (
 	schemaRetryDelay      = 2 * time.Second
 )
 
-func createSpadeReporter(stats reporter.StatsLogger, auditLogger *gologging.UploadLogger) reporter.Reporter {
+func createStatsdStatter() statsd.Statter {
+	// - If the env is not set up we wil use a noop connection
+	statsdHostport := os.Getenv("STATSD_HOSTPORT")
+	if statsdHostport == "" {
+		logger.Warning("STATSD_HOSTPORT is empty, using noop statsd connection")
+		stats, err := statsd.NewNoop()
+		if err != nil {
+			logger.WithError(err).Fatal("Failed to create noop statsd connection (!?)")
+		}
+		return stats
+	}
+
+	stats, err := statsd.New(statsdHostport, *statsPrefix)
+	if err != nil {
+		logger.WithError(err).Fatal("Statsd configuration error")
+	}
+	logger.WithField("statsd_host_port", statsdHostport).Info("Connected to statsd")
+	return stats
+}
+
+func startELBHealthCheckListener() {
+	healthMux := http.NewServeMux()
+	healthMux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	logger.Go(func() {
+		err := http.ListenAndServe(net.JoinHostPort("", "8080"), healthMux)
+		logger.WithError(err).Error("Failure listening to port 8080 with healthMux")
+	})
+}
+
+func createSpadeReporter(stats reporter.StatsLogger) reporter.Reporter {
 	return reporter.BuildSpadeReporter(
-		[]reporter.Tracker{
-			&reporter.SpadeStatsdTracker{Stats: stats},
-			&reporter.SpadeUUIDTracker{Logger: auditLogger},
-		},
-	)
+		[]reporter.Tracker{&reporter.SpadeStatsdTracker{Stats: stats}})
 }
 
 func createSpadeWriter(
