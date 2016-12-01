@@ -6,5 +6,4 @@ source "${SPADE_DIR}/bin/run_spade_base.sh"
 
 exec ${SPADE_DIR}/bin/spade -spade_dir ${SPADE_DATA_DIR} \
   -config "${SPADE_DIR}/config/conf.json" \
-  -audit_log_dir "${SPADE_LOG_DIR}" \
   -stat_prefix "${STATSD_PREFIX}"

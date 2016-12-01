@@ -280,14 +280,6 @@
 			"Rev": "2739958d94d4d27898d6d3f25ab1e3184aa0183d"
 		},
 		{
-			"ImportPath": "github.com/twitchscience/gologging/file_writer",
-			"Rev": "466a4eb9056b2ca7a77712d799728911322507b2"
-		},
-		{
-			"ImportPath": "github.com/twitchscience/gologging/gologging",
-			"Rev": "466a4eb9056b2ca7a77712d799728911322507b2"
-		},
-		{
 			"ImportPath": "github.com/twitchscience/gologging/key_name_generator",
 			"Rev": "466a4eb9056b2ca7a77712d799728911322507b2"
 		},

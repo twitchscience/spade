@@ -1,12 +1,10 @@
 package reporter
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/twitchscience/aws_utils/logger"
-	"github.com/twitchscience/gologging/gologging"
 )
 
 const reportBuffer = 400000
@@ -51,22 +49,6 @@ type SpadeReporter struct {
 // SpadeStatsdTracker is a Tracker that reports to statsd.
 type SpadeStatsdTracker struct {
 	Stats StatsLogger
-}
-
-// SpadeUUIDTracker is a Tracker that reports to UUIDs to the spade audit log.
-type SpadeUUIDTracker struct {
-	Logger *gologging.UploadLogger
-}
-
-// spadeAuditLog defines a struct of spade audit log to output as json
-// any change to this struct, please make relevant changes to
-// func (s *SpadeUUIDTracker) Track(result *Result) and
-// update the explicit string printing given marshall error
-type spadeAuditLog struct {
-	UUID       string
-	FinishedAt time.Time
-	Duration   float64
-	Failure    string
 }
 
 // BuildSpadeReporter builds a SpadeReporter on the given Trackers and starts its goroutine.
@@ -121,20 +103,4 @@ func (s *SpadeStatsdTracker) Track(result *Result) {
 		s.Stats.IncrBy(fmt.Sprintf("tracking.%s.fail", result.Category), 1)
 	}
 	s.Stats.Timing(fmt.Sprintf("%d", result.Failure), result.Duration)
-}
-
-// Track sends the result's UUID, timing, and error to the spade audit logger.
-func (s *SpadeUUIDTracker) Track(result *Result) {
-	newAuditLog := spadeAuditLog{
-		UUID:       result.UUID,
-		FinishedAt: result.FinishedAt,
-		Duration:   result.Duration.Seconds(),
-		Failure:    result.Failure.String(),
-	}
-	jsonBytes, err := json.Marshal(newAuditLog)
-	if err != nil { //write json string explicitlt given any marshal error
-		s.Logger.Log(fmt.Sprintf("{\"UUID\":\"%s\", \"FinishedAt\":\"%v\", \"Duration\":%f, \"Failure\":\"%s\"}",
-			result.UUID, result.FinishedAt, result.Duration.Seconds(), result.Failure.String()))
-	}
-	s.Logger.Log(string(jsonBytes))
 }
