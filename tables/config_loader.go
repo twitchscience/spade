@@ -30,6 +30,7 @@ func NewStaticLoader(config map[string][]transformer.RedshiftType, versions map[
 type DynamicLoader struct {
 	fetcher    fetcher.ConfigFetcher
 	reloadTime time.Duration
+	retryDelay time.Duration
 	configs    map[string][]transformer.RedshiftType
 	versions   map[string]int
 	lock       *sync.RWMutex
@@ -47,6 +48,7 @@ func NewDynamicLoader(
 	d := DynamicLoader{
 		fetcher:    fetcher,
 		reloadTime: reloadTime,
+		retryDelay: retryDelay,
 		configs:    make(map[string][]transformer.RedshiftType),
 		versions:   make(map[string]int),
 		lock:       &sync.RWMutex{},
@@ -149,7 +151,7 @@ func (d *DynamicLoader) Crank() {
 		case <-tick.C:
 			// can put a circuit breaker here.
 			now := time.Now()
-			newConfig, newVersions, err := d.pullConfigIn()
+			newConfig, newVersions, err := d.retryPull(5, d.retryDelay)
 			if err != nil {
 				logger.WithError(err).Error("Failed to refresh config")
 				d.stats.Timing("config.error", time.Since(now))
