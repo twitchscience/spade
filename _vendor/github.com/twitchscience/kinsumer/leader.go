@@ -149,6 +149,10 @@ func (k *Kinsumer) setCachedShardIDs(shardIDs []string) error {
 		LastUpdate:    now.UnixNano(),
 		LastUpdateRFC: now.UTC().Format(time.RFC1123Z),
 	})
+	if err != nil {
+		return fmt.Errorf("error marshalling map: %v", err)
+	}
+
 	_, err = k.dynamodb.PutItem(&dynamodb.PutItemInput{
 		TableName: aws.String(k.metadataTableName),
 		Item:      item,
@@ -168,7 +172,6 @@ func diffShardIDs(curShardIDs, cachedShardIDs []string, checkpoints map[string]*
 		cur[s] = true
 	}
 	for _, s := range cachedShardIDs {
-		// If a shard is no longer returned by DescribeStream, drop it.
 		if cur[s] {
 			delete(cur, s)
 			// Drop the shard if it's been finished.
@@ -177,6 +180,9 @@ func diffShardIDs(curShardIDs, cachedShardIDs []string, checkpoints map[string]*
 			} else {
 				updatedShardIDs = append(updatedShardIDs, s)
 			}
+		} else {
+			// If a shard is no longer returned by DescribeStream, drop it.
+			changed = true
 		}
 	}
 	for s := range cur {
