@@ -9,13 +9,12 @@ There are several very good ways to consume Kinesis streams, primarily [The Amaz
 
 Kinsumer is designed for a cluster of Go clients that want each client to consume from multiple shards. Kinsumer is designed to be at-least-once with a strong effort to be exactly-once. Kinsumer by design does not attempt to keep shards on a specific client and will shuffle them around as needed.
 
-## Development state
-Currently Kinsumer is in alpha state. We are putting it into production slowly, but it's probable that issues will arise.
-
 ## Behavior
 Kinsumer is designed to suit a specific use case of kinesis consuming, specifically when you need to have multiple clients each handling multiple shards and you do not care which shard is being consumed by which client.
 
 Kinsumer will rebalance shards to each client whenever it detects the list of shards or list of clients has changed, and does not attempt to keep shards on the same client.
+
+If you are running multiple Kinsumer apps against a single stream, make sure to increase the throttleDelay to at least `50ms + (200ms * <the number of reader apps>)`. Note that Kinesis does not support more than two readers per writer on a fully utilized stream, so make sure you have enough stream capcity.
 
 ## Testing
 

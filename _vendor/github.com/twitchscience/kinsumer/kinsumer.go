@@ -124,6 +124,10 @@ func (k *Kinsumer) refreshShards() (bool, error) {
 
 	//TODO: Move this out of refreshShards and into refreshClients
 	clients, err := getClients(k.dynamodb, k.clientID, k.clientsTableName, k.maxAgeForClientRecord)
+	if err != nil {
+		return false, err
+	}
+
 	totalClients := len(clients)
 	thisClient := 0
 
@@ -138,10 +142,6 @@ func (k *Kinsumer) refreshShards() (bool, error) {
 
 	if !found {
 		return false, ErrThisClientNotInDynamo
-	}
-
-	if err != nil {
-		return false, err
 	}
 
 	if thisClient == 0 && !k.isLeader {
@@ -183,6 +183,10 @@ func (k *Kinsumer) refreshShards() (bool, error) {
 func (k *Kinsumer) startConsumers() error {
 	k.stop = make(chan struct{})
 	assigned := false
+
+	if k.thisClient >= len(k.shardIDs) {
+		return nil
+	}
 
 	for i, shard := range k.shardIDs {
 		if (i % k.totalClients) == k.thisClient {
@@ -264,7 +268,12 @@ func (k *Kinsumer) Run() error {
 	}
 
 	if _, err := k.refreshShards(); err != nil {
-		return err
+		deregErr := deregisterFromClientsTable(k.dynamodb, k.clientID, k.clientsTableName)
+		if deregErr != nil {
+			return fmt.Errorf("error in kinsumer Run initial refreshShards: (%v); "+
+				"error deregistering from clients table: (%v)", err, deregErr)
+		}
+		return fmt.Errorf("error in kinsumer Run initial refreshShards: %v", err)
 	}
 
 	k.mainWG.Add(1)
