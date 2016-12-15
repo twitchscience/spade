@@ -3,22 +3,23 @@ package transformer
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"reflect"
+	"testing"
+	"time"
+
+	"github.com/cactus/go-statsd-client/statsd"
 
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/writer"
-
-	"log"
-	"testing"
-	"time"
 )
 
 // This tests that the logic is implemented correctly to
 // transform a parsed event to some table psql format.
 // Thus this does not test the redsshift types.
 // Modes to test:
-//  - Normal Mode: event conforms and is transformed succesfully
+//  - Normal Mode: event conforms and is transformed successfully
 //  - Not tracked Mode: there is no table for this event
 //  - Empty Event: no text associated with this event
 //  - Transform error: Event contains a column that does not convert.
@@ -60,10 +61,11 @@ func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writ
 			"login": 42,
 		},
 	}
-	_transformer := NewRedshiftTransformer(config)
+	_stats, _ := statsd.NewNoop()
+	_transformer := NewRedshiftTransformer(config, reporter.WrapCactusStatter(_stats, 0.1))
 	if !reflect.DeepEqual(_transformer.Consume(input), expected) {
-		t.Logf("Got %v expected %v\n", *_transformer.Consume(input), expected)
-		t.Logf("%#v", _transformer.Consume(input).Record)
+		t.Logf("Got \n%v \nexpected \n%v\n", *_transformer.Consume(input), expected)
+		t.Logf("Transformer output: %#v", _transformer.Consume(input).Record)
 		t.Fail()
 	}
 }

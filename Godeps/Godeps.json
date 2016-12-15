@@ -297,7 +297,7 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/scoop_protocol",
-			"Rev": "1b1f46e747aae6f8194b71eb5eff15c9e2101e6d"
+			"Rev": "0b20b1127bcfdbea678ea132cd9fb2d7b5414792"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/spade",
@@ -305,7 +305,7 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/transformer",
-			"Rev": "1b1f46e747aae6f8194b71eb5eff15c9e2101e6d"
+			"Rev": "0b20b1127bcfdbea678ea132cd9fb2d7b5414792"
 		},
 		{
 			"ImportPath": "golang.org/x/sys/unix",

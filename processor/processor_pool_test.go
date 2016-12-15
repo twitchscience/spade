@@ -3,8 +3,13 @@ package processor
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"sync"
+	"testing"
+	"time"
+
+	"github.com/cactus/go-statsd-client/statsd"
 
 	"github.com/twitchscience/spade/parser"
 	jsonLog "github.com/twitchscience/spade/parser/json"
@@ -12,10 +17,6 @@ import (
 	tableConfig "github.com/twitchscience/spade/tables"
 	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/writer"
-
-	"io/ioutil"
-	"testing"
-	"time"
 )
 
 var (
@@ -25,7 +26,9 @@ var (
 	expectedJSONBytes  = loadFile("test_resources/expected_byte_buffer.txt")
 	PST                = getPST()
 
-	_config = tableConfig.NewStaticLoader(
+	_stats, _ = statsd.NewNoop()
+	_cactus   = reporter.WrapCactusStatter(_stats, 0.1)
+	_config   = tableConfig.NewStaticLoader(
 		map[string][]transformer.RedshiftType{
 			"login": {
 				{
@@ -50,7 +53,7 @@ var (
 			"login": 42,
 		},
 	)
-	_transformer = transformer.NewRedshiftTransformer(_config)
+	_transformer = transformer.NewRedshiftTransformer(_config, _cactus)
 	_parser      = parser.BuildSpadeParser()
 )
 
@@ -152,6 +155,7 @@ func (p *parseRequest) StartTime() time.Time {
 //
 func buildTestPool(nConverters, nTransformers int, p parser.Parser, t transformer.Transformer,
 	w writer.SpadeWriter) *SpadeProcessorPool {
+
 	transformers := make([]*RequestTransformer, nTransformers)
 	converters := make([]*RequestConverter, nConverters)
 

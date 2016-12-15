@@ -85,6 +85,7 @@ var (
 		"ipAsn":              ipAsnFormat,
 		"ipAsnInteger":       ipAsnIntFormat,
 		"stringToIntegerMD5": hashTransformer,
+		"userIDWithMapping":  intFormat(64),
 	}
 	transformGeneratorMap = map[string]func(string) ColumnTransformer{
 		"timestamp": genTimeFormat,

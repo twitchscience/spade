@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
@@ -13,6 +14,7 @@ import (
 // RedshiftTransformer turns MixpanelEvents into WriteRequests using the given ConfigLoader.
 type RedshiftTransformer struct {
 	Configs ConfigLoader
+	stats   reporter.StatsLogger
 }
 
 type nontrackedEvent struct {
@@ -21,9 +23,10 @@ type nontrackedEvent struct {
 }
 
 // NewRedshiftTransformer creates a new RedshiftTransformer using the given ConfigLoader.
-func NewRedshiftTransformer(configs ConfigLoader) Transformer {
+func NewRedshiftTransformer(configs ConfigLoader, stats reporter.StatsLogger) Transformer {
 	return &RedshiftTransformer{
 		Configs: configs,
+		stats:   stats,
 	}
 }
 
@@ -43,7 +46,10 @@ func (t *RedshiftTransformer) Consume(event *parser.MixpanelEvent) *writer.Write
 		}
 	}
 
+	t1 := time.Now()
 	line, kv, err := t.transform(event)
+	t.stats.Timing(fmt.Sprintf("transformer.%s", event.Event), time.Since(t1)/time.Millisecond)
+
 	if err == nil {
 		return &writer.WriteRequest{
 			Category: event.Event,

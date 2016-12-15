@@ -108,7 +108,7 @@ func newProcessor() *spadeProcessor {
 
 	processorPool := processor.BuildProcessorPool(
 		createSchemaLoader(fetcher.New(config.BlueprintSchemasURL), reporterStats),
-		spadeReporter, multee)
+		spadeReporter, multee, reporterStats)
 	processorPool.StartListeners()
 
 	deglobberPool := deglobber.NewPool(deglobber.PoolConfig{
