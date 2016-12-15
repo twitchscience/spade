@@ -15,6 +15,7 @@ type ColumnDefinition struct {
 	OutboundName          string
 	Transformer           string // this should match one of the types in redshift types
 	ColumnCreationOptions string
+	SupportingColumns     string // comma separated list used by mapping transformers
 }
 
 type Config struct {
@@ -26,9 +27,12 @@ type Config struct {
 type Action string
 
 const (
-	ADD    Action = "add"
-	DELETE Action = "delete"
-	RENAME Action = "rename"
+	ADD                Action = "add"
+	DELETE             Action = "delete"
+	RENAME             Action = "rename"
+	REQUEST_DROP_EVENT Action = "request_drop_event" // mark a table for manual deletion
+	DROP_EVENT         Action = "drop_event"         // table has been dropped
+	CANCEL_DROP_EVENT  Action = "cancel_drop_event"  // used to unmark the table for deletion
 )
 
 // Operation represents a single change to a schema
@@ -38,17 +42,19 @@ type Operation struct {
 	ActionMetadata map[string]string
 }
 
-func NewAddOperation(outbound, inbound, type_, options string) Operation {
+func NewAddOperation(outbound, inbound, type_, options, columns string) Operation {
 	return Operation{
 		Action: ADD,
 		Name:   outbound,
 		ActionMetadata: map[string]string{
-			"inbound":        inbound,
-			"column_type":    type_,
-			"column_options": options,
+			"inbound":            inbound,
+			"column_type":        type_,
+			"column_options":     options,
+			"supporting_columns": columns,
 		},
 	}
 }
+
 func NewDeleteOperation(outbound string) Operation {
 	return Operation{
 		Action:         DELETE,
@@ -56,6 +62,7 @@ func NewDeleteOperation(outbound string) Operation {
 		ActionMetadata: map[string]string{},
 	}
 }
+
 func NewRenameOperation(current, new string) Operation {
 	return Operation{
 		Action: RENAME,
@@ -63,6 +70,30 @@ func NewRenameOperation(current, new string) Operation {
 		ActionMetadata: map[string]string{
 			"new_outbound": new,
 		},
+	}
+}
+
+func NewRequestDropEventOperation(reason string) Operation {
+	return Operation{
+		Action:         REQUEST_DROP_EVENT,
+		Name:           "", // nil would be better, but most code can't handle it.
+		ActionMetadata: map[string]string{"reason": reason},
+	}
+}
+
+func NewDropEventOperation(reason string) Operation {
+	return Operation{
+		Action:         DROP_EVENT,
+		Name:           "", // nil would be better, but most code can't handle it.
+		ActionMetadata: map[string]string{"reason": reason},
+	}
+}
+
+func NewCancelDropEventOperation(reason string) Operation {
+	return Operation{
+		Action:         CANCEL_DROP_EVENT,
+		Name:           "", // nil would be better, but most code can't handle it.
+		ActionMetadata: map[string]string{},
 	}
 }
 
