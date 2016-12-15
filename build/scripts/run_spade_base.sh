@@ -7,7 +7,8 @@ then
     export GOMAXPROCS=$CORE_COUNT
 fi
 
-source /etc/environment
+# export all variables in /etc/environment
+for line in $( cat /etc/environment ) ; do export $(echo $line | tr -d '"') ; done
 
 export GEO_IP_DB="${SPADE_DIR}/config/GeoIPCity.dat"
 export ASN_IP_DB="${SPADE_DIR}/config/GeoLiteASNum.dat"
