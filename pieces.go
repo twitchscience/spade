@@ -8,6 +8,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/aws/aws-sdk-go/service/s3"
+
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
@@ -109,7 +112,7 @@ func createPipe(session *session.Session, stats statsd.Statter, replay bool) con
 }
 
 func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
-	u := geoip.NewUpdater(time.Now(), transformer.GeoIPDB, *config)
+	u := geoip.NewUpdater(time.Now(), transformer.GeoIPDB, *config, s3.New(session.New(&aws.Config{})))
 	logger.Go(u.UpdateLoop)
 	return u
 }

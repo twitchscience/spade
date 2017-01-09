@@ -11,8 +11,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/twitchscience/aws_utils/logger"
 )
 
@@ -24,6 +24,7 @@ type Updater struct {
 	config      Config
 	ipCityPath  string
 	ipASNPath   string
+	s3          s3iface.S3API
 }
 
 // Config defines how a GeoLookup should be kept updated.
@@ -36,7 +37,7 @@ type Config struct {
 }
 
 // NewUpdater returns a new Updater for the given GeoLookup.
-func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config) *Updater {
+func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config, s3 s3iface.S3API) *Updater {
 	return &Updater{
 		lastUpdated: lastUpdated,
 		closer:      make(chan bool),
@@ -44,6 +45,7 @@ func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config) *Updater {
 		ipCityPath:  os.Getenv("GEO_IP_DB"),
 		ipASNPath:   os.Getenv("ASN_IP_DB"),
 		config:      config,
+		s3:          s3,
 	}
 }
 
@@ -65,38 +67,29 @@ func writeWithRename(data io.Reader, fname string) error {
 // getIfNew downloads the new geoip dbs from s3 if there are new ones, and returns
 // a boolean true if it was new
 func (u *Updater) getIfNew() (bool, error) {
-	svc := s3.New(session.New(&aws.Config{}))
-	resp, err := svc.GetObject(&s3.GetObjectInput{
-		Bucket:          aws.String(u.config.ConfigBucket),
-		Key:             aws.String(u.config.IPCityKey),
-		IfModifiedSince: aws.Time(u.lastUpdated),
-	})
-	if err != nil {
-		switch err := err.(type) {
-		case awserr.Error:
-			if err.Code() == "304NotModified" {
+	type keypath struct {
+		key  string
+		path string
+	}
+	for _, kp := range []keypath{{u.config.IPCityKey, u.ipCityPath}, {u.config.IPASNKey, u.ipASNPath}} {
+		resp, err := u.s3.GetObject(&s3.GetObjectInput{
+			Bucket:          aws.String(u.config.ConfigBucket),
+			Key:             aws.String(kp.key),
+			IfModifiedSince: aws.Time(u.lastUpdated),
+		})
+		if err != nil {
+			if err, ok := err.(awserr.RequestFailure); ok && err.StatusCode() == 304 {
 				// Not a new geoip db
 				return false, nil
 			}
+			return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, u.config.IPCityKey, err)
 		}
-		return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, u.config.IPCityKey, err)
-	}
-	err = writeWithRename(resp.Body, u.ipCityPath)
-	if err != nil {
-		return false, err
+		err = writeWithRename(resp.Body, kp.path)
+		if err != nil {
+			return false, err
+		}
 	}
 
-	resp, err = svc.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String(u.config.ConfigBucket),
-		Key:    aws.String(u.config.IPASNKey),
-	})
-	if err != nil {
-		return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, u.config.IPASNKey, err)
-	}
-	err = writeWithRename(resp.Body, u.ipASNPath)
-	if err != nil {
-		return false, err
-	}
 	return true, nil
 }
 
