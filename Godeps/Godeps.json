@@ -71,6 +71,11 @@
 			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
 		},
 		{
+			"ImportPath": "github.com/aws/aws-sdk-go/aws/endpoints",
+			"Comment": "v1.6.10-1-g8649d27",
+			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
+		},
+		{
 			"ImportPath": "github.com/aws/aws-sdk-go/aws/request",
 			"Comment": "v1.6.10-1-g8649d27",
 			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
@@ -146,6 +151,16 @@
 			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
 		},
 		{
+			"ImportPath": "github.com/aws/aws-sdk-go/service/elasticache",
+			"Comment": "v1.2.5",
+			"Rev": "3c37d29820480639ff03fd66df00a0f27984f88d"
+		},
+		{
+			"ImportPath": "github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface",
+			"Comment": "v1.2.5",
+			"Rev": "3c37d29820480639ff03fd66df00a0f27984f88d"
+		},
+		{
 			"ImportPath": "github.com/aws/aws-sdk-go/service/firehose",
 			"Comment": "v1.6.10-1-g8649d27",
 			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
@@ -206,6 +221,11 @@
 			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
 		},
 		{
+			"ImportPath": "github.com/bradfitz/gomemcache/memcache",
+			"Comment": "release.r60-41-gfb1f79c",
+			"Rev": "fb1f79c6b65acda83063cbc69f6bba1522558bfc"
+		},
+		{
 			"ImportPath": "github.com/cactus/go-statsd-client/statsd",
 			"Comment": "v3.1.0",
 			"Rev": "91c326c3f7bd20f0226d3d1c289dd9f8ce28d33d"
@@ -213,6 +233,14 @@
 		{
 			"ImportPath": "github.com/davecgh/go-spew/spew",
 			"Rev": "5215b55f46b2b919f50a1df0eaa5886afe4e3b3d"
+		},
+		{
+			"ImportPath": "github.com/elgs/gojq",
+			"Rev": "81fa9a608a130323eaf4b4fc00224f7a467ffbd1"
+		},
+		{
+			"ImportPath": "github.com/elgs/gosplitargs",
+			"Rev": "a491c5eeb3c841d55913cf4888f5c957be4c598d"
 		},
 		{
 			"ImportPath": "github.com/go-ini/ini",
@@ -303,23 +331,16 @@
 			"Rev": "0b20b1127bcfdbea678ea132cd9fb2d7b5414792"
 		},
 		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "3797cd8864994d713d909eda5e61ede8683fdc12"
+		},
+		{
 			"ImportPath": "golang.org/x/sys/unix",
 			"Rev": "b518c298ac9dc94b6ac0757394f50d10c5dfa25a"
 		},
 		{
-			"ImportPath": "github.com/aws/aws-sdk-go/aws/endpoints",
-			"Comment": "v1.6.10-1-g8649d27",
-			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
-		},
-		{
-			"ImportPath": "github.com/aws/aws-sdk-go/vendor/github.com/go-ini/ini",
-			"Comment": "v1.6.10-1-g8649d27",
-			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
-		},
-		{
-			"ImportPath": "github.com/aws/aws-sdk-go/vendor/github.com/jmespath/go-jmespath",
-			"Comment": "v1.6.10-1-g8649d27",
-			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
+			"ImportPath": "golang.org/x/time/rate",
+			"Rev": "f51c12702a4d776e4c1fa9b0fabab841babae631"
 		}
 	]
 }

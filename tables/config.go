@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
@@ -16,18 +17,30 @@ type Tables struct {
 	Configs []scoop_protocol.Config
 }
 
-func getTypes(definitions []scoop_protocol.ColumnDefinition) ([]transformer.RedshiftType, error) {
+func getTypes(
+	definitions []scoop_protocol.ColumnDefinition,
+	tConfigs map[string]transformer.MappingTransformerConfig,
+) ([]transformer.RedshiftType, error) {
 	types := make([]transformer.RedshiftType, len(definitions))
 	for i, definition := range definitions {
-		t := transformer.GetTransform(definition.Transformer)
+		var t transformer.ColumnTransformer
+		var supportingColumns []string
+		tConfig, ok := tConfigs[definition.Transformer]
+		if ok {
+			t = transformer.GetMappingTransform(definition.Transformer, tConfig)
+			supportingColumns = strings.Split(definition.SupportingColumns, ",")
+		} else {
+			t = transformer.GetSingleValueTransform(definition.Transformer)
+		}
 		if t == nil {
 			logger.WithError(transformer.ErrUnknownTransform).Error("Failed to parse config")
 			return nil, transformer.ErrUnknownTransform
 		}
 		_type := transformer.RedshiftType{
-			Transformer:  t,
-			InboundName:  definition.InboundName,
-			OutboundName: definition.OutboundName,
+			Transformer:       t,
+			InboundName:       definition.InboundName,
+			OutboundName:      definition.OutboundName,
+			SupportingColumns: supportingColumns,
 		}
 		types[i] = _type
 	}
@@ -64,11 +77,13 @@ func LoadConfig(file io.Reader) (Tables, error) {
 }
 
 // CompileForParsing returns a map of transformers and versions for our table configs.
-func (c *Tables) CompileForParsing() (map[string][]transformer.RedshiftType, map[string]int, error) {
+func (c *Tables) CompileForParsing(
+	tConfigs map[string]transformer.MappingTransformerConfig,
+) (map[string][]transformer.RedshiftType, map[string]int, error) {
 	configs := make(map[string][]transformer.RedshiftType)
 	versions := make(map[string]int)
 	for _, config := range c.Configs {
-		typedConfig, typeErr := getTypes(config.Columns)
+		typedConfig, typeErr := getTypes(config.Columns, tConfigs)
 		if typeErr == nil {
 			configs[config.EventName] = typedConfig
 			versions[config.EventName] = config.Version

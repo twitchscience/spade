@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
+
+	"github.com/twitchscience/spade/transformer"
 )
 
 func newColumnDefs(in, out, transformer, opts string) scoop_protocol.ColumnDefinition {
@@ -25,6 +27,7 @@ func buildConfig() []byte {
 				newColumnDefs("testIn", "test", "int", ""),
 				newColumnDefs("testCharIn", "testChar", "varchar", "(32)"),
 				newColumnDefs("testIn", "test", "f@timestamp@2006-01-02 15:04:05", ""),
+				newColumnDefs("testMappingIn", "testMapping", "userIDWithMapping", ""),
 			},
 			Version: 22,
 		},
@@ -41,13 +44,19 @@ func buildConfig() []byte {
 	return configBuffer
 }
 
+func buildMappingConfig() map[string]transformer.MappingTransformerConfig {
+	return map[string]transformer.MappingTransformerConfig{
+		"userIDWithMapping": transformer.MappingTransformerConfig{},
+	}
+}
+
 func TestConfigLoading(t *testing.T) {
 	tables, err := LoadConfig(bytes.NewReader(buildConfig()))
 	if err != nil {
 		t.Error(err)
 		t.Fail()
 	}
-	maintenanceStrings, maintananceVersions, _ := tables.CompileForParsing()
+	maintenanceStrings, maintananceVersions, _ := tables.CompileForParsing(buildMappingConfig())
 	loader := NewStaticLoader(maintenanceStrings, maintananceVersions)
 	_, err = loader.GetColumnsForEvent("test1")
 	if err != nil {
@@ -72,7 +81,7 @@ func TestVersionLoading(t *testing.T) {
 		t.Error(err)
 		t.Fail()
 	}
-	maintenanceStrings, maintananceVersions, _ := tables.CompileForParsing()
+	maintenanceStrings, maintananceVersions, _ := tables.CompileForParsing(buildMappingConfig())
 	loader := NewStaticLoader(maintenanceStrings, maintananceVersions)
 	version := loader.GetVersionForEvent("test1")
 	if version != 22 {

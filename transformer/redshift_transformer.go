@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/writer"
+
+	"github.com/twitchscience/spade/lookup"
 )
 
 // RedshiftTransformer turns MixpanelEvents into WriteRequests using the given ConfigLoader.
@@ -138,11 +141,35 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 		temp["ip"] = event.ClientIP
 	}
 
+	var successes, skippedColumn int
 	for n, column := range columns {
 		k, v, err := column.Format(temp)
-		// We should add reporting here to statsd
 		if err != nil {
-			possibleError = ErrSkippedColumn{fmt.Sprintf("Problem parsing into %v: %v\n", column, err)}
+			switch err {
+			case memcache.ErrCacheMiss:
+				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.cache_miss", event.Event), 1)
+			case memcache.ErrCASConflict:
+				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.cas_conflict", event.Event), 1)
+			case memcache.ErrNotStored:
+				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.not_stored", event.Event), 1)
+			case memcache.ErrServerError:
+				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.server_error", event.Event), 1)
+			case memcache.ErrNoStats:
+				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.no_stats", event.Event), 1)
+			case memcache.ErrMalformedKey:
+				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.malformed_key", event.Event), 1)
+			case lookup.ErrTooManyRequests:
+				t.stats.IncrBy(fmt.Sprintf("transformer.%s.tooManyFetchRequests", event.Event), 1)
+			case lookup.ErrExtractingValue:
+				t.stats.IncrBy(fmt.Sprintf("transformer.%s.invalidMapping", event.Event), 1)
+			default:
+				skippedColumn++
+				possibleError = ErrSkippedColumn{
+					fmt.Sprintf("Problem parsing into %v: %v\n", column, err),
+				}
+			}
+		} else {
+			successes++
 		}
 		if n != 0 {
 			_, _ = tsvOutput.WriteRune('\t')
@@ -150,5 +177,8 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 		_, _ = tsvOutput.WriteString(fmt.Sprintf("%q", v))
 		kvOutput[k] = v
 	}
+	t.stats.IncrBy(fmt.Sprintf("transformer.%s.success", event.Event), successes)
+	t.stats.IncrBy(fmt.Sprintf("transformer.%s.skippedColumn", event.Event), skippedColumn)
+
 	return tsvOutput.String(), kvOutput, possibleError
 }

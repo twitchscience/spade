@@ -7,8 +7,10 @@ import (
 	"os"
 
 	"github.com/twitchscience/aws_utils/logger"
+	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
+	"github.com/twitchscience/spade/lookup"
 	"github.com/twitchscience/spade/writer"
 )
 
@@ -51,6 +53,15 @@ var config struct {
 
 	// KinesisWriters contain a list of configs for KinesisWriters
 	KinesisOutputs []writer.KinesisWriterConfig
+
+	// JSONValueFetchers is a map of id to JSONValueFetcherConfigs
+	JSONValueFetchers map[string]lookup.JSONValueFetcherConfig
+
+	// TransformerCacheCluster contains the config required to instantiate a cache for transformers
+	TransformerCacheCluster elastimemcache.Config
+
+	// TransformerFetchers is a map of transformer id to value fetcher id
+	TransformerFetchers map[string]string
 }
 
 func loadConfig() {

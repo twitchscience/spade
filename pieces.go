@@ -15,9 +15,12 @@ import (
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/uploader"
+	"github.com/twitchscience/spade/cache"
+	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
+	"github.com/twitchscience/spade/lookup"
 	"github.com/twitchscience/spade/reporter"
 	tableConfig "github.com/twitchscience/spade/tables"
 	"github.com/twitchscience/spade/transformer"
@@ -60,6 +63,21 @@ func startELBHealthCheckListener() {
 	})
 }
 
+func createValueFetchers(
+	jsonFetchers map[string]lookup.JSONValueFetcherConfig,
+) map[string]lookup.ValueFetcher {
+
+	allFetchers := map[string]lookup.ValueFetcher{}
+	for id, config := range jsonFetchers {
+		fetcher, err := lookup.NewJSONValueFetcher(config)
+		if err != nil {
+			logger.WithError(err).Fatalf("Failed to create a value fetcher with id %s", id)
+		}
+		allFetchers[id] = fetcher
+	}
+	return allFetchers
+}
+
 func createSpadeReporter(stats reporter.StatsLogger) reporter.Reporter {
 	return reporter.BuildSpadeReporter(
 		[]reporter.Tracker{&reporter.SpadeStatsdTracker{Stats: stats}})
@@ -89,8 +107,43 @@ func createSpadeWriter(
 	return w
 }
 
-func createSchemaLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger) *tableConfig.DynamicLoader {
-	loader, err := tableConfig.NewDynamicLoader(fetcher, schemaReloadFrequency, schemaRetryDelay, stats)
+func createTransformerCache(s *session.Session, cfg elastimemcache.Config) *elastimemcache.Client {
+	tCache, err := elastimemcache.NewClientWithSession(s, cfg)
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to create transformer cache")
+	}
+	logger.Go(tCache.StartAutoDiscovery)
+	return tCache
+}
+
+func createMappingTransformerConfigs(
+	valueFetchers map[string]lookup.ValueFetcher,
+	tCache cache.StringCache,
+	fetchersMapping map[string]string,
+) map[string]transformer.MappingTransformerConfig {
+
+	tConfigs := map[string]transformer.MappingTransformerConfig{}
+	for tID, fID := range fetchersMapping {
+		fetcher, ok := valueFetchers[fID]
+		if !ok {
+			logger.Fatalf("Failed to find a value fetcher with id %s", fID)
+		}
+		tConfigs[tID] = transformer.MappingTransformerConfig{
+			Fetcher: fetcher,
+			Cache:   tCache,
+		}
+	}
+	return tConfigs
+}
+
+func createSchemaLoader(
+	fetcher fetcher.ConfigFetcher,
+	stats reporter.StatsLogger,
+	tConfigs map[string]transformer.MappingTransformerConfig,
+) *tableConfig.DynamicLoader {
+
+	loader, err := tableConfig.NewDynamicLoader(fetcher, schemaReloadFrequency, schemaRetryDelay,
+		stats, tConfigs)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create schema dynamic loader")
 	}
