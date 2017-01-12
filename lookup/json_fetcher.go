@@ -11,6 +11,8 @@ import (
 	"github.com/elgs/gojq"
 	"github.com/elgs/gosplitargs"
 	"golang.org/x/time/rate"
+
+	"github.com/twitchscience/spade/reporter"
 )
 
 // JSONValueFetcherConfig contains the required information to instantiate a JSONValueFetcher
@@ -27,6 +29,7 @@ type JSONValueFetcher struct {
 	config  JSONValueFetcherConfig
 	handler HTTPRequestHandler
 	limiter *rate.Limiter
+	stats   reporter.StatsLogger
 }
 
 // validateJQ returns an error in the event the provided JQ expression is not valid for gojq parsing
@@ -54,7 +57,10 @@ func validateJQ(exp string) error {
 
 // NewJSONValueFetcher returns a *JSONValueFetcher that uses a BasicHTTPRequestHandler wrapping a
 // http.Client instance with the given timeout in ms to service GET requests
-func NewJSONValueFetcher(config JSONValueFetcherConfig) (*JSONValueFetcher, error) {
+func NewJSONValueFetcher(
+	config JSONValueFetcherConfig,
+	stats reporter.StatsLogger,
+) (*JSONValueFetcher, error) {
 	if config.TimeoutMS < 1 {
 		return nil, errors.New("TimeoutMS needs to be a positive integer")
 	}
@@ -72,6 +78,7 @@ func NewJSONValueFetcher(config JSONValueFetcherConfig) (*JSONValueFetcher, erro
 		config:  config,
 		handler: &handler,
 		limiter: rate.NewLimiter(rate.Limit(config.RatePerSecond), config.BurstSize),
+		stats:   stats,
 	}, nil
 }
 
@@ -88,6 +95,7 @@ func (f *JSONValueFetcher) fetchHelper(args map[string]string) (*gojq.JQ, error)
 	if err != nil {
 		return nil, err
 	}
+	f.stats.IncrBy("fetcher.json.requests", 1)
 
 	var jsonBlob interface{}
 	if err := json.Unmarshal(b, &jsonBlob); err != nil {

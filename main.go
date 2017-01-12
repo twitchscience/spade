@@ -93,9 +93,9 @@ func newProcessor() *spadeProcessor {
 	stats := createStatsdStatter()
 	startELBHealthCheckListener()
 
-	valueFetchers := createValueFetchers(config.JSONValueFetchers)
 	reporterStats := reporter.WrapCactusStatter(stats, 0.01)
 	spadeReporter := createSpadeReporter(reporterStats)
+	valueFetchers := createValueFetchers(config.JSONValueFetchers, reporterStats)
 	spadeUploaderPool := uploader.BuildUploaderForRedshift(
 		redshiftUploaderNumWorkers, sns, s3Uploader, config.AceBucketName,
 		config.AceTopicARN, config.AceErrorTopicARN, *runTag, *replay)

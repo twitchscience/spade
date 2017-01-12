@@ -4,7 +4,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cactus/go-statsd-client/statsd"
 	"golang.org/x/time/rate"
+
+	"github.com/twitchscience/spade/reporter"
 )
 
 const (
@@ -30,10 +33,12 @@ func (h *DummyHTTPRequestHandler) Get(url string, args map[string]string) ([]byt
 }
 
 func newFetcher(handler HTTPRequestHandler) JSONValueFetcher {
+	c, _ := statsd.NewNoop()
 	return JSONValueFetcher{
 		config:  jsonConfig,
 		handler: handler,
 		limiter: rate.NewLimiter(rate.Limit(jsonConfig.RatePerSecond), jsonConfig.BurstSize),
+		stats:   reporter.WrapCactusStatter(c, 0.1),
 	}
 }
 

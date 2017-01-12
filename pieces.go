@@ -65,11 +65,12 @@ func startELBHealthCheckListener() {
 
 func createValueFetchers(
 	jsonFetchers map[string]lookup.JSONValueFetcherConfig,
+	stats reporter.StatsLogger,
 ) map[string]lookup.ValueFetcher {
 
 	allFetchers := map[string]lookup.ValueFetcher{}
 	for id, config := range jsonFetchers {
-		fetcher, err := lookup.NewJSONValueFetcher(config)
+		fetcher, err := lookup.NewJSONValueFetcher(config, stats)
 		if err != nil {
 			logger.WithError(err).Fatalf("Failed to create a value fetcher with id %s", id)
 		}
