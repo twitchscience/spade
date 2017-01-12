@@ -58,6 +58,7 @@ func TestRefresh(t *testing.T) {
 		1*time.Microsecond,
 		1,
 		reporter.WrapCactusStatter(c, 0.1),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("was expecting no error but got %v\n", err)
@@ -100,6 +101,7 @@ func TestRetryPull(t *testing.T) {
 		1*time.Second,
 		1*time.Microsecond,
 		reporter.WrapCactusStatter(c, 0.1),
+		nil,
 	)
 	if err == nil {
 		t.Fatalf("expected loader to timeout\n")

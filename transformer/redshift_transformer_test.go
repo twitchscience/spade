@@ -2,6 +2,7 @@ package transformer
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"reflect"
@@ -15,14 +16,49 @@ import (
 	"github.com/twitchscience/spade/writer"
 )
 
+// idFetcherMock implements a dummy RedshiftValueFetcher that just checks if you're asking
+// for an int64 with an expected key, otherwise it returns an error.
+type idFetcherMock struct {
+	expectedLogin string
+}
+
+func (f *idFetcherMock) Fetch(args map[string]string) (interface{}, error) {
+	return nil, errors.New("Not expected to fetch for an interface")
+}
+
+func (f *idFetcherMock) FetchInt64(args map[string]string) (int64, error) {
+	login, ok := args["login"]
+	if !ok {
+		return 0, fmt.Errorf("Can't fetch login from args. Received: %v", args)
+	}
+	if login != f.expectedLogin {
+		return 0, fmt.Errorf("Can't fetch a value with login '%v', it should be %v ", login,
+			f.expectedLogin)
+	}
+	return 42, nil
+}
+
+// cacheMock implements a TransformerCache that always fails in Get and does nothing in Set.
+type cacheMock struct{}
+
+func (c *cacheMock) Get(key string) (string, error) {
+	return "", errors.New("memcache: cache miss")
+}
+
+func (c *cacheMock) Set(key string, value string) error {
+	return nil
+}
+
 // This tests that the logic is implemented correctly to
 // transform a parsed event to some table psql format.
 // Thus this does not test the redsshift types.
 // Modes to test:
 //  - Normal Mode: event conforms and is transformed successfully
+//  - Normal Mode with mapping: event conforms and is transformed and mapped successfully
 //  - Not tracked Mode: there is no table for this event
 //  - Empty Event: no text associated with this event
 //  - Transform error: Event contains a column that does not convert.
+//  - No mapping event: Event doesn't contain the required mapping columns.
 //  - Bad Parse event: Event already contains an error
 type testLoader struct {
 	Configs  map[string][]RedshiftType
@@ -48,13 +84,15 @@ func (s *testLoader) GetVersionForEvent(eventName string) int {
 
 func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writer.WriteRequest) {
 	log.SetOutput(bytes.NewBuffer(make([]byte, 0, 256))) // silence log output
+	tConfig := MappingTransformerConfig{&idFetcherMock{"kai.hayashi"}, &cacheMock{}}
 	config := &testLoader{
 		Configs: map[string][]RedshiftType{
 			"login": {
-				{intFormat(64), "times", "times"},
-				{floatFormat, "fraction", "fraction"},
-				{varcharFormat, "name", "name"},
-				{genUnixTimeFormat(PST), "now", "now"},
+				{intFormat(64), "times", "times", nil},
+				{floatFormat, "fraction", "fraction", nil},
+				{varcharFormat, "name", "name", nil},
+				{genUnixTimeFormat(PST), "now", "now", nil},
+				{genLoginToIDTransformer(tConfig), "id", "id", []string{"name"}},
 			},
 		},
 		Versions: map[string]int{
@@ -78,7 +116,8 @@ func TestBadParseEventConsume(t *testing.T) {
 			"times":    42,
 			"fraction": 0.1234,
 			"name":     "kai.hayashi",
-			"now":      1382033155}`),
+			"now":      1382033155,
+			"id":       42}`),
 		Failure: reporter.UnableToParseData,
 		Pstart:  now,
 		UUID:    "uuid1",
@@ -102,7 +141,8 @@ func TestTransformBadColumnEventConsume(t *testing.T) {
 			"times":    "sda",
 			"fraction": 0.1234,
 			"name":     "kai.hayashi",
-			"now":      1382033155}`),
+			"now":      1382033155,
+			"id":       42}`),
 		Failure: reporter.None,
 		Pstart:  now,
 		UUID:    "uuid1",
@@ -110,16 +150,12 @@ func TestTransformBadColumnEventConsume(t *testing.T) {
 	expected := writer.WriteRequest{
 		Category: "login",
 		Version:  42,
-		Line:     "\"\"\t\"0.1234\"\t\"kai.hayashi\"\t\"2013-10-17 11:05:55\"",
-		Record:   map[string]string{"times": "", "fraction": "0.1234", "name": "kai.hayashi", "now": "2013-10-17 11:05:55"},
-		Source: []byte(`{
-			"times":    "sda",
-			"fraction": 0.1234,
-			"name":     "kai.hayashi",
-			"now":      1382033155}`),
-		Failure: reporter.SkippedColumn,
-		Pstart:  now,
-		UUID:    "uuid1",
+		Line:     "\"\"\t\"0.1234\"\t\"kai.hayashi\"\t\"2013-10-17 11:05:55\"\t\"42\"",
+		Record:   map[string]string{"times": "", "fraction": "0.1234", "name": "kai.hayashi", "now": "2013-10-17 11:05:55", "id": "42"},
+		Source:   transformErrorEvent.Properties,
+		Failure:  reporter.SkippedColumn,
+		Pstart:   now,
+		UUID:     "uuid1",
 	}
 	transformerRunner(t, transformErrorEvent, &expected)
 }
@@ -132,7 +168,8 @@ func TestEmptyEventConsume(t *testing.T) {
 			"times":    42,
 			"fraction": 0.1234,
 			"name":     "kai.hayashi",
-			"now":      1382033155}`),
+			"now":      1382033155,
+			"id":       42}`),
 		Failure: reporter.None,
 		Pstart:  now,
 		UUID:    "uuid1",
@@ -162,15 +199,12 @@ func TestMissingPropertyEventConsume(t *testing.T) {
 	expected := writer.WriteRequest{
 		Category: "login",
 		Version:  42,
-		Line:     "\"42\"\t\"0.1234\"\t\"kai.hayashi\"\t\"\"",
-		Record:   map[string]string{"times": "42", "fraction": "0.1234", "name": "kai.hayashi", "": ""},
-		Source: []byte(`{
-			"times":    42,
-			"fraction": 0.1234,
-			"name":     "kai.hayashi"}`),
-		Failure: reporter.SkippedColumn,
-		Pstart:  now,
-		UUID:    "uuid1",
+		Line:     "\"42\"\t\"0.1234\"\t\"kai.hayashi\"\t\"\"\t\"42\"",
+		Record:   map[string]string{"times": "42", "fraction": "0.1234", "name": "kai.hayashi", "id": "42", "": ""},
+		Source:   emptyEvent.Properties,
+		Failure:  reporter.SkippedColumn,
+		Pstart:   now,
+		UUID:     "uuid1",
 	}
 	transformerRunner(t, emptyEvent, &expected)
 }
@@ -183,7 +217,8 @@ func TestNotTrackedEventConsume(t *testing.T) {
 			"times":    42,
 			"fraction": 0.1234,
 			"name":     "kai.hayashi",
-			"now":      1382033155
+			"now":      1382033155,
+			"id":       42
 		}`),
 		Failure: reporter.None,
 		Pstart:  now,
@@ -191,12 +226,39 @@ func TestNotTrackedEventConsume(t *testing.T) {
 	}
 	transformerRunner(t, notTrackedEvent, &writer.WriteRequest{
 		Category: notTrackedEvent.Event,
-		Line:     `{"event":"NotTracked","properties":{"times":42,"fraction":0.1234,"name":"kai.hayashi","now":1382033155}}`,
+		Line:     `{"event":"NotTracked","properties":{"times":42,"fraction":0.1234,"name":"kai.hayashi","now":1382033155,"id":42}}`,
 		Source:   notTrackedEvent.Properties,
 		Failure:  reporter.NonTrackingEvent,
 		Pstart:   notTrackedEvent.Pstart,
 		UUID:     "uuid1",
 	})
+}
+
+func TestEventWithNoMappingConsume(t *testing.T) {
+	now := time.Now().In(PST)
+	noMappingEvent := &parser.MixpanelEvent{
+		Event: "login",
+		Properties: []byte(`{
+			"times":    42,
+			"fraction": 0.1234,
+			"now":      1382033155,
+			"id":       null}
+		}`),
+		Failure: reporter.None,
+		Pstart:  now,
+		UUID:    "uuid1",
+	}
+	expected := writer.WriteRequest{
+		Category: "login",
+		Version:  42,
+		Line:     "\"42\"\t\"0.1234\"\t\"\"\t\"2013-10-17 11:05:55\"\t\"\"",
+		Record:   map[string]string{"times": "42", "fraction": "0.1234", "now": "2013-10-17 11:05:55", "id": "", "": ""},
+		Source:   noMappingEvent.Properties,
+		UUID:     "uuid1",
+		Failure:  reporter.SkippedColumn,
+		Pstart:   now,
+	}
+	transformerRunner(t, noMappingEvent, &expected)
 }
 
 func TestNormalEventConsume(t *testing.T) {
@@ -207,7 +269,8 @@ func TestNormalEventConsume(t *testing.T) {
 			"times":    42,
 			"fraction": 0.1234,
 			"name":     "kai.hayashi",
-			"now":      1382033155
+			"now":      1382033155,
+			"id":       42}
 		}`),
 		Failure: reporter.None,
 		Pstart:  now,
@@ -216,17 +279,40 @@ func TestNormalEventConsume(t *testing.T) {
 	expected := writer.WriteRequest{
 		Category: "login",
 		Version:  42,
-		Line:     "\"42\"\t\"0.1234\"\t\"kai.hayashi\"\t\"2013-10-17 11:05:55\"",
-		Record:   map[string]string{"times": "42", "fraction": "0.1234", "name": "kai.hayashi", "now": "2013-10-17 11:05:55"},
-		Source: []byte(`{
+		Line:     "\"42\"\t\"0.1234\"\t\"kai.hayashi\"\t\"2013-10-17 11:05:55\"\t\"42\"",
+		Record:   map[string]string{"times": "42", "fraction": "0.1234", "name": "kai.hayashi", "now": "2013-10-17 11:05:55", "id": "42"},
+		Source:   normalEvent.Properties,
+		UUID:     "uuid1",
+		Failure:  reporter.None,
+		Pstart:   now,
+	}
+	transformerRunner(t, normalEvent, &expected)
+}
+
+func TestNormalEventWithMappingConsume(t *testing.T) {
+	now := time.Now().In(PST)
+	normalEvent := &parser.MixpanelEvent{
+		Event: "login",
+		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
 			"name":     "kai.hayashi",
-			"now":      1382033155
+			"now":      1382033155,
+			"id":       null}
 		}`),
-		UUID:    "uuid1",
 		Failure: reporter.None,
 		Pstart:  now,
+		UUID:    "uuid1",
+	}
+	expected := writer.WriteRequest{
+		Category: "login",
+		Version:  42,
+		Line:     "\"42\"\t\"0.1234\"\t\"kai.hayashi\"\t\"2013-10-17 11:05:55\"\t\"42\"",
+		Record:   map[string]string{"times": "42", "fraction": "0.1234", "name": "kai.hayashi", "now": "2013-10-17 11:05:55", "id": "42"},
+		Source:   normalEvent.Properties,
+		UUID:     "uuid1",
+		Failure:  reporter.None,
+		Pstart:   now,
 	}
 	transformerRunner(t, normalEvent, &expected)
 }

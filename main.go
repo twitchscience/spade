@@ -16,6 +16,7 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/twitchscience/aws_utils/logger"
 	aws_uploader "github.com/twitchscience/aws_utils/uploader"
+	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/deglobber"
@@ -64,6 +65,7 @@ type spadeProcessor struct {
 	multee                *writer.Multee
 	spadeUploaderPool     *aws_uploader.UploaderPool
 	blueprintUploaderPool *aws_uploader.UploaderPool
+	tCache                *elastimemcache.Client
 
 	rotation <-chan time.Time
 	sigc     chan os.Signal
@@ -91,6 +93,7 @@ func newProcessor() *spadeProcessor {
 	stats := createStatsdStatter()
 	startELBHealthCheckListener()
 
+	valueFetchers := createValueFetchers(config.JSONValueFetchers)
 	reporterStats := reporter.WrapCactusStatter(stats, 0.01)
 	spadeReporter := createSpadeReporter(reporterStats)
 	spadeUploaderPool := uploader.BuildUploaderForRedshift(
@@ -106,9 +109,12 @@ func newProcessor() *spadeProcessor {
 		config.MaxLogBytes, config.MaxLogAgeSecs))
 	multee.AddMany(createKinesisWriters(session, stats))
 
-	processorPool := processor.BuildProcessorPool(
-		createSchemaLoader(fetcher.New(config.BlueprintSchemasURL), reporterStats),
-		spadeReporter, multee, reporterStats)
+	fetcher := fetcher.New(config.BlueprintSchemasURL)
+	tCache := createTransformerCache(session, config.TransformerCacheCluster)
+	tConfigs := createMappingTransformerConfigs(valueFetchers, tCache, config.TransformerFetchers)
+	schemaLoader := createSchemaLoader(fetcher, reporterStats, tConfigs)
+
+	processorPool := processor.BuildProcessorPool(schemaLoader, spadeReporter, multee, reporterStats)
 	processorPool.StartListeners()
 
 	deglobberPool := deglobber.NewPool(deglobber.PoolConfig{
@@ -134,6 +140,7 @@ func newProcessor() *spadeProcessor {
 		blueprintUploaderPool: blueprintUploaderPool,
 		rotation:              time.Tick(rotationCheckFrequency),
 		sigc:                  sigc,
+		tCache:                tCache,
 	}
 }
 
@@ -169,6 +176,8 @@ func (s *spadeProcessor) run() {
 }
 
 func (s *spadeProcessor) shutdown() {
+	s.tCache.StopAutoDiscovery()
+
 	s.resultPipe.Close()
 	s.deglobberPool.Close()
 	s.processorPool.Close()

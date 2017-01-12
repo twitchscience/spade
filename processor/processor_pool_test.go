@@ -32,19 +32,19 @@ var (
 		map[string][]transformer.RedshiftType{
 			"login": {
 				{
-					Transformer: transformer.GetTransform("float"),
+					Transformer: transformer.GetSingleValueTransform("float"),
 					InboundName: "sampling_factor",
 				},
 				{
-					Transformer: transformer.GetTransform("varchar"),
+					Transformer: transformer.GetSingleValueTransform("varchar"),
 					InboundName: "distinct_id",
 				},
 				{
-					Transformer: transformer.GetTransform("f@timestamp@unix"),
+					Transformer: transformer.GetSingleValueTransform("f@timestamp@unix"),
 					InboundName: "time",
 				},
 				{
-					Transformer: transformer.GetTransform("f@timestamp@unix"),
+					Transformer: transformer.GetSingleValueTransform("f@timestamp@unix"),
 					InboundName: "client_time",
 				},
 			},

@@ -36,6 +36,7 @@ type DynamicLoader struct {
 	lock       *sync.RWMutex
 	closer     chan bool
 	stats      reporter.StatsLogger
+	tConfigs   map[string]transformer.MappingTransformerConfig
 }
 
 // NewDynamicLoader returns a new DynamicLoader, performing the first fetch.
@@ -44,6 +45,7 @@ func NewDynamicLoader(
 	reloadTime,
 	retryDelay time.Duration,
 	stats reporter.StatsLogger,
+	tConfigs map[string]transformer.MappingTransformerConfig,
 ) (*DynamicLoader, error) {
 	d := DynamicLoader{
 		fetcher:    fetcher,
@@ -54,6 +56,7 @@ func NewDynamicLoader(
 		lock:       &sync.RWMutex{},
 		closer:     make(chan bool),
 		stats:      stats,
+		tConfigs:   tConfigs,
 	}
 	config, versions, err := d.retryPull(5, retryDelay)
 	if err != nil {
@@ -107,7 +110,7 @@ func (d *DynamicLoader) pullConfigIn() (map[string][]transformer.RedshiftType, m
 		return nil, nil, err
 	}
 
-	newConfigs, newVersions, err := tables.CompileForParsing()
+	newConfigs, newVersions, err := tables.CompileForParsing(d.tConfigs)
 	if err != nil {
 		return nil, nil, err
 	}

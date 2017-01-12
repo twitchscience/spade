@@ -14,6 +14,9 @@ import (
 
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/geoip"
+
+	"github.com/twitchscience/spade/cache"
+	"github.com/twitchscience/spade/lookup"
 )
 
 // Contains transformers to cast and munge properties coming in into types
@@ -36,44 +39,67 @@ func getPST() *time.Location {
 	return pst
 }
 
+// MappingTransformerConfig contains the required configuration for a mapping transformer to work.
+type MappingTransformerConfig struct {
+	Fetcher lookup.ValueFetcher // used to fetch a value with with support of extra columns
+	Cache   cache.StringCache   // used to avoid fetching if possible.
+}
+
 // RedshiftType combines a way to get the input to the ColumnTransformer.
-// Basically it performs Transformer(Event[EventProperty]) -> Column.
+// Basically it performs Transformer(Event[EventProperty]) -> Column with the help of the values
+// of the SupportingColumns provided.
 type RedshiftType struct {
-	Transformer  ColumnTransformer
-	InboundName  string
-	OutboundName string
+	Transformer       ColumnTransformer
+	InboundName       string
+	OutboundName      string
+	SupportingColumns []string
 }
 
 // Format finds the column to transform and returns the outbound column name and transformed value.
 func (r *RedshiftType) Format(eventProperties map[string]interface{}) (string, string, error) {
-	if p, ok := eventProperties[r.InboundName]; ok {
-		value, err := r.Transformer(p)
-		return r.OutboundName, value, err
+	args := make([]interface{}, 0, len(r.SupportingColumns)+1)
+	columns := []string{r.InboundName}
+	columns = append(columns, r.SupportingColumns...)
+	for _, col := range columns {
+		p, ok := eventProperties[col]
+		if !ok && len(r.SupportingColumns) == 0 {
+			return "", "", ErrColumnNotFound
+		}
+		args = append(args, p)
 	}
-	return "", "", ErrColumnNotFound
+	value, err := r.Transformer(args)
+	return r.OutboundName, value, err
 }
 
-// GetTransform returns us a Transformer for a given string.
-func GetTransform(tType string) ColumnTransformer {
-	if t, ok := transformMap[tType]; ok {
-		return t
+// GetSingleValueTransform returns us a single value Transformer for a given identifier string.
+func GetSingleValueTransform(tType string) ColumnTransformer {
+	if t, ok := singleValueTransformMap[tType]; ok {
+		return safeColumnTransformer(t, 1)
 	}
 	if tType[0] == 'f' { // were building a transform function
 		transformParams := strings.Split(tType, "@")
 		if len(transformParams) < 3 {
 			return nil
 		}
-		if transformGenerator, ok := transformGeneratorMap[transformParams[1]]; ok {
-			return transformGenerator(transformParams[2])
+		if transformGenerator, ok := singleValueTransformGeneratorMap[transformParams[1]]; ok {
+			return safeColumnTransformer(transformGenerator(transformParams[2]), 1)
 		}
 		return nil
 	}
 	return nil
 }
 
+// GetMappingTransform returns a mapping transformer for a given identifier string.
+func GetMappingTransform(tType string, config MappingTransformerConfig) ColumnTransformer {
+	if transformGenerator, ok := mappingTransformMap[tType]; ok {
+		return transformGenerator(config)
+	}
+	return nil
+}
+
 // New types should register here
 var (
-	transformMap = map[string]ColumnTransformer{
+	singleValueTransformMap = map[string]ColumnTransformer{
 		"int":                intFormat(32),
 		"bigint":             intFormat(64),
 		"float":              floatFormat,
@@ -85,10 +111,12 @@ var (
 		"ipAsn":              ipAsnFormat,
 		"ipAsnInteger":       ipAsnIntFormat,
 		"stringToIntegerMD5": hashTransformer,
-		"userIDWithMapping":  intFormat(64),
 	}
-	transformGeneratorMap = map[string]func(string) ColumnTransformer{
+	singleValueTransformGeneratorMap = map[string]func(string) ColumnTransformer{
 		"timestamp": genTimeFormat,
+	}
+	mappingTransformMap = map[string]func(MappingTransformerConfig) ColumnTransformer{
+		"userIDWithMapping": genLoginToIDTransformer,
 	}
 )
 
@@ -131,7 +159,7 @@ func SetGeoDB(geoloc string, asnloc string) error {
 }
 
 // ColumnTransformer takes an event property and transforms it to a string.
-type ColumnTransformer func(interface{}) (string, error)
+type ColumnTransformer func([]interface{}) (string, error)
 
 const (
 	// RedshiftDatetimeIngestString is the format of timestamps that Redshift understands.
@@ -144,24 +172,35 @@ const (
 	FloatLowerBound = 10e-300
 )
 
-func intFormat(bitsAllowed uint) func(interface{}) (string, error) {
+// SafeColumnTransformer generates a ColumnTransformer that calls the provided transformer only
+// after validating that the amount of arguments provided at runtime is equal to nargs.
+func safeColumnTransformer(transformer ColumnTransformer, nargs int) ColumnTransformer {
+	return func(args []interface{}) (string, error) {
+		if len(args) != nargs {
+			return "", fmt.Errorf("Provide %v arguments instead of the required amount of %v",
+				len(args), nargs)
+		}
+		return transformer(args)
+	}
+}
+
+// safeParseInt safely extracts an int64 from an interface{}. It assumes first that it comes from a
+// decoded json with UseNumber() enabled, otherwise it assumes is a string or just returns error.
+func safeParseInt(value interface{}) (int64, error) {
+	if t, ok := value.(json.Number); ok {
+		return t.Int64()
+	}
+	if strTarget, ok := value.(string); ok {
+		return strconv.ParseInt(strTarget, 10, 64)
+	}
+	return 0, errors.New("nil target")
+}
+
+func intFormat(bitsAllowed uint) func([]interface{}) (string, error) {
 	maxIntAllowed := int64(1<<(bitsAllowed-1) - 1)
 	minIntAllowed := int64(1<<(bitsAllowed-1)) * -1
-	return func(target interface{}) (string, error) {
-		// The json decoder we are using outputs as json.Number
-		t, ok := target.(json.Number)
-		var i int64
-		var err error
-		if !ok { // we should try parsing it from string
-			strTarget, ok := target.(string)
-			if !ok {
-				err = errors.New("nil target")
-			} else {
-				i, err = strconv.ParseInt(strTarget, 10, 64)
-			}
-		} else {
-			i, err = t.Int64()
-		}
+	return func(args []interface{}) (string, error) {
+		i, err := safeParseInt(args[0])
 		if err != nil {
 			return "", err
 		}
@@ -172,12 +211,12 @@ func intFormat(bitsAllowed uint) func(interface{}) (string, error) {
 	}
 }
 
-func floatFormat(target interface{}) (string, error) {
-	t, ok := target.(json.Number)
+func floatFormat(args []interface{}) (string, error) {
+	t, ok := args[0].(json.Number)
 	var f float64
 	var err error
 	if !ok { // we should try parsing it from string
-		strTarget, ok := target.(string)
+		strTarget, ok := args[0].(string)
 		if !ok {
 			err = errors.New("nil target")
 		} else {
@@ -196,10 +235,10 @@ func floatFormat(target interface{}) (string, error) {
 }
 
 func genUnixTimeFormat(timezone *time.Location) ColumnTransformer {
-	return func(target interface{}) (string, error) {
-		t, ok := target.(json.Number)
+	return func(args []interface{}) (string, error) {
+		t, ok := args[0].(json.Number)
 		if !ok {
-			return "", genError(target, "Time: unix")
+			return "", genError(args[0], "Time: unix")
 		}
 		i, err := t.Float64()
 		if err != nil {
@@ -210,7 +249,7 @@ func genUnixTimeFormat(timezone *time.Location) ColumnTransformer {
 		nanos := (i - seconds) * float64(time.Second)
 		// we also error if the year will be converted into a > 4 digit number
 		if seconds < timeLowerBound || seconds > fiveDigitYearCutoff {
-			return "", genError(target, "Time: unix")
+			return "", genError(args[0], "Time: unix")
 		}
 		return time.Unix(int64(seconds), int64(nanos)).In(timezone).Format(RedshiftDatetimeIngestString), nil
 	}
@@ -222,10 +261,10 @@ func genTimeFormat(format string) ColumnTransformer {
 	} else if format == "unix-utc" {
 		return genUnixTimeFormat(time.UTC)
 	}
-	return func(target interface{}) (string, error) {
-		str, ok := target.(string)
+	return func(args []interface{}) (string, error) {
+		str, ok := args[0].(string)
 		if !ok {
-			return "", genError(target, "Time: "+format)
+			return "", genError(args[0], "Time: "+format)
 		}
 		t, err := time.ParseInLocation(format, str, PST)
 		if err != nil {
@@ -235,20 +274,20 @@ func genTimeFormat(format string) ColumnTransformer {
 	}
 }
 
-func varcharFormat(target interface{}) (string, error) {
-	str, ok := target.(string)
+func varcharFormat(args []interface{}) (string, error) {
+	str, ok := args[0].(string)
 	if !ok {
-		return "", genError(target, "Varchar")
+		return "", genError(args[0], "Varchar")
 	}
 	return str, nil
 }
 
-func boolFormat(target interface{}) (string, error) {
-	b, ok := target.(bool)
+func boolFormat(args []interface{}) (string, error) {
+	b, ok := args[0].(bool)
 	if ok {
 		return fmt.Sprintf("%t", b), nil
 	} // else we should try parsing it as a number
-	i, ok := target.(json.Number)
+	i, ok := args[0].(json.Number)
 	if ok {
 		if i == json.Number("1") {
 			return "true", nil
@@ -256,49 +295,49 @@ func boolFormat(target interface{}) (string, error) {
 			return "false", nil
 		}
 	}
-	return "", genError(target, "Bool")
+	return "", genError(args[0], "Bool")
 }
 
-func ipCityFormat(target interface{}) (string, error) {
-	str, ok := target.(string)
+func ipCityFormat(args []interface{}) (string, error) {
+	str, ok := args[0].(string)
 	if !ok {
-		return "", genError(target, "Ip City")
+		return "", genError(args[0], "Ip City")
 	}
 	return GeoIPDB.GetCity(str), nil
 }
 
-func ipCountryFormat(target interface{}) (string, error) {
-	str, ok := target.(string)
+func ipCountryFormat(args []interface{}) (string, error) {
+	str, ok := args[0].(string)
 	if !ok {
-		return "", genError(target, "Ip Country")
+		return "", genError(args[0], "Ip Country")
 	}
 	return GeoIPDB.GetCountry(str), nil
 }
 
-func ipRegionFormat(target interface{}) (string, error) {
-	str, ok := target.(string)
+func ipRegionFormat(args []interface{}) (string, error) {
+	str, ok := args[0].(string)
 	if !ok {
-		return "", genError(target, "Ip Region")
+		return "", genError(args[0], "Ip Region")
 	}
 	return GeoIPDB.GetRegion(str), nil
 }
 
-func ipAsnFormat(target interface{}) (string, error) {
-	str, ok := target.(string)
+func ipAsnFormat(args []interface{}) (string, error) {
+	str, ok := args[0].(string)
 	if !ok {
-		return "", genError(target, "Ip Asn")
+		return "", genError(args[0], "Ip Asn")
 	}
 	return GeoIPDB.GetAsn(str), nil
 }
 
-func ipAsnIntFormat(target interface{}) (string, error) {
-	str, ok := target.(string)
+func ipAsnIntFormat(args []interface{}) (string, error) {
+	str, ok := args[0].(string)
 	if !ok {
-		return "", genError(target, "Ip Asn")
+		return "", genError(args[0], "Ip Asn")
 	}
 	asnString := GeoIPDB.GetAsn(str)
 	if !strings.HasPrefix(asnString, "AS") {
-		return "", genError(target, "Ip Asn")
+		return "", genError(args[0], "Ip Asn")
 	}
 	index := strings.Index(asnString, " ")
 	if index < 0 {
@@ -306,20 +345,72 @@ func ipAsnIntFormat(target interface{}) (string, error) {
 	}
 	asnInt, err := strconv.Atoi(asnString[2:index])
 	if err != nil {
-		return "", genError(target, "Ip Asn")
+		return "", genError(args[0], "Ip Asn")
 	}
 	return strconv.Itoa(asnInt), nil
 }
 
-func hashTransformer(target interface{}) (string, error) {
-	str, ok := target.(string)
+func hashTransformer(args []interface{}) (string, error) {
+	str, ok := args[0].(string)
 	if !ok {
-		return "", genError(target, "Hash transformer")
+		return "", genError(args[0], "Hash transformer")
 	}
 	bytedString := md5.Sum([]byte(str))
 	hashedInt, err := strconv.ParseInt(hex.EncodeToString(bytedString[:])[:8], 16, 64)
 	if err != nil {
-		return "", genError(target, "Hash transformer")
+		return "", genError(args[0], "Hash transformer")
 	}
 	return strconv.FormatInt(hashedInt, 10), nil
+}
+
+func genLoginToIDTransformer(config MappingTransformerConfig) ColumnTransformer {
+	return safeColumnTransformer(func(args []interface{}) (string, error) {
+		// Relevant design decision:
+		// We try to parse as a valid int64, if we fail we'll proceed to fetch. The important
+		// point is that we will fetch in the event of any type of failure, so is not just an
+		// empty string or null that will force the fetch. So a side effect of the transformer
+		// is that it will pro actively try to fix invalid IDs
+		localID, err := safeParseInt(args[0])
+		if err == nil {
+			return strconv.FormatInt(localID, 10), nil
+		}
+
+		// We're assuming the second argument is a string representing a user login string which
+		// we'll use to fetch the ID value
+		login, ok := args[1].(string)
+		if !ok {
+			return "", genError(args[1], "Login string")
+		}
+
+		// No need to fetch if we have an empty login, let's just return an empty id
+		if len(login) == 0 {
+			return "", nil
+		}
+
+		// Let's hit the cache, if there's a miss (or any other type of failure) we'll just
+		// proceed to fetch.
+		cachedID, err := config.Cache.Get(login)
+		if err == nil {
+			return cachedID, nil
+		}
+
+		// We'll fetch at this point, remembering to save to cache before returning. One thing
+		// to notice is that we'll always return failures from setting the cache in conjunction
+		// with the fetched value, this way the client can identify failure to save to cache but
+		// still use the value and move forward.
+		fetchArgs := map[string]string{
+			"login": login,
+		}
+		fetchedValue, err := config.Fetcher.FetchInt64(fetchArgs)
+		if err != nil {
+			if err == lookup.ErrExtractingValue {
+				// This kind of error is most likely caused by an invalid login provided for
+				// fetching, so let's cache an empty value so we don't keep fetching in the future
+				_ = config.Cache.Set(login, "")
+			}
+			return "", err
+		}
+		fetchedID := strconv.FormatInt(fetchedValue, 10)
+		return fetchedID, config.Cache.Set(login, fetchedID)
+	}, 2)
 }
