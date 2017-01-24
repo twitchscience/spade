@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/geoip"
+	"github.com/twitchscience/spade/reporter"
 
 	"github.com/twitchscience/spade/cache"
 	"github.com/twitchscience/spade/lookup"
@@ -41,8 +43,10 @@ func getPST() *time.Location {
 
 // MappingTransformerConfig contains the required configuration for a mapping transformer to work.
 type MappingTransformerConfig struct {
-	Fetcher lookup.ValueFetcher // used to fetch a value with with support of extra columns
-	Cache   cache.StringCache   // used to avoid fetching if possible.
+	Fetcher     lookup.ValueFetcher // used to fetch a value with with support of extra columns
+	LocalCache  cache.StringCache   // an in-memory cache to avoid fetching.
+	RemoteCache cache.StringCache   // an external cache to avoid fetching.
+	Stats       reporter.StatsLogger
 }
 
 // RedshiftType combines a way to get the input to the ColumnTransformer.
@@ -363,6 +367,49 @@ func hashTransformer(args []interface{}) (string, error) {
 	return strconv.FormatInt(hashedInt, 10), nil
 }
 
+func recordCacheError(stats reporter.StatsLogger, err error, operation string) {
+	switch err {
+	case nil:
+		stats.IncrBy(fmt.Sprintf("transformer.login_to_id.cache_error.%s.success", operation), 1)
+	case memcache.ErrCacheMiss:
+		stats.IncrBy(fmt.Sprintf("transformer.login_to_id.cache_error.%s.cache_miss", operation), 1)
+	case memcache.ErrMalformedKey:
+		stats.IncrBy(fmt.Sprintf("transformer.login_to_id.cache_error.%s.malformed_key", operation), 1)
+	default:
+		if _, ok := err.(*memcache.ConnectTimeoutError); ok {
+			stats.IncrBy(fmt.Sprintf("transformer.login_to_id.cache_error.%s.connect_timeout", operation), 1)
+		} else {
+			stats.IncrBy(fmt.Sprintf("transformer.login_to_id.cache_error.%s.other", operation), 1)
+		}
+	}
+}
+
+var (
+	// ErrIDSet means we didn't have to do a lookup.
+	ErrIDSet = errors.New("id was set")
+
+	// ErrBadLookupValue means the lookup value is not usable.
+	ErrBadLookupValue = errors.New("bad lookup value")
+
+	// ErrEmptyLookupValue means the lookup value is not usable.
+	ErrEmptyLookupValue = errors.New("empty lookup value")
+
+	// ErrLocalCacheHit means the value was in the local cache.
+	ErrLocalCacheHit = errors.New("local cache hit")
+
+	// ErrRemoteCacheHit means the value was in the remote cache.
+	ErrRemoteCacheHit = errors.New("remote cache hit")
+
+	// ErrFetchSuccess means we were able to fetch the correct value.
+	ErrFetchSuccess = errors.New("fetch success")
+
+	// ErrFetchFailure means we were unable to fetch the correct value.
+	ErrFetchFailure = errors.New("fetch failure")
+
+	// ErrCacheSetFailure means we were unable to store the lookup value in the cache.
+	ErrCacheSetFailure = errors.New("cache set failure")
+)
+
 func genLoginToIDTransformer(config MappingTransformerConfig) ColumnTransformer {
 	return safeColumnTransformer(func(args []interface{}) (string, error) {
 		// Relevant design decision:
@@ -372,26 +419,34 @@ func genLoginToIDTransformer(config MappingTransformerConfig) ColumnTransformer 
 		// is that it will pro actively try to fix invalid IDs
 		localID, err := safeParseInt(args[0])
 		if err == nil {
-			return strconv.FormatInt(localID, 10), nil
+			return strconv.FormatInt(localID, 10), ErrIDSet
 		}
 
 		// We're assuming the second argument is a string representing a user login string which
 		// we'll use to fetch the ID value
 		login, ok := args[1].(string)
 		if !ok {
-			return "", genError(args[1], "Login string")
+			return "", ErrBadLookupValue
 		}
 
 		// No need to fetch if we have an empty login, let's just return an empty id
 		if len(login) == 0 {
-			return "", nil
+			return "", ErrEmptyLookupValue
 		}
 
-		// Let's hit the cache, if there's a miss (or any other type of failure) we'll just
-		// proceed to fetch.
-		cachedID, err := config.Cache.Get(login)
+		// Chceck the local cache.
+		cachedID, err := config.LocalCache.Get(login)
 		if err == nil {
-			return cachedID, nil
+			recordCacheError(config.Stats, nil, "local_get")
+			return cachedID, ErrLocalCacheHit
+		}
+
+		// Failed the local cache. Try the remote cache.
+		cachedID, err = config.RemoteCache.Get(login)
+		if err == nil {
+			recordCacheError(config.Stats, nil, "remote_get")
+			_ = config.LocalCache.Set(login, cachedID)
+			return cachedID, ErrRemoteCacheHit
 		}
 
 		// We'll fetch at this point, remembering to save to cache before returning. One thing
@@ -406,11 +461,19 @@ func genLoginToIDTransformer(config MappingTransformerConfig) ColumnTransformer 
 			if err == lookup.ErrExtractingValue {
 				// This kind of error is most likely caused by an invalid login provided for
 				// fetching, so let's cache an empty value so we don't keep fetching in the future
-				_ = config.Cache.Set(login, "")
+				_ = config.LocalCache.Set(login, "")
+				err = config.RemoteCache.Set(login, "")
+				recordCacheError(config.Stats, err, "remote_set")
 			}
-			return "", err
+			return "", ErrFetchFailure
 		}
 		fetchedID := strconv.FormatInt(fetchedValue, 10)
-		return fetchedID, config.Cache.Set(login, fetchedID)
+		_ = config.LocalCache.Set(login, fetchedID)
+		err = config.RemoteCache.Set(login, fetchedID)
+		recordCacheError(config.Stats, err, "remote_set")
+		if err != nil {
+			return fetchedID, ErrCacheSetFailure
+		}
+		return fetchedID, ErrFetchSuccess
 	}, 2)
 }
