@@ -11,6 +11,7 @@ import (
 
 	"github.com/cactus/go-statsd-client/statsd"
 
+	"github.com/twitchscience/spade/lookup"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/writer"
@@ -31,6 +32,9 @@ func (f *idFetcherMock) FetchInt64(args map[string]string) (int64, error) {
 	if !ok {
 		return 0, fmt.Errorf("Can't fetch login from args. Received: %v", args)
 	}
+	if login == "errExtractingValue" {
+		return 0, lookup.ErrExtractingValue
+	}
 	if login != f.expectedLogin {
 		return 0, fmt.Errorf("Can't fetch a value with login '%v', it should be %v ", login,
 			f.expectedLogin)
@@ -47,6 +51,14 @@ func (c *cacheMock) Get(key string) (string, error) {
 
 func (c *cacheMock) Set(key string, value string) error {
 	return nil
+}
+
+type statsMock struct{}
+
+func (s *statsMock) Timing(stat string, t time.Duration) {
+}
+
+func (s *statsMock) IncrBy(stat string, value int) {
 }
 
 // This tests that the logic is implemented correctly to
@@ -84,7 +96,8 @@ func (s *testLoader) GetVersionForEvent(eventName string) int {
 
 func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writer.WriteRequest) {
 	log.SetOutput(bytes.NewBuffer(make([]byte, 0, 256))) // silence log output
-	tConfig := MappingTransformerConfig{&idFetcherMock{"kai.hayashi"}, &cacheMock{}}
+	tConfig := MappingTransformerConfig{
+		&idFetcherMock{"kai.hayashi"}, &cacheMock{}, &cacheMock{}, &statsMock{}}
 	config := &testLoader{
 		Configs: map[string][]RedshiftType{
 			"login": {

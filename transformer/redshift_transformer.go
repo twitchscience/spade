@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/writer"
@@ -141,35 +140,51 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 		temp["ip"] = event.ClientIP
 	}
 
-	var successes, skippedColumn int
+	results := make(map[string]int)
 	for n, column := range columns {
 		k, v, err := column.Format(temp)
-		if err != nil {
-			switch err {
-			case memcache.ErrCacheMiss:
-				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.cache_miss", event.Event), 1)
-			case memcache.ErrCASConflict:
-				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.cas_conflict", event.Event), 1)
-			case memcache.ErrNotStored:
-				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.not_stored", event.Event), 1)
-			case memcache.ErrServerError:
-				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.server_error", event.Event), 1)
-			case memcache.ErrNoStats:
-				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.no_stats", event.Event), 1)
-			case memcache.ErrMalformedKey:
-				t.stats.IncrBy(fmt.Sprintf("transformer.%s.cache_error.malformed_key", event.Event), 1)
-			case lookup.ErrTooManyRequests:
-				t.stats.IncrBy(fmt.Sprintf("transformer.%s.tooManyFetchRequests", event.Event), 1)
-			case lookup.ErrExtractingValue:
-				t.stats.IncrBy(fmt.Sprintf("transformer.%s.invalidMapping", event.Event), 1)
-			default:
-				skippedColumn++
-				possibleError = ErrSkippedColumn{
-					fmt.Sprintf("Problem parsing into %v: %v\n", column, err),
-				}
+		skipped := false
+		switch err {
+		case nil:
+			results["success"]++
+		case lookup.ErrTooManyRequests:
+			skipped = true
+			results["tooManyFetchRequests"]++
+		case lookup.ErrExtractingValue:
+			skipped = true
+			results["invalidMapping"]++
+		case ErrIDSet:
+			results["success"]++
+			results["cache.id_set"]++
+		case ErrBadLookupValue:
+			skipped = true
+			results["cache.bad_lookup_value"]++
+		case ErrEmptyLookupValue:
+			skipped = true
+			results["cache.empty_lookup_value"]++
+		case ErrLocalCacheHit:
+			results["success"]++
+			results["cache.local_cache_hit"]++
+		case ErrRemoteCacheHit:
+			results["success"]++
+			results["cache.remote_cache_hit"]++
+		case ErrFetchSuccess:
+			results["success"]++
+			results["cache.fetch_success"]++
+		case ErrFetchFailure:
+			skipped = true
+			results["cache.fetch_failure"]++
+		case ErrCacheSetFailure:
+			results["success"]++
+			results["cache.set_failure"]++
+		default:
+			skipped = true
+		}
+		if skipped {
+			results["skippedColumn"]++
+			possibleError = ErrSkippedColumn{
+				fmt.Sprintf("Problem parsing into %v: %v\n", column, err),
 			}
-		} else {
-			successes++
 		}
 		if n != 0 {
 			_, _ = tsvOutput.WriteRune('\t')
@@ -177,8 +192,9 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 		_, _ = tsvOutput.WriteString(fmt.Sprintf("%q", v))
 		kvOutput[k] = v
 	}
-	t.stats.IncrBy(fmt.Sprintf("transformer.%s.success", event.Event), successes)
-	t.stats.IncrBy(fmt.Sprintf("transformer.%s.skippedColumn", event.Event), skippedColumn)
+	for stat, count := range results {
+		t.stats.IncrBy(fmt.Sprintf("transformer.%s.%s", event.Event, stat), count)
+	}
 
 	return tsvOutput.String(), kvOutput, possibleError
 }

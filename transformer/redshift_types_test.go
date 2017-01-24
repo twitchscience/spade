@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/twitchscience/scoop_protocol/transformer"
+	"github.com/twitchscience/spade/cache/lru"
 )
 
 var (
@@ -171,4 +173,64 @@ func TestInSyncWithScoopProtocol(t *testing.T) {
 	if !reflect.DeepEqual(processorNames, transformer.ValidTransforms) {
 		t.Errorf("Expected processor valid transform names to be equal to scoop_protocol's list of valid transforms. Respectively found them as %v and %v", processorNames, transformer.ValidTransforms)
 	}
+}
+
+func TestLoginToIDTransformer(t *testing.T) {
+	localCache := lru.New(5)
+	remoteCache := lru.New(5)
+	tConfig := MappingTransformerConfig{
+		Fetcher:     &idFetcherMock{"kai.hayashi"},
+		LocalCache:  localCache,
+		RemoteCache: remoteCache,
+		Stats:       &statsMock{},
+	}
+	transformer := genLoginToIDTransformer(tConfig)
+	// Setting ID should tell us that we set ID.
+	v, err := transformer([]interface{}{json.Number("5"), "test"})
+	assert.Equal(t, "5", v)
+	assert.Equal(t, ErrIDSet, err)
+
+	// ID fetch should work
+	v, err = transformer([]interface{}{"", "kai.hayashi"})
+	assert.Equal(t, "42", v)
+	assert.Equal(t, ErrFetchSuccess, err)
+
+	// The value should have been promoted to the local and remote caches, hitting local first.
+	v, err = transformer([]interface{}{"", "kai.hayashi"})
+	assert.Equal(t, "42", v)
+	assert.Equal(t, ErrLocalCacheHit, err)
+
+	// The value should still be in the remote cache.
+	localCache.RemoveOldest()
+	v, err = transformer([]interface{}{"", "kai.hayashi"})
+	assert.Equal(t, "42", v)
+	assert.Equal(t, ErrRemoteCacheHit, err)
+
+	// The value should have been promoted back to the local cache.
+	v, err = transformer([]interface{}{"", "kai.hayashi"})
+	assert.Equal(t, "42", v)
+	assert.Equal(t, ErrLocalCacheHit, err)
+
+	// Check an error extracting fetched value propagates as expected.
+	v, err = transformer([]interface{}{"", "errExtractingValue"})
+	assert.Equal(t, "", v)
+	assert.Equal(t, ErrFetchFailure, err)
+
+	// Check the local and remote caches had the empty value set.
+	v, err = transformer([]interface{}{"", "errExtractingValue"})
+	assert.Equal(t, "", v)
+	assert.Equal(t, ErrLocalCacheHit, err)
+	localCache.RemoveOldest()
+	localCache.RemoveOldest()
+	v, err = transformer([]interface{}{"", "errExtractingValue"})
+	assert.Equal(t, "", v)
+	assert.Equal(t, ErrRemoteCacheHit, err)
+
+	// Check a failed fetch doesn't get cached.
+	v, err = transformer([]interface{}{"", "unknown"})
+	assert.Equal(t, "", v)
+	assert.Equal(t, ErrFetchFailure, err)
+	v, err = transformer([]interface{}{"", "unknown"})
+	assert.Equal(t, "", v)
+	assert.Equal(t, ErrFetchFailure, err)
 }

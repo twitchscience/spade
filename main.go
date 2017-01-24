@@ -20,6 +20,7 @@ import (
 	"github.com/twitchscience/aws_utils/logger"
 	aws_uploader "github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/spade/cache/elastimemcache"
+	"github.com/twitchscience/spade/cache/lru"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/deglobber"
@@ -110,8 +111,10 @@ func newProcessor() *spadeProcessor {
 	multee.AddMany(createKinesisWriters(session, stats))
 
 	fetcher := fetcher.New(config.BlueprintSchemasURL)
-	tCache := createTransformerCache(session, config.TransformerCacheCluster)
-	tConfigs := createMappingTransformerConfigs(valueFetchers, tCache, config.TransformerFetchers)
+	localCache := lru.New(1000)
+	remoteCache := createTransformerCache(session, config.TransformerCacheCluster)
+	tConfigs := createMappingTransformerConfigs(
+		valueFetchers, localCache, remoteCache, config.TransformerFetchers, reporterStats)
 	schemaLoader := createSchemaLoader(fetcher, reporterStats, tConfigs)
 
 	processorPool := processor.BuildProcessorPool(schemaLoader, spadeReporter, multee, reporterStats)
@@ -140,7 +143,7 @@ func newProcessor() *spadeProcessor {
 		blueprintUploaderPool: blueprintUploaderPool,
 		rotation:              time.Tick(rotationCheckFrequency),
 		sigc:                  sigc,
-		tCache:                tCache,
+		tCache:                remoteCache,
 	}
 }
 

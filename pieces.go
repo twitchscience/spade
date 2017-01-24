@@ -119,8 +119,10 @@ func createTransformerCache(s *session.Session, cfg elastimemcache.Config) *elas
 
 func createMappingTransformerConfigs(
 	valueFetchers map[string]lookup.ValueFetcher,
-	tCache cache.StringCache,
+	localCache cache.StringCache,
+	remoteCache cache.StringCache,
 	fetchersMapping map[string]string,
+	stats reporter.StatsLogger,
 ) map[string]transformer.MappingTransformerConfig {
 
 	tConfigs := map[string]transformer.MappingTransformerConfig{}
@@ -130,8 +132,10 @@ func createMappingTransformerConfigs(
 			logger.Fatalf("Failed to find a value fetcher with id %s", fID)
 		}
 		tConfigs[tID] = transformer.MappingTransformerConfig{
-			Fetcher: fetcher,
-			Cache:   tCache,
+			Fetcher:     fetcher,
+			LocalCache:  localCache,
+			RemoteCache: remoteCache,
+			Stats:       stats,
 		}
 	}
 	return tConfigs
