@@ -9,12 +9,12 @@ import (
 )
 
 const (
-	nConverters   = 10
-	nTransformers = 10
+	nConverters   = 80
+	nTransformers = 80
 )
 
 // QueueSize is the size of the buffer on the input and output channels for the pool.
-const QueueSize = 6
+const QueueSize = 48
 
 // Pool takes in parser.Parseable objects, produces MixpanelEvents from them, and writes those events to S3.
 type Pool interface {

@@ -22,8 +22,6 @@ var (
 var config struct {
 	// BlueprintSchemasURL is the url to blueprint schemas
 	BlueprintSchemasURL string
-	// SQSPollInterval is how often should we poll SQS in seconds
-	SQSPollInterval int64
 	// ProcessorErrorTopicARN is the arn of the SNS topic for processor errors
 	ProcessorErrorTopicARN string
 	// AceTopicARN is the arn of the SNS topic for events going to Ace
@@ -128,7 +126,6 @@ func validateConfig() error {
 	}
 
 	for _, i := range []int64{
-		config.SQSPollInterval,
 		config.MaxLogBytes,
 		config.MaxLogAgeSecs,
 		int64(config.Geoip.UpdateFrequencyMins),
