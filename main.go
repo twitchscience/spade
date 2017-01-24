@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
 	"runtime"
 	"syscall"
 	"time"
@@ -26,13 +29,10 @@ import (
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/uploader"
 	"github.com/twitchscience/spade/writer"
-
-	"os"
-	"os/signal"
 )
 
 const (
-	redshiftUploaderNumWorkers          = 3
+	redshiftUploaderNumWorkers          = 6
 	blueprintUploaderNumWorkers         = 1
 	rotationCheckFrequency              = 2 * time.Second
 	duplicateCacheExpiry                = 5 * time.Minute
@@ -208,6 +208,12 @@ func main() {
 	logger.Info("Starting processor")
 	logger.CaptureDefault()
 	defer logger.LogPanic()
+
+	// Start listener for pprof.
+	logger.Go(func() {
+		defaultErr := http.ListenAndServe(net.JoinHostPort("", "8081"), http.DefaultServeMux)
+		logger.WithError(defaultErr).Error("Error listening to port 8081 with http.DefaultServeMux")
+	})
 
 	s := newProcessor()
 	s.run()
