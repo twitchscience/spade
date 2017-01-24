@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	nConverters   = 80
-	nTransformers = 80
+	nConverters   = 40
+	nTransformers = 40
 )
 
 // QueueSize is the size of the buffer on the input and output channels for the pool.
