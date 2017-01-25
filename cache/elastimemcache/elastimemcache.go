@@ -95,6 +95,11 @@ func (c *Client) updateNodes() error {
 	//Construct slice with strings of address:port
 	endpoints := make([]string, len(nodes))
 	for i, node := range resp.CacheClusters[0].CacheNodes {
+		if node == nil || node.Endpoint == nil || node.Endpoint.Address == nil ||
+			node.Endpoint.Port == nil {
+			// We have to be extra careful as a node info might be incomplete during changes
+			continue
+		}
 		endpoints[i] = fmt.Sprintf("%s:%d", *node.Endpoint.Address, *node.Endpoint.Port)
 	}
 
