@@ -176,8 +176,8 @@ func TestInSyncWithScoopProtocol(t *testing.T) {
 }
 
 func TestLoginToIDTransformer(t *testing.T) {
-	localCache := lru.New(5)
-	remoteCache := lru.New(5)
+	localCache := lru.New(5, lru.LongDuration)
+	remoteCache := lru.New(5, lru.LongDuration)
 	tConfig := MappingTransformerConfig{
 		Fetcher:     &idFetcherMock{"kai.hayashi"},
 		LocalCache:  localCache,

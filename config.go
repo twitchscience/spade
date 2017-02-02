@@ -60,6 +60,9 @@ var config struct {
 
 	// TransformerFetchers is a map of transformer id to value fetcher id
 	TransformerFetchers map[string]string
+
+	// LRULifetimeSeconds is the lifetime of an item in the local cache, in seconds.
+	LRULifetimeSeconds int64
 }
 
 func loadConfig() {
@@ -128,6 +131,7 @@ func validateConfig() error {
 	for _, i := range []int64{
 		config.MaxLogBytes,
 		config.MaxLogAgeSecs,
+		config.LRULifetimeSeconds,
 		int64(config.Geoip.UpdateFrequencyMins),
 		int64(config.Geoip.JitterSecs),
 	} {
