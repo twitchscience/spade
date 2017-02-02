@@ -214,8 +214,8 @@ func main() {
 
 	// Start listener for pprof.
 	logger.Go(func() {
-		defaultErr := http.ListenAndServe(net.JoinHostPort("", "8081"), http.DefaultServeMux)
-		logger.WithError(defaultErr).Error("Error listening to port 8081 with http.DefaultServeMux")
+		logger.WithError(http.ListenAndServe(":7766", http.DefaultServeMux)).
+			Error("Serving pprof failed")
 	})
 
 	s := newProcessor()
