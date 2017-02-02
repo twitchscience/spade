@@ -111,7 +111,7 @@ func newProcessor() *spadeProcessor {
 	multee.AddMany(createKinesisWriters(session, stats))
 
 	fetcher := fetcher.New(config.BlueprintSchemasURL)
-	localCache := lru.New(1000)
+	localCache := lru.New(1000, time.Duration(config.LRULifetimeSeconds)*time.Second)
 	remoteCache := createTransformerCache(session, config.TransformerCacheCluster)
 	tConfigs := createMappingTransformerConfigs(
 		valueFetchers, localCache, remoteCache, config.TransformerFetchers, reporterStats)
