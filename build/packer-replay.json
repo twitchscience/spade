@@ -73,7 +73,7 @@
     {
       "type": "shell",
       "inline": [
-        "sudo run_apt_get_install.sh libpq-dev",
+        "sudo run_apt_get_install.sh libpq-dev gzrt",
         "sudo pip install --upgrade -r /opt/science/{{user `project`}}/requirements-replay.txt",
         "sudo chmod +x /opt/science/{{user `project`}}/bin/*",
         "sudo rm /opt/science/{{user `project`}}/config/upstart/spade.conf",
