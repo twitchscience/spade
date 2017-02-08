@@ -104,6 +104,11 @@ func newProcessor() *spadeProcessor {
 		blueprintUploaderNumWorkers, sns, s3Uploader, config.NonTrackedBucketName,
 		config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN, *replay)
 
+	// If the processor exited hard, clean up the files that were left.
+	eDir := *_dir + "/" + writer.EventsDir + "/"
+	uploader.SalvageCorruptedEvents(eDir)
+	uploader.ClearEventsFolder(spadeUploaderPool, eDir)
+
 	multee := &writer.Multee{}
 	multee.Add(createSpadeWriter(
 		*_dir, spadeReporter, spadeUploaderPool, blueprintUploaderPool,

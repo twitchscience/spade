@@ -11,11 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type dummy struct {
-	I int
-	S string
-}
-
 func TestInvalidConfig(t *testing.T) {
 	validConfig := Config{
 		MaxSize:      1 * 1024 * 1024,

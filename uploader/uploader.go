@@ -1,11 +1,15 @@
 package uploader
 
 import (
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,7 +31,11 @@ type SNSNotifierHarness struct {
 
 // SendMessage sends information to SNS about file uploaded to S3.
 func (s *SNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
-	return s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, extractEventVersion(message.Path))
+	version, err := extractEventVersion(message.Path)
+	if err != nil {
+		return fmt.Errorf("extracting event version from path: %v", err)
+	}
+	return s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, version)
 }
 
 // NullNotifierHarness is a stub SNS client that does nothing.  In replay mode, we don't need to notify anyone of the
@@ -73,14 +81,13 @@ func extractEventName(filename string) string {
 	return filename[path:ext]
 }
 
-func extractEventVersion(filename string) int {
+func extractEventVersion(filename string) (int, error) {
 	path := strings.LastIndex(filename, ".v") + 2
 	ext := strings.Index(filename, ".gz")
 	if ext < 0 {
 		ext = len(filename)
 	}
-	val, _ := strconv.Atoi(filename[path:ext])
-	return val
+	return strconv.Atoi(filename[path:ext])
 }
 
 // ProcessorErrorHandler sends messages about errors sending SNS messages to another topic.
@@ -91,15 +98,15 @@ type ProcessorErrorHandler struct {
 
 // SendError sends the sending error to an topic.
 func (p *ProcessorErrorHandler) SendError(err error) {
-	logger.WithError(err).Error("Error sending message to topic")
+	logger.WithError(err).Error("error sending message to topic")
 	e := p.notifier.SendMessage("error", p.topicARN, err)
 	if e != nil {
-		logger.WithError(e).Error("Failed to send error")
+		logger.WithError(e).Error("failed to send error")
 	}
 }
 
 // NullErrorHandler logs errors but does not send an SNS message.
-type NullErrorHandler struct {}
+type NullErrorHandler struct{}
 
 // SendError logs the given error.
 func (n *NullErrorHandler) SendError(err error) {
@@ -109,11 +116,18 @@ func (n *NullErrorHandler) SendError(err error) {
 func buildErrorHandler(sns snsiface.SNSAPI, errorTopicArn string, nullNotifier bool) uploader.ErrorNotifierHarness {
 	if nullNotifier {
 		return &NullErrorHandler{}
-	} else {
-		return &ProcessorErrorHandler{
-			notifier: notifier.BuildSNSClient(sns),
-			topicARN: errorTopicArn,
-		}
+	}
+	return &ProcessorErrorHandler{
+		notifier: notifier.BuildSNSClient(sns),
+		topicARN: errorTopicArn,
+	}
+}
+
+// remove the file or log the error and move on
+func removeOrLog(path string) {
+	err := os.Remove(path)
+	if err != nil {
+		logger.WithError(err).WithField("path", path).Error("failed to remove file")
 	}
 }
 
@@ -126,48 +140,92 @@ func SafeGzipUpload(uploaderPool *uploader.UploaderPool, path string) {
 		})
 	} else {
 		logger.WithField("path", path).Warn("Given path is not a valid gzip file; removing")
-		err := os.Remove(path)
-		if err != nil {
-			logger.WithError(err).WithField("path", path).Error("Failed to remove path")
-		}
+		removeOrLog(path)
 	}
+}
+
+// salvageData uses the utility gzrecover to recover partial data from gzip,
+// overwriting the corrupted gzip file. Returns false if no data was recovered
+// or there was an error, else true
+func salvageData(path string) (bool, error) {
+	cmd := exec.Command("gzrecover", "-p", path)
+	var salvaged bytes.Buffer
+	cmd.Stdout = &salvaged
+	err := cmd.Run()
+	if err != nil {
+		return false, fmt.Errorf("running gzrecover: %v", err)
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return false, fmt.Errorf("creating file to overwrite with salvaged data: %v", err)
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			logger.WithField("path", path).WithError(cerr).Error("failed to close salvaged file")
+		}
+	}()
+
+	writer := gzip.NewWriter(f)
+	defer func() {
+		if cerr := writer.Close(); cerr != nil {
+			logger.WithField("path", path).WithError(cerr).Error("failed to close salvaged data gzip writer")
+		}
+	}()
+
+	// Writes (via gzip to file) all lines of the gzrecover output but the last,
+	// as the last line likely was only partially written.
+	writeSuccess := false
+	for {
+		bytes, err := salvaged.ReadBytes('\n')
+		if err == io.EOF {
+			return writeSuccess, nil
+		} else if err != nil {
+			return false, fmt.Errorf("reading from gzrecover output: %v", err)
+		}
+
+		if _, err = writer.Write(bytes); err != nil {
+			return false, fmt.Errorf("writing salvaged data: %v", err)
+		}
+		writeSuccess = true
+	}
+
 }
 
 func isValidGzip(path string) bool {
 	entry := logger.WithField("path", path)
 	file, err := os.Open(path)
 	if err != nil {
-		entry.WithError(err).Error("Failed to open")
+		entry.WithError(err).Error("failed to open")
 		return false
 	}
 	defer func() {
 		if err = file.Close(); err != nil {
-			entry.WithError(err).Error("Failed to close file")
+			entry.WithError(err).Error("failed to close file")
 		}
 	}()
 
 	reader, err := gzip.NewReader(file)
 	if err != nil {
-		entry.WithError(err).Error("Failed to create gzip.NewReader")
+		entry.WithError(err).Error("failed to create gzip.NewReader")
 		return false
 	}
 	defer func() {
 		if err = reader.Close(); err != nil {
-			entry.WithError(err).Error("Failed to close reader")
+			entry.WithError(err).Error("failed to close reader")
 		}
 	}()
 
 	_, err = ioutil.ReadAll(reader)
 	if err != nil {
-		entry.WithError(err).Error("Failed to read gzipped file")
+		entry.WithError(err).Error("failed to read gzipped file")
 		return false
 	}
 
 	return true
 }
 
-// ClearEventsFolder uploads all files in the eventsDir.
-func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) error {
+func walkEventFiles(eventsDir string, f func(path string)) error {
 	return filepath.Walk(eventsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -176,9 +234,31 @@ func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) er
 			return filepath.SkipDir
 		}
 		if strings.HasSuffix(path, ".gz") {
-			SafeGzipUpload(uploaderPool, path)
+			f(path)
 		}
 		return nil
+	})
+}
+
+// ClearEventsFolder uploads all files in the eventsDir.
+func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) error {
+	return walkEventFiles(eventsDir, func(path string) {
+		SafeGzipUpload(uploaderPool, path)
+	})
+}
+
+// SalvageCorruptedEvents salvages in place all invalid gzip files in the eventsDir
+func SalvageCorruptedEvents(eventsDir string) error {
+	return walkEventFiles(eventsDir, func(path string) {
+		if !isValidGzip(path) {
+			salvaged, err := salvageData(path)
+			if !salvaged {
+				removeOrLog(path)
+			}
+			if err != nil {
+				logger.WithField("path", path).WithError(err).Error("salvaging data from corrupted gzip file")
+			}
+		}
 	})
 }
 

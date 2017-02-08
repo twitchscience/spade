@@ -64,6 +64,7 @@
       "type": "shell",
       "inline":
       [
+        "sudo run_apt_get_install.sh gzrt",
         "sudo chmod +x /opt/science/{{user `project`}}/bin/*",
         "for f in /opt/science/{{user `project`}}/config/upstart/*.conf; do sudo ln -s $f /etc/init/$(basename $f); done"
       ]
