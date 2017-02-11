@@ -23,19 +23,30 @@ import (
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
-// SNSNotifierHarness is an SNS client that writes messages about uploaded files to a specific ARN.
-type SNSNotifierHarness struct {
+// RedshiftSNSNotifierHarness is an SNS client that writes messages about uploaded event files
+type RedshiftSNSNotifierHarness struct {
 	topicARN string
 	notifier *notifier.SNSClient
 }
 
 // SendMessage sends information to SNS about file uploaded to S3.
-func (s *SNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
+func (s *RedshiftSNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
 	version, err := extractEventVersion(message.Path)
 	if err != nil {
 		return fmt.Errorf("extracting event version from path: %v", err)
 	}
 	return s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, version)
+}
+
+// BlueprintSNSNotifierHarness is an SNS client that writes messages about uploaded nontracked event files
+type BlueprintSNSNotifierHarness struct {
+	topicARN string
+	notifier *notifier.SNSClient
+}
+
+// SendMessage sends information to SNS about file uploaded to S3.
+func (s *BlueprintSNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
+	return s.notifier.SendMessage("uploadNotify", s.topicARN, message.KeyName)
 }
 
 // NullNotifierHarness is a stub SNS client that does nothing.  In replay mode, we don't need to notify anyone of the
@@ -47,20 +58,12 @@ func (n *NullNotifierHarness) SendMessage(_ *uploader.UploadReceipt) error {
 	return nil
 }
 
-func buildNotifierHarness(sns snsiface.SNSAPI, topicARN string, replay bool) uploader.NotifierHarness {
-	if replay {
-		return &NullNotifierHarness{}
-	}
-
+func createSNSClient(sns snsiface.SNSAPI, f func(args ...interface{}) (*scoop_protocol.RowCopyRequest, error)) *notifier.SNSClient {
 	client := notifier.BuildSNSClient(sns)
 	client.Signer.RegisterMessageType("uploadNotify", func(args ...interface{}) (string, error) {
-		if len(args) != 3 {
-			return "", errors.New("Missing correct number of args")
-		}
-		message := scoop_protocol.RowCopyRequest{
-			TableName:    args[0].(string),
-			KeyName:      args[1].(string),
-			TableVersion: args[2].(int),
+		message, err := f(args...)
+		if err != nil {
+			return "", err
 		}
 
 		jsonMessage, err := json.Marshal(message)
@@ -69,7 +72,39 @@ func buildNotifierHarness(sns snsiface.SNSAPI, topicARN string, replay bool) upl
 		}
 		return string(jsonMessage), nil
 	})
-	return &SNSNotifierHarness{topicARN: topicARN, notifier: client}
+	return client
+}
+
+func buildRedshiftNotifierHarness(sns snsiface.SNSAPI, topicARN string, replay bool) uploader.NotifierHarness {
+	if replay {
+		return &NullNotifierHarness{}
+	}
+
+	client := createSNSClient(sns, func(args ...interface{}) (*scoop_protocol.RowCopyRequest, error) {
+		if len(args) != 3 {
+			return nil, errors.New("Missing correct number of args")
+		}
+		return &scoop_protocol.RowCopyRequest{
+			TableName:    args[0].(string),
+			KeyName:      args[1].(string),
+			TableVersion: args[2].(int),
+		}, nil
+	})
+	return &RedshiftSNSNotifierHarness{topicARN: topicARN, notifier: client}
+}
+
+func buildBlueprintNotifierHarness(sns snsiface.SNSAPI, topicARN string, replay bool) uploader.NotifierHarness {
+	if replay {
+		return &NullNotifierHarness{}
+	}
+
+	client := createSNSClient(sns, func(args ...interface{}) (*scoop_protocol.RowCopyRequest, error) {
+		if len(args) != 1 {
+			return nil, errors.New("Missing correct number of args")
+		}
+		return &scoop_protocol.RowCopyRequest{KeyName: args[0].(string)}, nil
+	})
+	return &BlueprintSNSNotifierHarness{topicARN: topicARN, notifier: client}
 }
 
 func extractEventName(filename string) string {
@@ -279,13 +314,14 @@ type buildUploaderInput struct {
 	s3Uploader       s3manageriface.UploaderAPI
 	keyNameGenerator uploader.S3KeyNameGenerator
 	nullNotifier     bool
+	harness          uploader.NotifierHarness
 }
 
 func buildUploader(input *buildUploaderInput) *uploader.UploaderPool {
 	return uploader.StartUploaderPool(
 		input.numWorkers,
 		buildErrorHandler(input.sns, input.errorTopicARN, input.nullNotifier),
-		buildNotifierHarness(input.sns, input.topicARN, input.nullNotifier),
+		input.harness,
 		uploader.NewFactory(input.bucketName, input.keyNameGenerator, input.s3Uploader),
 	)
 }
@@ -301,6 +337,7 @@ func redshiftKeyNameGenerator(info *gen.InstanceInfo, runTag string, replay bool
 func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI,
 	aceBucketName, aceTopicARN, aceErrorTopicARN, runTag string, replay bool) *uploader.UploaderPool {
 
+	harness := buildRedshiftNotifierHarness(sns, aceTopicARN, replay)
 	return buildUploader(&buildUploaderInput{
 		bucketName:       aceBucketName,
 		topicARN:         aceTopicARN,
@@ -310,6 +347,7 @@ func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3
 		s3Uploader:       s3Uploader,
 		keyNameGenerator: redshiftKeyNameGenerator(buildInstanceInfo(replay), runTag, replay),
 		nullNotifier:     replay,
+		harness:          harness,
 	})
 }
 
@@ -317,6 +355,7 @@ func BuildUploaderForRedshift(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3
 func BuildUploaderForBlueprint(numWorkers int, sns snsiface.SNSAPI, s3Uploader s3manageriface.UploaderAPI,
 	nonTrackedBucketName, nonTrackedTopicARN, nonTrackedErrorTopicARN string, replay bool) *uploader.UploaderPool {
 
+	harness := buildBlueprintNotifierHarness(sns, nonTrackedTopicARN, replay)
 	return buildUploader(&buildUploaderInput{
 		bucketName:       nonTrackedBucketName,
 		topicARN:         nonTrackedTopicARN,
@@ -326,5 +365,6 @@ func BuildUploaderForBlueprint(numWorkers int, sns snsiface.SNSAPI, s3Uploader s
 		s3Uploader:       s3Uploader,
 		keyNameGenerator: &gen.EdgeKeyNameGenerator{Info: buildInstanceInfo(replay)},
 		nullNotifier:     replay,
+		harness:          harness,
 	})
 }
