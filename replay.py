@@ -3,6 +3,7 @@
 
     Usage:
         replay.py START END [TABLE ... | --all-tables] --rsurl=<url>
+                  [--processor-only] [--from-runtag=<runtag>]
                   [--poolsize=<size>] [--log=<level>]
         replay.py --help
 
@@ -10,14 +11,18 @@
         START   timestamp of start of period in "%Y-%m-%d %H:%M:%S" format
                 in PT
         END     timestamp of end of period in "%Y-%m-%d %H:%M:%S" format in PT
-        TABLE   one or more tables to reload into
+        TABLE   table[s] to reload into
 
     Options:
         --rsurl=<url>   `postgres://` style url to access the redshift database
+        --processor-only    if present, skip the DB step
+        --from-runtag=<runtag>
+            if present, skip the Spark step and upload to DB from runtag
         --poolsize=<size>
             Size of pool for parallel ingester operations [default: 4]
-        --log=<level>   Set the logging level [default: INFO]
-        --all-tables    Set TABLE to be all the tables in blueprint
+        --log=<level>   the logging level [default: INFO]
+        --all-tables
+            if present, upload data to all database tables known to blueprint
 """
 import datetime
 import logging
@@ -163,8 +168,27 @@ def ingester_worker(table, start, end, rsurl, run_tag):
     LOGGER.info('done %s', table)
 
 
+def tables_to_upload(args):
+    if args['--all-tables']:
+        return get_tables_from_blueprint()
+    else:
+        return args['TABLE']
+
+
+def upload_to_db(args, start, end, run_tag):
+    Pool(int(args['--poolsize'])).map(
+        lambda x: ingester_worker(x, start, end, args['--rsurl'], run_tag),
+        tables_to_upload(args))
+
+
 def main(args):
     set_up_logging(args)
+
+    run_tag = args.get('from-runtag')
+    processor_only = args.get('processor-only')
+    if run_tag and processor_only:
+        print "Looks like you don't want to do anything; exiting"
+        sys.exit(1)
 
     # Do our best to verify that the timestamps make sense
     start = PT.localize(
@@ -176,17 +200,13 @@ def main(args):
         print "Need a valid time range, got {} to {}".format(start, end)
         sys.exit(1)
 
-    run_tag = datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
+    if not run_tag:
+        run_tag = datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
+        print "Starting processors now, dumping to runtag {}".format(run_tag)
+        replay_processor(start, end, run_tag)
 
-    replay_processor(start, end, run_tag)
-
-    tables = args['TABLE']
-    if args['--all-tables']:
-        tables = get_tables_from_blueprint()
-
-    p = Pool(int(args['--poolsize']))
-    p.map(lambda x: ingester_worker(x, start, end, args['--rsurl'], run_tag),
-          tables)
+    if not processor_only:
+        upload_to_db(args, start, end, run_tag)
 
 
 if __name__ == '__main__':

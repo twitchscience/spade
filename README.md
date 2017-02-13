@@ -67,13 +67,16 @@ isolated by only allowing one task at a time on each worker node.
 ./replay.sh MASTER_IP REDSHIFT_TARGET START END [TABLE ... | --all-tables]
 ```
 where
-* `MASTER_IP` is the central node of the Spark cluster;
-* `REDSHIFT_TARGET` is the destination Redshift cluster;
-* `START` and `END` specify the time window to be replaced, in Pacific time in
-  the format `%Y-%m-%d %H:%M:%S`;
-* `TABLE ...` specifies the tables whose records should be replaced.
+	* `MASTER_IP` is the central node of the Spark cluster;
+	* `REDSHIFT_TARGET` is the destination Redshift cluster;
+	* `START` and `END` specify the time window to be replaced, in Pacific time in
+	  the format `%Y-%m-%d %H:%M:%S`;
+	* `TABLE ...` specifies the tables whose records should be replaced.
 3. If the results of the previous step are unsatisfactory, make necessary
    changes and repeat.
+
+For extra reliability, instead of running `replay.sh` locally, start a tmux session on the
+master node and submit from there.
 
 We expect this tool to be used only every few months; if your needs are
 similar and the Spark cluster you bring up is only for this tool, consider
