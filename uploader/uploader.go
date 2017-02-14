@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -35,7 +34,13 @@ func (s *RedshiftSNSNotifierHarness) SendMessage(message *uploader.UploadReceipt
 	if err != nil {
 		return fmt.Errorf("extracting event version from path: %v", err)
 	}
-	return s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, version)
+
+	err = s.notifier.SendMessage("uploadNotify", s.topicARN, extractEventName(message.Path), message.KeyName, version)
+	if err != nil {
+		return fmt.Errorf("sending Redshift SNS message: %v", err)
+	}
+
+	return nil
 }
 
 // BlueprintSNSNotifierHarness is an SNS client that writes messages about uploaded nontracked event files
@@ -46,7 +51,11 @@ type BlueprintSNSNotifierHarness struct {
 
 // SendMessage sends information to SNS about file uploaded to S3.
 func (s *BlueprintSNSNotifierHarness) SendMessage(message *uploader.UploadReceipt) error {
-	return s.notifier.SendMessage("uploadNotify", s.topicARN, message.KeyName)
+	if err := s.notifier.SendMessage("uploadNotify", s.topicARN, message.KeyName); err != nil {
+		return fmt.Errorf("sending Blueprint SNS message: %v", err)
+	}
+
+	return nil
 }
 
 // NullNotifierHarness is a stub SNS client that does nothing.  In replay mode, we don't need to notify anyone of the
@@ -63,12 +72,12 @@ func createSNSClient(sns snsiface.SNSAPI, f func(args ...interface{}) (*scoop_pr
 	client.Signer.RegisterMessageType("uploadNotify", func(args ...interface{}) (string, error) {
 		message, err := f(args...)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("constructing RowCopyRequest: %v", err)
 		}
 
 		jsonMessage, err := json.Marshal(message)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("marshaling RowCopyRequest: %v", err)
 		}
 		return string(jsonMessage), nil
 	})
@@ -82,14 +91,28 @@ func buildRedshiftNotifierHarness(sns snsiface.SNSAPI, topicARN string, replay b
 
 	client := createSNSClient(sns, func(args ...interface{}) (*scoop_protocol.RowCopyRequest, error) {
 		if len(args) != 3 {
-			return nil, errors.New("Missing correct number of args")
+			return nil, fmt.Errorf("expected 3 arguments, got %d", len(args))
 		}
+
+		var tableName, keyName string
+		var tableVersion int
+		var ok bool
+
+		if tableName, ok = args[0].(string); !ok {
+			return nil, fmt.Errorf("args[0] has type %T, expected string for table name", args[0])
+		} else if keyName, ok = args[1].(string); !ok {
+			return nil, fmt.Errorf("args[1] has type %T, expected string for key name", args[1])
+		} else if tableVersion, ok = args[2].(int); !ok {
+			return nil, fmt.Errorf("args[2] has type %T, expected int for table version", args[2])
+		}
+
 		return &scoop_protocol.RowCopyRequest{
-			TableName:    args[0].(string),
-			KeyName:      args[1].(string),
-			TableVersion: args[2].(int),
+			TableName:    tableName,
+			KeyName:      keyName,
+			TableVersion: tableVersion,
 		}, nil
 	})
+
 	return &RedshiftSNSNotifierHarness{topicARN: topicARN, notifier: client}
 }
 
@@ -100,10 +123,18 @@ func buildBlueprintNotifierHarness(sns snsiface.SNSAPI, topicARN string, replay 
 
 	client := createSNSClient(sns, func(args ...interface{}) (*scoop_protocol.RowCopyRequest, error) {
 		if len(args) != 1 {
-			return nil, errors.New("Missing correct number of args")
+			return nil, fmt.Errorf("expected 1 argument, got %d", len(args))
 		}
-		return &scoop_protocol.RowCopyRequest{KeyName: args[0].(string)}, nil
+
+		var keyName string
+		var ok bool
+		if keyName, ok = args[0].(string); !ok {
+			return nil, fmt.Errorf("argument has type %T, expected string for key name", args[0])
+		}
+
+		return &scoop_protocol.RowCopyRequest{KeyName: keyName}, nil
 	})
+
 	return &BlueprintSNSNotifierHarness{topicARN: topicARN, notifier: client}
 }
 
@@ -133,10 +164,9 @@ type ProcessorErrorHandler struct {
 
 // SendError sends the sending error to an topic.
 func (p *ProcessorErrorHandler) SendError(err error) {
-	logger.WithError(err).Error("error sending message to topic")
-	e := p.notifier.SendMessage("error", p.topicARN, err)
-	if e != nil {
-		logger.WithError(e).Error("failed to send error")
+	logger.WithError(err).Error("Failed to send message to topic")
+	if e := p.notifier.SendMessage("error", p.topicARN, err); e != nil {
+		logger.WithError(e).Error("Failed to send error")
 	}
 }
 
@@ -145,7 +175,7 @@ type NullErrorHandler struct{}
 
 // SendError logs the given error.
 func (n *NullErrorHandler) SendError(err error) {
-	logger.WithError(err).Error("")
+	logger.WithError(err).Error("Failed to send message to topic")
 }
 
 func buildErrorHandler(sns snsiface.SNSAPI, errorTopicArn string, nullNotifier bool) uploader.ErrorNotifierHarness {
@@ -160,9 +190,8 @@ func buildErrorHandler(sns snsiface.SNSAPI, errorTopicArn string, nullNotifier b
 
 // remove the file or log the error and move on
 func removeOrLog(path string) {
-	err := os.Remove(path)
-	if err != nil {
-		logger.WithError(err).WithField("path", path).Error("failed to remove file")
+	if err := os.Remove(path); err != nil {
+		logger.WithError(err).WithField("path", path).Error("Failed to remove file")
 	}
 }
 
@@ -174,7 +203,7 @@ func SafeGzipUpload(uploaderPool *uploader.UploaderPool, path string) {
 			FileType: uploader.Gzip,
 		})
 	} else {
-		logger.WithField("path", path).Warn("Given path is not a valid gzip file; removing")
+		logger.WithField("path", path).Warn("Not a valid gzip file; removing")
 		removeOrLog(path)
 	}
 }
@@ -197,14 +226,14 @@ func salvageData(path string) (bool, error) {
 	}
 	defer func() {
 		if cerr := f.Close(); cerr != nil {
-			logger.WithField("path", path).WithError(cerr).Error("failed to close salvaged file")
+			logger.WithField("path", path).WithError(cerr).Error("Failed to close salvaged file")
 		}
 	}()
 
 	writer := gzip.NewWriter(f)
 	defer func() {
 		if cerr := writer.Close(); cerr != nil {
-			logger.WithField("path", path).WithError(cerr).Error("failed to close salvaged data gzip writer")
+			logger.WithField("path", path).WithError(cerr).Error("Failed to close salvaged data gzip writer")
 		}
 	}()
 
@@ -231,29 +260,28 @@ func isValidGzip(path string) bool {
 	entry := logger.WithField("path", path)
 	file, err := os.Open(path)
 	if err != nil {
-		entry.WithError(err).Error("failed to open")
+		entry.WithError(err).Error("Failed to open")
 		return false
 	}
 	defer func() {
 		if err = file.Close(); err != nil {
-			entry.WithError(err).Error("failed to close file")
+			entry.WithError(err).Error("Failed to close file")
 		}
 	}()
 
 	reader, err := gzip.NewReader(file)
 	if err != nil {
-		entry.WithError(err).Error("failed to create gzip.NewReader")
+		entry.WithError(err).Error("Failed to create gzip.NewReader")
 		return false
 	}
 	defer func() {
 		if err = reader.Close(); err != nil {
-			entry.WithError(err).Error("failed to close reader")
+			entry.WithError(err).Error("Failed to close reader")
 		}
 	}()
 
-	_, err = ioutil.ReadAll(reader)
-	if err != nil {
-		entry.WithError(err).Error("failed to read gzipped file")
+	if _, err = ioutil.ReadAll(reader); err != nil {
+		entry.WithError(err).Error("Failed to read gzipped file")
 		return false
 	}
 
@@ -285,14 +313,16 @@ func ClearEventsFolder(uploaderPool *uploader.UploaderPool, eventsDir string) er
 // SalvageCorruptedEvents salvages in place all invalid gzip files in the eventsDir
 func SalvageCorruptedEvents(eventsDir string) error {
 	return walkEventFiles(eventsDir, func(path string) {
-		if !isValidGzip(path) {
-			salvaged, err := salvageData(path)
-			if !salvaged {
-				removeOrLog(path)
-			}
-			if err != nil {
-				logger.WithField("path", path).WithError(err).Error("salvaging data from corrupted gzip file")
-			}
+		if isValidGzip(path) {
+			return
+		}
+
+		salvaged, err := salvageData(path)
+		if !salvaged {
+			removeOrLog(path)
+		}
+		if err != nil {
+			logger.WithField("path", path).WithError(err).Error("Failed to salvage data")
 		}
 	})
 }

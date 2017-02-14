@@ -184,8 +184,8 @@ def upload_to_db(args, start, end, run_tag):
 def main(args):
     set_up_logging(args)
 
-    run_tag = args.get('from-runtag')
-    processor_only = args.get('processor-only')
+    run_tag = args.get('--from-runtag')
+    processor_only = args.get('--processor-only')
     if run_tag and processor_only:
         print "Looks like you don't want to do anything; exiting"
         sys.exit(1)
