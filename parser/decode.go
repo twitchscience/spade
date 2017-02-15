@@ -19,7 +19,7 @@ func DecodeBase64(matches ParseResult, escaper URLEscaper) ([]MixpanelEvent, err
 
 	var n int
 	// We dont have to allocate a new byte array here because the len(dst) < len(src)
-	if bytes.IndexAny(data, "-_") == -1 {
+	if !bytes.ContainsAny(data, "-_") {
 		n, err = base64.StdEncoding.Decode(data, data)
 	} else {
 		n, err = base64.URLEncoding.Decode(data, data)

@@ -48,8 +48,8 @@ func (s *S3APIOldDBs) GetObject(goi *s3.GetObjectInput) (goo *s3.GetObjectOutput
 }
 
 func clearDBFiles() {
-	os.Remove(ippath)
-	os.Remove(asnpath)
+	_ = os.Remove(ippath)
+	_ = os.Remove(asnpath)
 }
 
 func checkFileIs(path, contents string) (bool, error) {

@@ -155,7 +155,7 @@ func loadDB() geoip.GeoLookup {
 func SetGeoDB(geoloc string, asnloc string) error {
 	g, loadErr := geoip.NewGeoMMIp(geoloc, asnloc)
 	if loadErr != nil {
-		return fmt.Errorf("Could not find geoIP db at %s or %s, using noop db instead\n",
+		return fmt.Errorf("could not find geoIP db at %s or %s, using noop db instead",
 			geoloc, asnloc)
 	}
 	GeoIPDB = g

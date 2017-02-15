@@ -15,7 +15,7 @@ import (
 
 // LongDuration is one year; use when you don't really want
 // a timeout on the cache (e.g. in tests).
-const LongDuration = time.Duration(365 * 24 * time.Hour)
+const LongDuration = 365 * 24 * time.Hour
 
 // ErrCacheMiss is an error indicating that the value is not in the cache.
 var ErrCacheMiss = errors.New("lru cache miss")

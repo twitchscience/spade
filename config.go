@@ -93,7 +93,7 @@ func loadConfig() {
 
 func checkNonempty(str string) error {
 	if str == "" {
-		return errors.New("Empty string found for required config option.")
+		return errors.New("empty string found for required config option")
 	}
 	return nil
 }
@@ -136,7 +136,7 @@ func validateConfig() error {
 		int64(config.Geoip.JitterSecs),
 	} {
 		if i <= 0 {
-			return errors.New("Nonpositive integer found in config, must provide positive integer.")
+			return errors.New("nonpositive integer found in config, must provide positive integer")
 		}
 	}
 

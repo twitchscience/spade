@@ -185,6 +185,6 @@ func (c *Client) Set(key string, value string) error {
 	return c.memcacheClient.Set(&memcache.Item{
 		Key:        c.createCacheKey(key),
 		Value:      []byte(value),
-		Expiration: int32(c.config.TTL),
+		Expiration: c.config.TTL,
 	})
 }
