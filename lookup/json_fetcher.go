@@ -104,7 +104,7 @@ func (f *JSONValueFetcher) fetchHelper(args map[string]string) (*gojq.JQ, error)
 	return gojq.NewQuery(jsonBlob), nil
 }
 
-// Fetch constructs a GET HTTP query with the provided map as URL arguments and returns the value
+// FetchInt64 constructs a GET HTTP query with the provided map as URL arguments and returns the value
 // as an int64 if possible
 func (f *JSONValueFetcher) FetchInt64(args map[string]string) (int64, error) {
 	parser, err := f.fetchHelper(args)

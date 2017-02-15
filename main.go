@@ -106,8 +106,12 @@ func newProcessor() *spadeProcessor {
 
 	// If the processor exited hard, clean up the files that were left.
 	eDir := *_dir + "/" + writer.EventsDir + "/"
-	uploader.SalvageCorruptedEvents(eDir)
-	uploader.ClearEventsFolder(spadeUploaderPool, eDir)
+	if err := uploader.SalvageCorruptedEvents(eDir); err != nil {
+		logger.WithError(err).Error("Failed to salvage corrupted events")
+	}
+	if err := uploader.ClearEventsFolder(spadeUploaderPool, eDir); err != nil {
+		logger.WithError(err).Error("Failed to clear events folder")
+	}
 
 	multee := &writer.Multee{}
 	multee.Add(createSpadeWriter(
