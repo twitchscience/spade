@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/twitchscience/spade",
 	"GoVersion": "go1.6",
-	"GodepVersion": "v74",
+	"GodepVersion": "v79",
 	"Packages": [
 		"./..."
 	],
@@ -152,16 +152,21 @@
 		},
 		{
 			"ImportPath": "github.com/aws/aws-sdk-go/service/elasticache",
-			"Comment": "v1.2.5",
-			"Rev": "3c37d29820480639ff03fd66df00a0f27984f88d"
+			"Comment": "v1.6.10-1-g8649d27",
+			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
 		},
 		{
 			"ImportPath": "github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface",
-			"Comment": "v1.2.5",
-			"Rev": "3c37d29820480639ff03fd66df00a0f27984f88d"
+			"Comment": "v1.6.10-1-g8649d27",
+			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
 		},
 		{
 			"ImportPath": "github.com/aws/aws-sdk-go/service/firehose",
+			"Comment": "v1.6.10-1-g8649d27",
+			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
+		},
+		{
+			"ImportPath": "github.com/aws/aws-sdk-go/service/firehose/firehoseiface",
 			"Comment": "v1.6.10-1-g8649d27",
 			"Rev": "8649d278323ebf6bd20c9cd56ecb152b1c617375"
 		},
