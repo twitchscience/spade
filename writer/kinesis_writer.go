@@ -3,6 +3,7 @@ package writer
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,7 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/firehose"
+	"github.com/aws/aws-sdk-go/service/firehose/firehoseiface"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	"github.com/aws/aws-sdk-go/service/kinesis/kinesisiface"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twinj/uuid"
 	"github.com/twitchscience/aws_utils/logger"
@@ -26,13 +29,14 @@ const (
 // KinesisWriterConfig is used to configure a KinesisWriter
 // and its nested globber and batcher objects
 type KinesisWriterConfig struct {
-	StreamName           string
-	StreamRole           string
-	StreamType           string // StreamType should be either "stream" or "firehose"
-	Compress             bool   // true if compress data with flate, false to output json
-	BufferSize           int
-	MaxAttemptsPerRecord int
-	RetryDelay           string
+	StreamName             string
+	StreamRole             string
+	StreamType             string // StreamType should be either "stream" or "firehose"
+	Compress               bool   // true if compress data with flate, false to output json
+	FirehoseRedshiftStream bool   // true if JSON destined for Firehose->Redshift streaming
+	BufferSize             int
+	MaxAttemptsPerRecord   int
+	RetryDelay             string
 
 	Events map[string]*struct {
 		Filter     string
@@ -64,6 +68,10 @@ func (c *KinesisWriterConfig) Validate() error {
 				return fmt.Errorf("batcher config invalid: %s", err)
 			}
 		}
+	}
+
+	if c.FirehoseRedshiftStream && (c.StreamType != "firehose" || c.Compress) {
+		return fmt.Errorf("Redshift streaming only valid with non-compressed firehose")
 	}
 
 	_, err = time.ParseDuration(c.RetryDelay)
@@ -108,14 +116,14 @@ type BatchWriter interface {
 
 // StreamBatchWriter writes batches to Kinesis Streams
 type StreamBatchWriter struct {
-	client  *kinesis.Kinesis
+	client  kinesisiface.KinesisAPI
 	config  *KinesisWriterConfig
 	statter *Statter
 }
 
 // FirehoseBatchWriter writes batches to Kinesis Firehose
 type FirehoseBatchWriter struct {
-	client  *firehose.Firehose
+	client  firehoseiface.FirehoseAPI
 	config  *KinesisWriterConfig
 	statter *Statter
 }
@@ -323,9 +331,11 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 	for i, e := range batch {
 		UUID := uuid.NewV4()
 		var data []byte
+		var marshalErr error
+		var unmarshalErr error
 		if w.config.Compress {
 			// if we are sending compressed data, send it as is
-			data, _ = json.Marshal(&record{
+			data, marshalErr = json.Marshal(&record{
 				UUID:      UUID.String(),
 				Version:   version,
 				Data:      e,
@@ -334,13 +344,23 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 		} else {
 			// if sending uncompressed json, remarshal batch into new objects
 			var unpacked map[string]string
-			_ = json.Unmarshal(e, &unpacked)
-			data, _ = json.Marshal(&jsonRecord{
+			unmarshalErr = json.Unmarshal(e, &unpacked)
+			data, marshalErr = json.Marshal(&jsonRecord{
 				UUID:      UUID.String(),
 				Version:   version,
 				Data:      unpacked,
 				CreatedAt: time.Now().UTC().Format(RedshiftDatetimeIngestString),
 			})
+		}
+		if marshalErr != nil {
+			logger.WithField("stream", w.config.StreamName).
+				WithError(marshalErr).
+				Error("Failed to marshal into Record")
+		}
+		if unmarshalErr != nil {
+			logger.WithField("stream", w.config.StreamName).
+				WithError(unmarshalErr).
+				Error("Failed to unmarshal into Record")
 		}
 		records[i] = &kinesis.PutRecordsRequestEntry{
 			PartitionKey: aws.String(UUID.String()),
@@ -424,22 +444,42 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 	for i, e := range batch {
 		UUID := uuid.NewV4()
 		var data []byte
+		var marshalErr error
+		var unmarshalErr error
 		if w.config.Compress {
 			// if we are sending compressed data, send it as is
-			data, _ = json.Marshal(&record{
+			data, marshalErr = json.Marshal(&record{
 				UUID:    UUID.String(),
 				Version: version,
 				Data:    e,
 			})
+		} else if w.config.FirehoseRedshiftStream {
+			// if streaming data to Redshift, send data as top level JSON and scrub away null bytes
+			var unpacked map[string]string
+			unmarshalErr = json.Unmarshal(e, &unpacked)
+			for k, v := range unpacked {
+				unpacked[k] = strings.Replace(v, "\x00", "", -1)
+			}
+			data, marshalErr = json.Marshal(unpacked)
 		} else {
 			// if sending uncompressed json, remarshal batch into new objects
 			var unpacked map[string]string
-			_ = json.Unmarshal(e, &unpacked)
-			data, _ = json.Marshal(&jsonRecord{
+			unmarshalErr = json.Unmarshal(e, &unpacked)
+			data, marshalErr = json.Marshal(&jsonRecord{
 				UUID:    UUID.String(),
 				Version: version,
 				Data:    unpacked,
 			})
+		}
+		if marshalErr != nil {
+			logger.WithField("firehose", w.config.StreamName).
+				WithError(marshalErr).
+				Error("Failed to marshal into Record")
+		}
+		if unmarshalErr != nil {
+			logger.WithField("firehose", w.config.StreamName).
+				WithError(unmarshalErr).
+				Error("Failed to unmarshal into Record")
 		}
 		// Add '\n' as a record separator
 		data = append(data, '\n')
