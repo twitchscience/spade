@@ -138,8 +138,8 @@ def ingester_worker(table, start, end, rsurl, run_tag):
             format(c.access_key, c.secret_key))
 
     conn = psycopg2.connect(rsurl)
-    with conn:
-        with conn.cursor() as cur:
+    try:
+        with conn, conn.cursor() as cur:
             cur.execute(
                 '''DELETE FROM logs."{}" WHERE time between '{}' and '{}' '''.
                 format(table, start, end))
@@ -163,9 +163,11 @@ def ingester_worker(table, start, end, rsurl, run_tag):
             cur.execute(('''INSERT INTO logs."{}" SELECT * FROM import ''' +
                          '''WHERE time between '{}' and '{}' ''').
                         format(table, start, end))
-            LOGGER.info('inserted %d rows into %s', cur.rowcount, table)
-    conn.close()
-    LOGGER.info('done %s', table)
+            LOGGER.info('inserted %d rows into %s, now committing',
+                        cur.rowcount, table)
+        LOGGER.info('table %s committed', table)
+    finally:
+        conn.close()
 
 
 def tables_to_upload(args):
