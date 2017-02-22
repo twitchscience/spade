@@ -24,6 +24,7 @@
         --all-tables
             if present, upload data to all database tables known to blueprint
 """
+from base64 import b64encode
 import datetime
 import logging
 import os
@@ -92,30 +93,37 @@ def contents(key):
     return decompress(gzipped_text, MAX_WBITS | 16)
 
 
-def pipe_through_processor(run_tag):
+def pipe_through_processor(run_tag, fragment_list):
     def fn(key_iter):
-        with open('spade-input.log', 'w') as f:
+        processor = subprocess.Popen(
+            ['/opt/science/replay/bin/run_spade_replay.sh', run_tag],
+            stdin=subprocess.PIPE)
+        if fragment_list is None:
             for key in key_iter:
-                f.write(contents(key))
-
-        with open('spade-input.log', 'r') as f:
-            subprocess.check_call(
-                ['/opt/science/replay/bin/run_spade_replay.sh', run_tag],
-                stdin=f)
+                processor.stdin.write(contents(key))
+        else:
+            for key in key_iter:
+                processor.stdin.writelines(
+                    line for line in contents(key).splitlines(True)
+                    if any(fragment in line for fragment in fragment_list))
+        processor.stdin.close()
+        processor.wait()
+        if processor.returncode > 0:
+            raise subprocess.CalledProcessError
 
     return fn
 
 
-def replay_processor(start, end, run_tag):
+def replay_processor(start, end, run_tag, fragment_list):
     s3_keys = s3_object_keys(start, end)
     spark_context().\
-        parallelize(s3_keys, len(s3_keys) // 20 + 1).\
-        foreachPartition(pipe_through_processor(run_tag))
+        parallelize(s3_keys, len(s3_keys) / 100 + 1).\
+        foreachPartition(pipe_through_processor(run_tag, fragment_list))
 
 
 def get_tables_from_blueprint():
-    return [row["EventName"]
-            for row in requests.get(os.environ['BLUEPRINT_URL']).json()]
+    return {row["EventName"]
+            for row in requests.get(os.environ['BLUEPRINT_URL']).json()}
 
 
 def s3_dir_exists(key):
@@ -166,21 +174,31 @@ def ingester_worker(table, start, end, rsurl, run_tag):
             LOGGER.info('inserted %d rows into %s, now committing',
                         cur.rowcount, table)
         LOGGER.info('table %s committed', table)
+    except Exception:
+        LOGGER.exception('Write to table %s failed', table)
     finally:
         conn.close()
 
 
-def tables_to_upload(args):
-    if args['--all-tables']:
-        return get_tables_from_blueprint()
-    else:
-        return args['TABLE']
+def fragments(table_name):
+    """Returns base64-encoded fragments of the given table_name.
+
+    This is used to filter for input which is relevant to the given event,
+    without invoking JSON unmarshalling or repeated b64 decoding, at the
+    possible expense of some false positives which will be filtered out at the
+    load phase anyway.
+    """
+    name_length = len(table_name)
+    for start_idx in xrange(3):
+        # end_idx = max <= name_length where 3 divides (end_idx - start_idx)
+        end_idx = (name_length - start_idx) / 3 * 3 + start_idx
+        yield b64encode(table_name[start_idx:end_idx])
 
 
-def upload_to_db(args, start, end, run_tag):
+def upload_to_db(args, start, end, run_tag, tables):
     Pool(int(args['--poolsize'])).map(
         lambda x: ingester_worker(x, start, end, args['--rsurl'], run_tag),
-        tables_to_upload(args))
+        tables)
 
 
 def main(args):
@@ -202,13 +220,21 @@ def main(args):
         print "Need a valid time range, got {} to {}".format(start, end)
         sys.exit(1)
 
+    tables = None
+    fragment_list = None
+    if args['--all-tables']:
+        tables = get_tables_from_blueprint()
+    else:
+        tables = args['TABLE']
+        fragment_list = [f for t in tables for f in fragments(t)]
+
     if not run_tag:
         run_tag = datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
         print "Starting processors now, dumping to runtag {}".format(run_tag)
-        replay_processor(start, end, run_tag)
+        replay_processor(start, end, run_tag, fragment_list)
 
     if not processor_only:
-        upload_to_db(args, start, end, run_tag)
+        upload_to_db(args, start, end, run_tag, tables)
 
 
 if __name__ == '__main__':
