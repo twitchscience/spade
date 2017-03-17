@@ -109,7 +109,7 @@ func (dp *Pool) expandGlob(glob []byte) (events []*spade.Event, err error) {
 
 func (dp *Pool) processEvent(e *spade.Event) {
 	now := time.Now()
-	if err := dp.config.Stats.TimingDuration("event.age", now.Sub(e.ReceivedAt), 0.1); err != nil {
+	if err := dp.config.Stats.TimingDuration("event.age", now.Sub(e.ReceivedAt), 0.01); err != nil {
 		logger.WithError(err).Error("Failed to submit timing")
 	}
 	d, err := spade.Marshal(e)
@@ -134,7 +134,7 @@ func (dp *Pool) crank() {
 			var event spade.Event
 			err := json.Unmarshal(glob, &event)
 			if err != nil {
-				logger.WithError(err).Error("Failed to unmarshall event")
+				logger.WithError(err).Error("Failed to unmarshal event")
 				continue
 			}
 			dp.processEvent(&event)
