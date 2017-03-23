@@ -15,6 +15,7 @@ type MixpanelEvent struct {
 	UUID       string            // UUID of the event as assigned by the edge
 	ClientIP   string            // the ipv4 of the client
 	Event      string            // the type of the event
+	UserAgent  string            // the user agent from an edge request
 	Properties json.RawMessage   // the raw bytes of the json properties sub object
 	Failure    reporter.FailMode // a flag for failure modes
 }

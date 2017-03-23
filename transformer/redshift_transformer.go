@@ -140,6 +140,11 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 		temp["ip"] = event.ClientIP
 	}
 
+	// Still allow clients to override the user agent.
+	if _, ok := temp["user_agent"]; !ok && event.UserAgent != "" {
+		temp["user_agent"] = event.UserAgent
+	}
+
 	results := make(map[string]int)
 	for n, column := range columns {
 		k, v, err := column.Format(temp)
