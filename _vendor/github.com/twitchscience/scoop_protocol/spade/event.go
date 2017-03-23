@@ -14,8 +14,8 @@ import (
 // defined in the clients of this code, as it current stands we cannot
 // move one without the other. Recommended ways to solve this sort of
 // thing in Protobuf and Thrift is to have your namespace dicate version
-const PROTOCOL_VERSION = 3
-const COMPRESSION_VERSION byte = 0
+const PROTOCOL_VERSION = 4
+const COMPRESSION_VERSION byte = 1
 
 type Event struct {
 	ReceivedAt    time.Time `json:"receivedAt"`
@@ -23,16 +23,18 @@ type Event struct {
 	XForwardedFor string    `json:"xForwardedFor"`
 	Uuid          string    `json:"uuid"`
 	Data          string    `json:"data"`
+	UserAgent     string    `json:"userAgent"`
 	Version       int       `json:"recordversion"`
 }
 
-func NewEvent(receivedAt time.Time, clientIp net.IP, xForwardedFor, uuid, data string) *Event {
+func NewEvent(receivedAt time.Time, clientIp net.IP, xForwardedFor, uuid, data, userAgent string) *Event {
 	return &Event{
 		ReceivedAt:    receivedAt,
 		ClientIp:      clientIp,
 		XForwardedFor: xForwardedFor,
 		Uuid:          uuid,
 		Data:          data,
+		UserAgent:     userAgent,
 		Version:       PROTOCOL_VERSION,
 	}
 }
@@ -65,6 +67,38 @@ func Compress(e *Event) ([]byte, error) {
 	}
 
 	return compressed.Bytes(), nil
+}
+
+func Deglob(glob []byte) (events []*Event, err error) {
+	compressed := bytes.NewBuffer(glob)
+
+	v, err := compressed.ReadByte()
+	if err != nil {
+		return nil, fmt.Errorf("error reading version byte: %s", err)
+	}
+	if v != COMPRESSION_VERSION {
+		return nil, fmt.Errorf("unknown version: got %v expected %v", v, COMPRESSION_VERSION)
+	}
+
+	deflator := flate.NewReader(compressed)
+	defer func() {
+		if cerr := deflator.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("error closing glob reader: %v", cerr)
+		}
+	}()
+
+	var decompressed bytes.Buffer
+	_, err = io.Copy(&decompressed, deflator)
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing: %v", err)
+	}
+
+	err = json.Unmarshal(decompressed.Bytes(), &events)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshalling: %v", err)
+	}
+
+	return
 }
 
 func Decompress(c []byte) (*Event, error) {

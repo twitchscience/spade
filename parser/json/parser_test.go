@@ -79,8 +79,9 @@ func TestSuccessfulJsonLogParser(t *testing.T) {
 
 	jsonParser := &jsonLogParser{}
 	uuid := "123abc"
+	userAgent := "TestBrowser"
 	for _, tt := range tests {
-		b, err := spade.Marshal(spade.NewEvent(receivedAt, net.IPv4(10, 0, 0, 1), "10.0.0.1", uuid, tt.logLine))
+		b, err := spade.Marshal(spade.NewEvent(receivedAt, net.IPv4(10, 0, 0, 1), "10.0.0.1", uuid, tt.logLine, userAgent))
 		if err != nil {
 			t.Fatalf("create event: unexpected error %v", err)
 		}
@@ -110,6 +111,9 @@ func TestSuccessfulJsonLogParser(t *testing.T) {
 		}
 		if me.Event != "login" {
 			t.Fatalf("mixpanel event: incorrect event name. Expected %v got %v", "login", me.Event)
+		}
+		if me.UserAgent != userAgent {
+			t.Fatalf("mixpanel event: incorrect user agent. Expected %v got %v", userAgent, me.UserAgent)
 		}
 		if !reflect.DeepEqual(me.Properties, tt.rawProps) {
 			t.Fatalf("mixpanel event: mismatched properties. Expected %s got %s", tt.rawProps, me.Properties)
