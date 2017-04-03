@@ -75,9 +75,19 @@ func TestFloatConversion(t *testing.T) {
 	_typeRunner(t, json.Number("1.234"), normalFloat, "1.234", false)
 	_typeRunner(t, json.Number("1234.0"), normalFloat, "1234", false)
 	_typeRunner(t, json.Number("1234"), normalFloat, "1234", false)
+	_typeRunner(t, json.Number("-12.34"), normalFloat, "-12.34", false)
+	_typeRunner(t, json.Number("1e311"), normalFloat, "", true)
+	_typeRunner(t, json.Number("-1e311"), normalFloat, "", true)
+	_typeRunner(t, json.Number("1e-311"), normalFloat, "0", false)
+	_typeRunner(t, json.Number("-1e-311"), normalFloat, "0", false)
 	_typeRunner(t, "1234.0", normalFloat, "1234", false)
 	_typeRunner(t, "1234.0000000000000000000000000000000000000000000000000000000000001",
 		normalFloat, "1234", false)
+	_typeRunner(t, "1e311", normalFloat, "", true)
+	_typeRunner(t, "-1e311", normalFloat, "", true)
+	_typeRunner(t, "1e-311", normalFloat, "0", false)
+	_typeRunner(t, "-1e-311", normalFloat, "0", false)
+	_typeRunner(t, "-12.34", normalFloat, "-12.34", false)
 	_typeRunner(t, nil, normalFloat, "", true)
 
 }

@@ -232,7 +232,7 @@ func floatFormat(args []interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if f < FloatLowerBound {
+	if -FloatLowerBound < f && f < FloatLowerBound {
 		f = 0.0
 	}
 	return strconv.FormatFloat(f, 'f', -1, 64), nil
