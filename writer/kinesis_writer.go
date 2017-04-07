@@ -40,7 +40,7 @@ type KinesisWriterConfig struct {
 
 	Events map[string]*struct {
 		Filter     string
-		FilterFunc func(map[string]string) bool
+		FilterFunc func(map[string]string) bool `json:"-"`
 		Fields     []string
 	}
 
