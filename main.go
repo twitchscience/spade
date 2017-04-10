@@ -74,7 +74,7 @@ type spadeProcessor struct {
 
 func newProcessor() *spadeProcessor {
 	// aws resources
-	session := session.New(&aws.Config{
+	session, err := session.NewSession(&aws.Config{
 		HTTPClient: &http.Client{
 			Timeout: networkTimeout,
 			Transport: &http.Transport{
@@ -87,6 +87,9 @@ func newProcessor() *spadeProcessor {
 			},
 		},
 	})
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to create aws session")
+	}
 
 	sns := sns.New(session)
 	s3Uploader := s3manager.NewUploader(session)
