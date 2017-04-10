@@ -170,7 +170,11 @@ func createPipe(session *session.Session, stats statsd.Statter, replay bool) con
 }
 
 func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
-	u := geoip.NewUpdater(time.Now(), transformer.GeoIPDB, *config, s3.New(session.New(&aws.Config{})))
+	session, err := session.NewSession(&aws.Config{})
+	if err != nil {
+		logger.WithError(err).Fatal("failed to create geoipupdater")
+	}
+	u := geoip.NewUpdater(time.Now(), transformer.GeoIPDB, *config, s3.New(session))
 	logger.Go(u.UpdateLoop)
 	return u
 }
