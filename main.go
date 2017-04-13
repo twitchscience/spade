@@ -26,7 +26,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go/service/sns"
-	"github.com/patrickmn/go-cache"
+	cache "github.com/patrickmn/go-cache"
 	"github.com/twitchscience/aws_utils/logger"
 	aws_uploader "github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/spade/cache/elastimemcache"
