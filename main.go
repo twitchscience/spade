@@ -1,3 +1,13 @@
+/*
+Spade is a parallel processing layer for event data in the Spade pipeline.
+It consumes data written by the Spade Edge, processes it according to rules
+in Blueprint, and writes it to Kinesis streams and TSV files intended for
+Redshift (via rs_ingester). It expects events to be a base64 encoded JSON object
+or list of objects with an event field and a properties field. It rejects
+any data it doesn’t recognize or cannot decode, including unmapped properties
+of correctly formatted data. Decodable but unmapped event types are flushed to
+S3 periodically so that Blueprint can suggest schemas for them.
+*/
 package main
 
 import (
