@@ -27,7 +27,7 @@ func _typeRunner(t *testing.T, input interface{}, _type RedshiftType,
 		return
 	}
 	if expected != actual {
-		t.Logf("Expected %v got %v\n", expected, actual)
+		t.Logf("Expected %#v, got %#v\n", expected, actual)
 		t.Fail()
 	}
 }
@@ -89,7 +89,7 @@ func TestFloatConversion(t *testing.T) {
 	_typeRunner(t, "-1e-311", normalFloat, "0", false)
 	_typeRunner(t, "-12.34", normalFloat, "-12.34", false)
 	_typeRunner(t, nil, normalFloat, "", true)
-
+	_typeRunner(t, json.Number("NaN"), normalFloat, "", false)
 }
 
 func TestVarCharConversion(t *testing.T) {

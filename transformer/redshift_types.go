@@ -232,6 +232,9 @@ func floatFormat(args []interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if math.IsNaN(f) {
+		return "", nil
+	}
 	if -FloatLowerBound < f && f < FloatLowerBound {
 		f = 0.0
 	}
