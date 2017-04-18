@@ -26,6 +26,25 @@ const (
 	RedshiftDatetimeIngestString = "2006-01-02 15:04:05.999"
 )
 
+// AnnotatedKinesisConfig was copypasta'd over from blueprint.
+// TODO: refactor all shared objects to scoop protocol after changes land
+// AnnotatedKinesisConfig is a Kinesis configuration annotated with meta information.
+type AnnotatedKinesisConfig struct {
+	StreamName       string
+	StreamType       string
+	AWSAccount       int64
+	Team             string
+	Version          int
+	Contact          string
+	Usage            string
+	ConsumingLibrary string
+	SpadeConfig      KinesisWriterConfig
+	LastEditedAt     time.Time
+	LastChangedBy    string
+	Dropped          bool
+	DroppedReason    string
+}
+
 // KinesisWriterConfig is used to configure a KinesisWriter
 // and its nested globber and batcher objects
 type KinesisWriterConfig struct {
@@ -82,6 +101,11 @@ var filterFuncs = map[string]func(map[string]string) bool{
 	"isVod": func(fields map[string]string) bool {
 		return fields["vod_id"] != "" && fields["vod_type"] != "clip"
 	},
+}
+
+// KinesisConfigLoader manages access to Kinesis writer configs through loading from Blueprint.
+type KinesisConfigLoader interface {
+	GetKinesisConfigs() []AnnotatedKinesisConfig
 }
 
 // Statter sends stats for a BatchWriter.

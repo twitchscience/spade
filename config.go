@@ -22,6 +22,8 @@ var (
 var config struct {
 	// BlueprintSchemasURL is the url to blueprint schemas
 	BlueprintSchemasURL string
+	// BlueprintKinesisConfigsURL is the url to blueprint kinesisconfigs
+	BlueprintKinesisConfigsURL string
 	// ProcessorErrorTopicARN is the arn of the SNS topic for processor errors
 	ProcessorErrorTopicARN string
 	// AceTopicARN is the arn of the SNS topic for events going to Ace
@@ -101,6 +103,7 @@ func checkNonempty(str string) error {
 func validateConfig() error {
 	for _, str := range []string{
 		config.BlueprintSchemasURL,
+		config.BlueprintKinesisConfigsURL,
 		config.AceBucketName,
 		config.NonTrackedBucketName,
 		config.Geoip.ConfigBucket,

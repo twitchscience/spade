@@ -10,12 +10,12 @@ import (
 // to a slice of targets.
 type Multee struct {
 	// targets is the spadewriters we will Multee events to
-	targets []SpadeWriter
+	targets map[string]SpadeWriter
 	sync.RWMutex
 }
 
 // Add adds a new writer to the slice
-func (t *Multee) Add(w SpadeWriter) {
+func (t *Multee) Add(key string, w SpadeWriter) {
 	t.Lock()
 	defer t.Unlock()
 	t.targets = append(t.targets, w)

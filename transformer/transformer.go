@@ -10,8 +10,8 @@ type Transformer interface {
 	Consume(*parser.MixpanelEvent) *writer.WriteRequest
 }
 
-// ConfigLoader returns columns (transformers) or versions for given event types.
-type ConfigLoader interface {
+// SchemaConfigLoader returns columns (transformers) or versions for given event types.
+type SchemaConfigLoader interface {
 	GetColumnsForEvent(string) ([]RedshiftType, error)
 	GetVersionForEvent(string) int
 }
