@@ -20,6 +20,7 @@ import (
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
+	"github.com/twitchscience/spade/kinesisconfigs"
 	"github.com/twitchscience/spade/lookup"
 	"github.com/twitchscience/spade/reporter"
 	tableConfig "github.com/twitchscience/spade/tables"
@@ -28,8 +29,10 @@ import (
 )
 
 const (
-	schemaReloadFrequency = 5 * time.Minute
-	schemaRetryDelay      = 2 * time.Second
+	schemaReloadFrequency        = 5 * time.Minute
+	schemaRetryDelay             = 2 * time.Second
+	kinesisConfigReloadFrequency = 10 * time.Minute
+	kinesisConfigRetryDelay      = 2 * time.Second
 )
 
 func createStatsdStatter() statsd.Statter {
@@ -151,6 +154,16 @@ func createSchemaLoader(
 		stats, tConfigs)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create schema dynamic loader")
+	}
+
+	logger.Go(loader.Crank)
+	return loader
+}
+
+func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger) *kinesisconfigs.DynamicLoader {
+	loader, err := kinesisconfigs.NewDynamicLoader(fetcher, kinesisConfigReloadFrequency, kinesisConfigRetryDelay, stats)
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to create kinesis config dynamic loader")
 	}
 
 	logger.Go(loader.Crank)
