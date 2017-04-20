@@ -221,6 +221,14 @@ func TestLoginToIDTransformer(t *testing.T) {
 	assert.Equal(t, "42", v)
 	assert.Equal(t, ErrLocalCacheHit, err)
 
+	// Check that whitespace is trimmed from both ends of login.
+	v, err = transformer([]interface{}{"", "   kai.hayashi\t"})
+	assert.Equal(t, "42", v)
+	assert.Equal(t, ErrLocalCacheHit, err)
+	v, err = transformer([]interface{}{"", "\t\n\t"})
+	assert.Equal(t, "", v)
+	assert.Equal(t, ErrEmptyLookupValue, err)
+
 	// Check an error extracting fetched value propagates as expected.
 	v, err = transformer([]interface{}{"", "errExtractingValue"})
 	assert.Equal(t, "", v)
