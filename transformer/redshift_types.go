@@ -432,6 +432,9 @@ func genLoginToIDTransformer(config MappingTransformerConfig) ColumnTransformer 
 			return "", ErrBadLookupValue
 		}
 
+		// Some clients submit the login name with whitespace on either end
+		login = strings.TrimSpace(login)
+
 		// No need to fetch if we have an empty login, let's just return an empty id
 		if len(login) == 0 {
 			return "", ErrEmptyLookupValue
