@@ -1,7 +1,6 @@
 package writer
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/twitchscience/aws_utils/logger"
@@ -112,17 +111,15 @@ func (t *Multee) Close() error {
 
 	var wg sync.WaitGroup
 	wg.Add(len(t.targets))
-	fmt.Println("gonna wayt for", len(t.targets))
-	for k, writer := range t.targets {
-		fmt.Println("in loop", k)
+	for key, writer := range t.targets {
+		k := key
+		w := writer
 		// losing errors here. Alternative is to
 		// return an arbitrary error out of all
 		// possible ones that occured
 		logger.Go(func() {
 			defer wg.Done()
-			fmt.Println("closinge", k)
-			err := writer.Close()
-			fmt.Println("done close", k)
+			err := w.Close()
 			if err != nil {
 				logger.WithError(err).
 					WithField("writer_key", k).
@@ -130,9 +127,7 @@ func (t *Multee) Close() error {
 			}
 		})
 	}
-	fmt.Println("done issuing close")
 
 	wg.Wait()
-	fmt.Println("done close.")
 	return nil
 }
