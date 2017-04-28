@@ -164,7 +164,7 @@ func createSchemaLoader(
 func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger, multee writer.SpadeWriterManager, session *session.Session) *kinesisconfigs.DynamicLoader {
 	loader, err := kinesisconfigs.NewDynamicLoader(
 		fetcher,
-		kinesisConfigReloadFrequency,
+		5*time.Second, //kinesisConfigReloadFrequency,
 		kinesisConfigRetryDelay,
 		stats,
 		multee,
