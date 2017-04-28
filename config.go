@@ -7,11 +7,11 @@ import (
 	"os"
 
 	"github.com/twitchscience/aws_utils/logger"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/lookup"
-	"github.com/twitchscience/spade/writer"
 )
 
 var (
@@ -52,7 +52,7 @@ var config struct {
 	RollbarEnvironment string
 
 	// KinesisWriters contain a list of configs for KinesisWriters
-	KinesisOutputs []writer.KinesisWriterConfig
+	KinesisOutputs []scoop_protocol.KinesisWriterConfig
 
 	// JSONValueFetchers is a map of id to JSONValueFetcherConfigs
 	JSONValueFetchers map[string]lookup.JSONValueFetcherConfig

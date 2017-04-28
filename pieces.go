@@ -3,6 +3,7 @@ package main
 // I need a better name for this file
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -160,8 +161,14 @@ func createSchemaLoader(
 	return loader
 }
 
-func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger) *kinesisconfigs.DynamicLoader {
-	loader, err := kinesisconfigs.NewDynamicLoader(fetcher, kinesisConfigReloadFrequency, kinesisConfigRetryDelay, stats)
+func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger, multee *writer.Multee, session *session.Session) *kinesisconfigs.DynamicLoader {
+	loader, err := kinesisconfigs.NewDynamicLoader(
+		fetcher,
+		kinesisConfigReloadFrequency,
+		kinesisConfigRetryDelay,
+		stats,
+		multee,
+		session)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create kinesis config dynamic loader")
 	}
@@ -192,17 +199,15 @@ func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
 	return u
 }
 
-func createKinesisWriters(session *session.Session, stats statsd.Statter) []writer.SpadeWriter {
-	var writers []writer.SpadeWriter
+// createStaticKinesisWriters creates the writers from JSON configs, which are static
+func createStaticKinesisWriters(multee *writer.Multee, session *session.Session, stats statsd.Statter) {
 	for _, c := range config.KinesisOutputs {
 		w, err := writer.NewKinesisWriter(session, stats, c)
 		if err != nil {
 			logger.WithError(err).
 				WithField("stream_name", c.StreamName).
-				Fatal("Failed to create Kinesis writer")
+				Fatal("Failed to create static Kinesis writer")
 		}
-		writers = append(writers, w)
+		multee.Add(fmt.Sprintf("static_%s_%s_%s", c.StreamRole, c.StreamType, c.StreamName), w)
 	}
-
-	return writers
 }

@@ -33,7 +33,7 @@ type SpadeProcessorPool struct {
 }
 
 // BuildProcessorPool builds a new SpadeProcessorPool.
-func BuildProcessorPool(schemaConfigs transformer.SchemaConfigLoader, kinesisConfigs writer.KinesisConfigLoader, rep reporter.Reporter,
+func BuildProcessorPool(schemaConfigs transformer.SchemaConfigLoader, rep reporter.Reporter,
 	writer writer.SpadeWriter, stats reporter.StatsLogger) *SpadeProcessorPool {
 
 	transformers := make([]*RequestTransformer, nTransformers)

@@ -38,6 +38,7 @@ import (
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/deglobber"
 	"github.com/twitchscience/spade/geoip"
+	"github.com/twitchscience/spade/kinesisconfigs"
 	jsonLog "github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"
@@ -53,6 +54,7 @@ const (
 	duplicateCacheCleanupFrequency      = 1 * time.Minute
 	networkTimeout                      = 6200 * time.Millisecond
 	compressionVersion             byte = 1
+	spadeWriterKey                      = "SpadeWriter"
 )
 
 var (
@@ -80,6 +82,7 @@ type spadeProcessor struct {
 	spadeUploaderPool     *aws_uploader.UploaderPool
 	blueprintUploaderPool *aws_uploader.UploaderPool
 	tCache                *elastimemcache.Client
+	kinesisConfigLoader   *kinesisconfigs.DynamicLoader
 
 	rotation <-chan time.Time
 	sigc     chan os.Signal
@@ -101,7 +104,7 @@ func validateFetchedKinesisConfig(b []byte) error {
 	if len(b) == 0 {
 		return fmt.Errorf("There are no bytes to validate kinesis config")
 	}
-	var cfgs []writer.AnnotatedKinesisConfig
+	var cfgs []scoop_protocol.AnnotatedKinesisConfig
 	err := json.Unmarshal(b, &cfgs)
 	if err != nil {
 		return fmt.Errorf("Result not a valid []writer.AnnotatedKinesisConfig: %s; error: %s", string(b), err)
@@ -153,23 +156,32 @@ func newProcessor() *spadeProcessor {
 		logger.WithError(err).Error("Failed to clear events folder")
 	}
 
-	multee := &writer.Multee{}
-	multee.Add(createSpadeWriter(
+	// staticMultee manages the static spade writer and kinesis writers from static JSON
+	staticMultee := writer.NewMultee()
+	staticMultee.Add(spadeWriterKey, createSpadeWriter(
 		*_dir, spadeReporter, spadeUploaderPool, blueprintUploaderPool,
 		config.MaxLogBytes, config.MaxLogAgeSecs))
-	multee.AddMany(createKinesisWriters(session, stats))
+	createStaticKinesisWriters(staticMultee, session, stats)
+
+	// dynamicMultee manages the dynamic kinesis writers that updates based on Blueprint
+	dynamicMultee := writer.NewMultee()
+
+	// One Multee to rule them all, One Multee to find them,
+	// One Multee to bring them all and in the darkness bind them.
+	multee := writer.NewMultee()
+	multee.Add("static_multee", staticMultee)
+	multee.Add("dynamic_multee", dynamicMultee)
 
 	schemaFetcher := fetcher.New(config.BlueprintSchemasURL, validateFetchedSchema)
+	kinesisConfigFetcher := fetcher.New(config.BlueprintKinesisConfigsURL, validateFetchedKinesisConfig)
 	localCache := lru.New(1000, time.Duration(config.LRULifetimeSeconds)*time.Second)
 	remoteCache := createTransformerCache(session, config.TransformerCacheCluster)
 	tConfigs := createMappingTransformerConfigs(
 		valueFetchers, localCache, remoteCache, config.TransformerFetchers, reporterStats)
 	schemaLoader := createSchemaLoader(schemaFetcher, reporterStats, tConfigs)
+	kinesisConfigLoader := createKinesisConfigLoader(kinesisConfigFetcher, reporterStats, dynamicMultee, session)
 
-	kinesisConfigFetcher := fetcher.New(config.BlueprintKinesisConfigsURL, validateFetchedKinesisConfig)
-	kinesisConfigLoader := createKinesisConfigLoader(kinesisConfigFetcher, reporterStats)
-
-	processorPool := processor.BuildProcessorPool(schemaLoader, kinesisConfigLoader, spadeReporter, multee, reporterStats)
+	processorPool := processor.BuildProcessorPool(schemaLoader, spadeReporter, multee, reporterStats)
 	processorPool.StartListeners()
 
 	deglobberPool := deglobber.NewPool(deglobber.PoolConfig{
@@ -196,6 +208,7 @@ func newProcessor() *spadeProcessor {
 		rotation:              time.Tick(rotationCheckFrequency),
 		sigc:                  sigc,
 		tCache:                remoteCache,
+		kinesisConfigLoader:   kinesisConfigLoader,
 	}
 }
 
@@ -233,6 +246,7 @@ func (s *spadeProcessor) run() {
 func (s *spadeProcessor) shutdown() {
 	s.tCache.StopAutoDiscovery()
 
+	s.kinesisConfigLoader.Close()
 	s.resultPipe.Close()
 	s.deglobberPool.Close()
 	s.processorPool.Close()
