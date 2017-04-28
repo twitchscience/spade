@@ -79,7 +79,6 @@ type KinesisWriter struct {
 	batcher     *batcher.Batcher
 	config      scoop_protocol.KinesisWriterConfig
 	batchWriter BatchWriter
-	testcloser  chan bool
 
 	sync.WaitGroup
 }
@@ -159,19 +158,6 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config s
 	w.Add(2)
 	logger.Go(w.incomingWorker)
 	logger.Go(w.sendWorker)
-	w.testcloser = make(chan bool)
-	logger.Go(func() {
-
-		tick := time.NewTicker(time.Second * 5)
-		for {
-			select {
-			case <-tick.C:
-				fmt.Print("\n\nI'm alive", w.config.StreamName, "\n\n\n")
-			case <-w.testcloser:
-				return
-			}
-		}
-	})
 
 	return w, nil
 }
@@ -514,7 +500,6 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 
 // Close closes a KinesisWriter
 func (w *KinesisWriter) Close() error {
-	w.testcloser <- true
 	close(w.incoming)
 	w.Wait()
 	return nil
