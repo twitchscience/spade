@@ -28,7 +28,7 @@ func main() {
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create blueprint URL")
 	}
-	err = fetcher.FetchConfig(fetcher.New(bpURL), *schemaCacheFileName)
+	err = fetcher.FetchConfig(fetcher.New(bpURL, fetcher.ValidateFetchedSchema), *schemaCacheFileName)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to fetch config")
 	}

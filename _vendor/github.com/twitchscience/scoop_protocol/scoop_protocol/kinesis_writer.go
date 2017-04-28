@@ -9,8 +9,6 @@ import (
 
 // AnnotatedKinesisConfig is a Kinesis configuration annotated with meta information.
 type AnnotatedKinesisConfig struct {
-	StreamName       string
-	StreamType       string
 	AWSAccount       int64
 	Team             string
 	Version          int
@@ -48,6 +46,10 @@ type KinesisWriterConfig struct {
 // Validate returns an error if the Kinesis Writer config is not valid, or nil if it is.
 // It also sets the FilterFunc on Events with Filters.
 func (c *KinesisWriterConfig) Validate() error {
+	if c.StreamType == "" || c.StreamName == "" {
+		return fmt.Errorf("Mandatory fields stream type and stream name aren't populated")
+	}
+
 	err := c.Globber.Validate()
 	if err != nil {
 		return fmt.Errorf("globber config invalid: %s", err)
