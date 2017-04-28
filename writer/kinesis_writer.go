@@ -17,6 +17,7 @@ import (
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twinj/uuid"
 	"github.com/twitchscience/aws_utils/logger"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/batcher"
 	"github.com/twitchscience/spade/globber"
 )
@@ -25,88 +26,6 @@ const (
 	// RedshiftDatetimeIngestString is the format of timestamps that Redshift understands.
 	RedshiftDatetimeIngestString = "2006-01-02 15:04:05.999"
 )
-
-// AnnotatedKinesisConfig was copypasta'd over from blueprint.
-// TODO: refactor all shared objects to scoop protocol after changes land
-// AnnotatedKinesisConfig is a Kinesis configuration annotated with meta information.
-type AnnotatedKinesisConfig struct {
-	StreamName       string
-	StreamType       string
-	AWSAccount       int64
-	Team             string
-	Version          int
-	Contact          string
-	Usage            string
-	ConsumingLibrary string
-	SpadeConfig      KinesisWriterConfig
-	LastEditedAt     time.Time
-	LastChangedBy    string
-	Dropped          bool
-	DroppedReason    string
-}
-
-// KinesisWriterConfig is used to configure a KinesisWriter
-// and its nested globber and batcher objects
-type KinesisWriterConfig struct {
-	StreamName             string
-	StreamRole             string
-	StreamType             string // StreamType should be either "stream" or "firehose"
-	Compress               bool   // true if compress data with flate, false to output json
-	FirehoseRedshiftStream bool   // true if JSON destined for Firehose->Redshift streaming
-	BufferSize             int
-	MaxAttemptsPerRecord   int
-	RetryDelay             string
-
-	Events map[string]*struct {
-		Filter     string
-		FilterFunc func(map[string]string) bool `json:"-"`
-		Fields     []string
-	}
-
-	Globber globber.Config
-	Batcher batcher.Config
-}
-
-// Validate returns an error if the config is not valid, or nil if it is.
-// It also sets the FilterFunc on Events with Filters.
-func (c *KinesisWriterConfig) Validate() error {
-	err := c.Globber.Validate()
-	if err != nil {
-		return fmt.Errorf("globber config invalid: %s", err)
-	}
-
-	err = c.Batcher.Validate()
-	if err != nil {
-		return fmt.Errorf("batcher config invalid: %s", err)
-	}
-
-	for _, e := range c.Events {
-		if e.Filter != "" {
-			e.FilterFunc = filterFuncs[e.Filter]
-			if e.FilterFunc == nil {
-				return fmt.Errorf("batcher config invalid: %s", err)
-			}
-		}
-	}
-
-	if c.FirehoseRedshiftStream && (c.StreamType != "firehose" || c.Compress) {
-		return fmt.Errorf("Redshift streaming only valid with non-compressed firehose")
-	}
-
-	_, err = time.ParseDuration(c.RetryDelay)
-	return err
-}
-
-var filterFuncs = map[string]func(map[string]string) bool{
-	"isVod": func(fields map[string]string) bool {
-		return fields["vod_id"] != "" && fields["vod_type"] != "clip"
-	},
-}
-
-// KinesisConfigLoader manages access to Kinesis writer configs through loading from Blueprint.
-type KinesisConfigLoader interface {
-	GetKinesisConfigs() []AnnotatedKinesisConfig
-}
 
 // Statter sends stats for a BatchWriter.
 type Statter struct {
@@ -141,14 +60,14 @@ type BatchWriter interface {
 // StreamBatchWriter writes batches to Kinesis Streams
 type StreamBatchWriter struct {
 	client  kinesisiface.KinesisAPI
-	config  *KinesisWriterConfig
+	config  *scoop_protocol.KinesisWriterConfig
 	statter *Statter
 }
 
 // FirehoseBatchWriter writes batches to Kinesis Firehose
 type FirehoseBatchWriter struct {
 	client  firehoseiface.FirehoseAPI
-	config  *KinesisWriterConfig
+	config  *scoop_protocol.KinesisWriterConfig
 	statter *Statter
 }
 
@@ -158,8 +77,9 @@ type KinesisWriter struct {
 	batches     chan [][]byte
 	globber     *globber.Globber
 	batcher     *batcher.Batcher
-	config      KinesisWriterConfig
+	config      scoop_protocol.KinesisWriterConfig
 	batchWriter BatchWriter
+	testcloser  chan bool
 
 	sync.WaitGroup
 }
@@ -191,7 +111,7 @@ func generateStatNames(streamName string) map[int]string {
 
 // NewKinesisWriter returns an instance of SpadeWriter that writes
 // events to kinesis
-func NewKinesisWriter(session *session.Session, statter statsd.Statter, config KinesisWriterConfig) (SpadeWriter, error) {
+func NewKinesisWriter(session *session.Session, statter statsd.Statter, config scoop_protocol.KinesisWriterConfig) (SpadeWriter, error) {
 	err := config.Validate()
 	if err != nil {
 		return nil, err
@@ -220,6 +140,8 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config K
 		batches:     make(chan [][]byte),
 		config:      config,
 		batchWriter: batchWriter,
+
+		testcloser: make(chan bool),
 	}
 
 	w.batcher, err = batcher.New(config.Batcher, func(b [][]byte) {
@@ -239,6 +161,18 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config K
 	w.Add(2)
 	logger.Go(w.incomingWorker)
 	logger.Go(w.sendWorker)
+	logger.Go(func() {
+		tick := time.NewTicker(time.Second * 5)
+		for {
+			select {
+			case <-tick.C:
+				fmt.Println("\nI'm alive!", config.StreamName, config.StreamRole, "\n")
+
+			case <-w.testcloser:
+				return
+			}
+		}
+	})
 	return w, nil
 }
 
@@ -580,6 +514,9 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 
 // Close closes a KinesisWriter
 func (w *KinesisWriter) Close() error {
+
+	w.testcloser <- true
+
 	close(w.incoming)
 	w.Wait()
 	return nil

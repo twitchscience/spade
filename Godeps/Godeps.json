@@ -321,19 +321,19 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
-			"Rev": "ea800add210eef3b689382283dcbd0584e2a1ffa"
+			"Rev": "295dcaf41c73a2dcdd8c624ca169ff94eb17d35a"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/scoop_protocol",
-			"Rev": "ea800add210eef3b689382283dcbd0584e2a1ffa"
+			"Rev": "295dcaf41c73a2dcdd8c624ca169ff94eb17d35a"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/spade",
-			"Rev": "ea800add210eef3b689382283dcbd0584e2a1ffa"
+			"Rev": "295dcaf41c73a2dcdd8c624ca169ff94eb17d35a"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/transformer",
-			"Rev": "ea800add210eef3b689382283dcbd0584e2a1ffa"
+			"Rev": "295dcaf41c73a2dcdd8c624ca169ff94eb17d35a"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",
