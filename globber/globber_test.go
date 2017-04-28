@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
 func TestInvalidConfig(t *testing.T) {
-	validConfig := Config{
+	validConfig := scoop_protocol.GlobberConfig{
 		MaxSize:      1 * 1024 * 1024,
 		MaxAge:       "1m",
 		BufferLength: 5,
@@ -77,7 +78,7 @@ func TestGlobber(t *testing.T) {
 
 	// config globber to be much bigger than
 	// we need
-	config := Config{
+	config := scoop_protocol.GlobberConfig{
 		MaxSize:      1 * 1024 * 1024,
 		MaxAge:       "1m",
 		BufferLength: 5,

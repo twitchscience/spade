@@ -61,6 +61,10 @@ func (s *statsMock) Timing(stat string, t time.Duration) {
 func (s *statsMock) IncrBy(stat string, value int) {
 }
 
+func (s *statsMock) GetStatter() statsd.Statter {
+	return nil
+}
+
 // This tests that the logic is implemented correctly to
 // transform a parsed event to some table psql format.
 // Thus this does not test the redsshift types.

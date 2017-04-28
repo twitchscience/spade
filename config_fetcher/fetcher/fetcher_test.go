@@ -26,8 +26,53 @@ var knownScoopProtocolSchemaEvents = []scoop_protocol.Config{
 	},
 }
 
+var knownScoopProtocolKinesisConfigs = []scoop_protocol.AnnotatedKinesisConfig{
+	{
+		AWSAccount:       123123,
+		Team:             "scieng",
+		Version:          3,
+		Contact:          "me",
+		Usage:            "testing",
+		ConsumingLibrary: "go test",
+		SpadeConfig: scoop_protocol.KinesisWriterConfig{
+			StreamName:             "foo",
+			StreamRole:             "bar",
+			StreamType:             "firehose",
+			Compress:               false,
+			FirehoseRedshiftStream: true,
+			BufferSize:             1024,
+			MaxAttemptsPerRecord:   10,
+			RetryDelay:             "1s",
+			Events: map[string]*struct {
+				Filter     string
+				FilterFunc func(map[string]string) bool `json:"-"`
+				Fields     []string
+			}{"event": {
+				Filter: "",
+				Fields: []string{
+					"time",
+					"time_utc",
+				},
+			},
+			},
+
+			Globber: scoop_protocol.GlobberConfig{
+				MaxSize:      990000,
+				MaxAge:       "1s",
+				BufferLength: 1024,
+			},
+			Batcher: scoop_protocol.BatcherConfig{
+				MaxSize:      990000,
+				MaxEntries:   500,
+				MaxAge:       "1s",
+				BufferLength: 1024,
+			},
+		},
+	},
+}
+
 func TestNew(t *testing.T) {
-	f := New("foo")
+	f := New("foo", func(b []byte) error { return nil })
 
 	v := f.(*fetcher)
 	if v == nil {
@@ -45,22 +90,41 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestValidate(t *testing.T) {
-	if validate([]byte{}) {
-		t.Error("Expected validate() to return false, got true")
+func TestValidateSchema(t *testing.T) {
+	if ValidateFetchedSchema([]byte{}) == nil {
+		t.Error("Expected validate to error, got nil")
 	}
 
 	b := []byte("this wont work")
-	if validate(b) {
-		t.Error("Expected validate() to return false when given non-schema.Event array, got true")
+	if ValidateFetchedSchema(b) == nil {
+		t.Error("Expected validate to error when given non-schema.Event array, got nil")
 	}
 
 	b, err := json.Marshal(knownScoopProtocolSchemaEvents)
 	if err != nil {
 		t.Errorf("Unexpected error serializing schema.Event: %s", err)
 	}
-	if !validate(b) {
-		t.Errorf("Expected validate() to return true, got false")
+	if ValidateFetchedSchema(b) != nil {
+		t.Errorf("Expected validate to return nil, got error")
+	}
+}
+
+func TestValidateKinesisConfig(t *testing.T) {
+	if ValidateFetchedKinesisConfig([]byte{}) == nil {
+		t.Error("Expected validate to error, got nil")
+	}
+
+	b := []byte("this wont work")
+	if ValidateFetchedKinesisConfig(b) == nil {
+		t.Error("Expected validate to error when given non kinesis config array, got nil")
+	}
+
+	b, err := json.Marshal(knownScoopProtocolKinesisConfigs)
+	if err != nil {
+		t.Errorf("Unexpected error serializing schema.Event: %s", err)
+	}
+	if ValidateFetchedKinesisConfig(b) != nil {
+		t.Errorf("Expected validate to return nil, got error")
 	}
 }
 
@@ -102,7 +166,7 @@ func (trwc *testReadWriteCloser) Close() error {
 }
 
 func (tf *testFetcher) FetchAndWrite(src io.ReadCloser, dest io.WriteCloser) error {
-	f := New("foo")
+	f := New("foo", ValidateFetchedSchema)
 	return f.FetchAndWrite(src, dest)
 }
 

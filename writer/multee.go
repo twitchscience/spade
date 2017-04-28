@@ -6,12 +6,19 @@ import (
 	"github.com/twitchscience/aws_utils/logger"
 )
 
-// Multee implements the `SpadeWriter` interface and forwards all calls
+// Multee implements the `SpadeWriter` and 'SpadeWriterManager' interface and forwards all calls
 // to a map of targets.
 type Multee struct {
 	// targets is the spadewriters we will Multee events to
 	targets map[string]SpadeWriter
 	sync.RWMutex
+}
+
+// SpadeWriterManager allows operations on a set of SpadeWriters
+type SpadeWriterManager interface {
+	Add(key string, w SpadeWriter)
+	Drop(key string)
+	Replace(key string, newWriter SpadeWriter)
 }
 
 // Add adds a new writer to the target map

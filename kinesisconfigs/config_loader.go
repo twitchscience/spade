@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
@@ -35,15 +36,16 @@ func NewStaticLoader(config []scoop_protocol.AnnotatedKinesisConfig) *StaticLoad
 
 // DynamicLoader fetches configs on an interval, with stats on the fetching process.
 type DynamicLoader struct {
-	fetcher    fetcher.ConfigFetcher
-	reloadTime time.Duration
-	retryDelay time.Duration
-	configs    []scoop_protocol.AnnotatedKinesisConfig
-	lock       *sync.RWMutex
-	closer     chan bool
-	stats      reporter.StatsLogger
-	multee     *writer.Multee
-	session    *session.Session
+	fetcher                fetcher.ConfigFetcher
+	reloadTime             time.Duration
+	retryDelay             time.Duration
+	configs                []scoop_protocol.AnnotatedKinesisConfig
+	lock                   *sync.RWMutex
+	closer                 chan bool
+	stats                  reporter.StatsLogger
+	multee                 writer.SpadeWriterManager
+	session                *session.Session
+	kinesisWriterGenerator func(*session.Session, statsd.Statter, scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error)
 }
 
 // NewDynamicLoader returns a new DynamicLoader, performing the first fetch.
@@ -52,19 +54,21 @@ func NewDynamicLoader(
 	reloadTime,
 	retryDelay time.Duration,
 	stats reporter.StatsLogger,
-	multee *writer.Multee,
+	multee writer.SpadeWriterManager,
 	session *session.Session,
+	kinesisWriterGenerator func(*session.Session, statsd.Statter, scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error),
 ) (*DynamicLoader, error) {
 	d := DynamicLoader{
-		fetcher:    fetcher,
-		reloadTime: time.Second * 5, //reloadTime,
-		retryDelay: retryDelay,
-		configs:    []scoop_protocol.AnnotatedKinesisConfig{},
-		lock:       &sync.RWMutex{},
-		closer:     make(chan bool),
-		stats:      stats,
-		multee:     multee,
-		session:    session,
+		fetcher:                fetcher,
+		reloadTime:             reloadTime,
+		retryDelay:             retryDelay,
+		configs:                []scoop_protocol.AnnotatedKinesisConfig{},
+		lock:                   &sync.RWMutex{},
+		closer:                 make(chan bool),
+		stats:                  stats,
+		multee:                 multee,
+		session:                session,
+		kinesisWriterGenerator: kinesisWriterGenerator,
 	}
 	config, err := d.retryPull(5, retryDelay)
 	if err != nil {
@@ -72,19 +76,26 @@ func NewDynamicLoader(
 	}
 	d.configs = config
 
-	// start the kinesis writers defined by Blueprint
-	for _, newConfig := range d.configs {
-		k := buildKey(newConfig)
-		w, err := writer.NewKinesisWriter(d.session, d.stats.GetStatter(), newConfig.SpadeConfig)
-		if err != nil {
-			logger.WithError(err).
-				WithField("key", k).
-				Error("Failed to create Kinesis writer at loader initialization")
-		}
-		d.multee.Add(k, w)
+	err = d.StartInitialWriters()
+	if err != nil {
+		return nil, fmt.Errorf("Error initializing kinesis writers: %s", err)
 	}
 
 	return &d, nil
+}
+
+// StartInitialWriters starts the initial batch of Kinesis Writers
+func (d *DynamicLoader) StartInitialWriters() error {
+	// start the kinesis writers defined by Blueprint
+	for _, newConfig := range d.configs {
+		k := buildKey(newConfig)
+		w, err := d.kinesisWriterGenerator(d.session, d.stats.GetStatter(), newConfig.SpadeConfig)
+		if err != nil {
+			return fmt.Errorf("Failed to create Kinesis writer %s at loader initialization: %s", k, err)
+		}
+		d.multee.Add(k, w)
+	}
+	return nil
 }
 
 // GetKinesisConfigs returns the transformers for the given event.
@@ -115,17 +126,16 @@ func (d *DynamicLoader) pullConfigIn() ([]scoop_protocol.AnnotatedKinesisConfig,
 	if err != nil {
 		return nil, fmt.Errorf("could not read response from fetcher: %s", err)
 	}
-
 	var acfgs []scoop_protocol.AnnotatedKinesisConfig
 	err = json.Unmarshal(b, &acfgs)
 	if err != nil {
-		return []scoop_protocol.AnnotatedKinesisConfig{}, fmt.Errorf("could not unmarshal annotated kiness response: %s", err)
+		return []scoop_protocol.AnnotatedKinesisConfig{}, fmt.Errorf("could not unmarshal annotated kinesis response: %s", err)
 	}
 	// validate
 	for i := range acfgs {
 		err = acfgs[i].SpadeConfig.Validate()
 		if err != nil {
-			return nil, fmt.Errorf("could not validate kinesis configuration %s: %s", acfgs[i].StreamName, err)
+			return nil, fmt.Errorf("could not validate kinesis configuration %s: %s", acfgs[i].SpadeConfig.StreamName, err)
 		}
 	}
 	return acfgs, nil
@@ -144,7 +154,7 @@ func (d *DynamicLoader) GetKinesisConfigs() []scoop_protocol.AnnotatedKinesisCon
 }
 
 func buildKey(c scoop_protocol.AnnotatedKinesisConfig) string {
-	return strings.Join([]string{strconv.FormatInt(c.AWSAccount, 10), c.StreamType, c.StreamName}, kinesisKeyDelimiter)
+	return strings.Join([]string{strconv.FormatInt(c.AWSAccount, 10), c.SpadeConfig.StreamType, c.SpadeConfig.StreamName}, kinesisKeyDelimiter)
 }
 
 // Crank is a blocking function that refreshes the config on an interval.
@@ -188,7 +198,7 @@ func (d *DynamicLoader) Crank() {
 							Error("Incoming Kinesis config higher than previous version")
 					} else if existingConfig.Version < newConfig.Version {
 						// if incoming version is higher than existing - replace the existing writer
-						w, err := writer.NewKinesisWriter(d.session, d.stats.GetStatter(), newConfig.SpadeConfig)
+						w, err := d.kinesisWriterGenerator(d.session, d.stats.GetStatter(), newConfig.SpadeConfig)
 						if err != nil {
 							logger.WithError(err).
 								WithField("key", k).
@@ -206,7 +216,7 @@ func (d *DynamicLoader) Crank() {
 
 			// the leftovers are new configs we don't know about yet - add them
 			for k, newConfig := range newConfigsLookup {
-				w, err := writer.NewKinesisWriter(d.session, d.stats.GetStatter(), newConfig.SpadeConfig)
+				w, err := d.kinesisWriterGenerator(d.session, d.stats.GetStatter(), newConfig.SpadeConfig)
 				if err != nil {
 					logger.WithError(err).
 						WithField("key", k).

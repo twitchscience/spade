@@ -12,7 +12,6 @@ suggest schemas for them.
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -31,7 +30,6 @@ import (
 	cache "github.com/patrickmn/go-cache"
 	"github.com/twitchscience/aws_utils/logger"
 	aws_uploader "github.com/twitchscience/aws_utils/uploader"
-	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/cache/lru"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
@@ -86,30 +84,6 @@ type spadeProcessor struct {
 
 	rotation <-chan time.Time
 	sigc     chan os.Signal
-}
-
-func validateFetchedSchema(b []byte) error {
-	if len(b) == 0 {
-		return fmt.Errorf("There are no bytes to validate schema")
-	}
-	var cfgs []scoop_protocol.Config
-	err := json.Unmarshal(b, &cfgs)
-	if err != nil {
-		return fmt.Errorf("Result not a valid []schema.Event: %s; error: %s", string(b), err)
-	}
-	return nil
-}
-
-func validateFetchedKinesisConfig(b []byte) error {
-	if len(b) == 0 {
-		return fmt.Errorf("There are no bytes to validate kinesis config")
-	}
-	var cfgs []scoop_protocol.AnnotatedKinesisConfig
-	err := json.Unmarshal(b, &cfgs)
-	if err != nil {
-		return fmt.Errorf("Result not a valid []writer.AnnotatedKinesisConfig: %s; error: %s", string(b), err)
-	}
-	return nil
 }
 
 func newProcessor() *spadeProcessor {
@@ -172,8 +146,8 @@ func newProcessor() *spadeProcessor {
 	multee.Add("static_multee", staticMultee)
 	multee.Add("dynamic_multee", dynamicMultee)
 
-	schemaFetcher := fetcher.New(config.BlueprintSchemasURL, validateFetchedSchema)
-	kinesisConfigFetcher := fetcher.New(config.BlueprintKinesisConfigsURL, validateFetchedKinesisConfig)
+	schemaFetcher := fetcher.New(config.BlueprintSchemasURL, fetcher.ValidateFetchedSchema)
+	kinesisConfigFetcher := fetcher.New(config.BlueprintKinesisConfigsURL, fetcher.ValidateFetchedKinesisConfig)
 	localCache := lru.New(1000, time.Duration(config.LRULifetimeSeconds)*time.Second)
 	remoteCache := createTransformerCache(session, config.TransformerCacheCluster)
 	tConfigs := createMappingTransformerConfigs(

@@ -1,44 +1,237 @@
 package kinesisconfigs
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/reporter"
+	"github.com/twitchscience/spade/writer"
 )
 
 var (
-	knownScoopProtocolConfig1 = []scoop_protocol.Config{
+	knownScoopProtocolKinesisConfigInit, _ = json.Marshal([]scoop_protocol.AnnotatedKinesisConfig{
 		{
-			EventName: "foo",
-			Columns: []scoop_protocol.ColumnDefinition{
-				{
-					InboundName:           "in",
-					OutboundName:          "out",
-					Transformer:           "int",
-					ColumnCreationOptions: "",
+			AWSAccount:       123123,
+			Team:             "scieng",
+			Version:          3,
+			Contact:          "me",
+			Usage:            "testing",
+			ConsumingLibrary: "go test",
+			SpadeConfig: scoop_protocol.KinesisWriterConfig{
+				StreamName:             "foo",
+				StreamRole:             "bar",
+				StreamType:             "firehose",
+				Compress:               false,
+				FirehoseRedshiftStream: true,
+				BufferSize:             1024,
+				MaxAttemptsPerRecord:   10,
+				RetryDelay:             "1s",
+				Events: map[string]*struct {
+					Filter     string
+					FilterFunc func(map[string]string) bool `json:"-"`
+					Fields     []string
+				}{"event": {
+					Filter: "",
+					Fields: []string{
+						"time",
+						"time_utc",
+					},
+				},
+				},
+
+				Globber: scoop_protocol.GlobberConfig{
+					MaxSize:      990000,
+					MaxAge:       "1s",
+					BufferLength: 1024,
+				},
+				Batcher: scoop_protocol.BatcherConfig{
+					MaxSize:      990000,
+					MaxEntries:   500,
+					MaxAge:       "1s",
+					BufferLength: 1024,
 				},
 			},
 		},
-	}
-	knownScoopProtocolConfig2 = []scoop_protocol.Config{
+	})
+
+	knownScoopProtocolKinesisConfigUpdate, _ = json.Marshal([]scoop_protocol.AnnotatedKinesisConfig{
 		{
-			EventName: "bar",
-			Columns: []scoop_protocol.ColumnDefinition{
-				{
-					InboundName:           "in",
-					OutboundName:          "out",
-					Transformer:           "int",
-					ColumnCreationOptions: "",
+			AWSAccount:       123123,
+			Team:             "scieng",
+			Version:          4,
+			Contact:          "me",
+			Usage:            "testing",
+			ConsumingLibrary: "go test",
+			SpadeConfig: scoop_protocol.KinesisWriterConfig{
+				StreamName:             "foo",
+				StreamRole:             "bar",
+				StreamType:             "firehose",
+				Compress:               false,
+				FirehoseRedshiftStream: true,
+				BufferSize:             1024,
+				MaxAttemptsPerRecord:   10,
+				RetryDelay:             "1s",
+				Events: map[string]*struct {
+					Filter     string
+					FilterFunc func(map[string]string) bool `json:"-"`
+					Fields     []string
+				}{"event": {
+					Filter: "",
+					Fields: []string{
+						"time",
+					},
+				},
+				},
+
+				Globber: scoop_protocol.GlobberConfig{
+					MaxSize:      990000,
+					MaxAge:       "1s",
+					BufferLength: 1024,
+				},
+				Batcher: scoop_protocol.BatcherConfig{
+					MaxSize:      990000,
+					MaxEntries:   500,
+					MaxAge:       "1s",
+					BufferLength: 1024,
 				},
 			},
 		},
-	}
+	})
+
+	knownScoopProtocolKinesisConfigAdd, _ = json.Marshal([]scoop_protocol.AnnotatedKinesisConfig{
+		{
+			AWSAccount:       123123,
+			Team:             "scieng",
+			Version:          1,
+			Contact:          "me",
+			Usage:            "testing",
+			ConsumingLibrary: "go test",
+			SpadeConfig: scoop_protocol.KinesisWriterConfig{
+				StreamName:           "foo",
+				StreamRole:           "bar",
+				StreamType:           "stream",
+				Compress:             false,
+				BufferSize:           1024,
+				MaxAttemptsPerRecord: 10,
+				RetryDelay:           "1s",
+				Events: map[string]*struct {
+					Filter     string
+					FilterFunc func(map[string]string) bool `json:"-"`
+					Fields     []string
+				}{"event": {
+					Filter: "",
+					Fields: []string{
+						"time",
+						"time_utc",
+					},
+				},
+				},
+
+				Globber: scoop_protocol.GlobberConfig{
+					MaxSize:      990000,
+					MaxAge:       "1s",
+					BufferLength: 1024,
+				},
+				Batcher: scoop_protocol.BatcherConfig{
+					MaxSize:      990000,
+					MaxEntries:   500,
+					MaxAge:       "1s",
+					BufferLength: 1024,
+				},
+			},
+		},
+		{
+			AWSAccount:       123123,
+			Team:             "scieng",
+			Version:          4,
+			Contact:          "me",
+			Usage:            "testing",
+			ConsumingLibrary: "go test",
+			SpadeConfig: scoop_protocol.KinesisWriterConfig{
+				StreamName:             "foo",
+				StreamRole:             "bar",
+				StreamType:             "firehose",
+				Compress:               false,
+				FirehoseRedshiftStream: true,
+				BufferSize:             1024,
+				MaxAttemptsPerRecord:   10,
+				RetryDelay:             "1s",
+				Events: map[string]*struct {
+					Filter     string
+					FilterFunc func(map[string]string) bool `json:"-"`
+					Fields     []string
+				}{"event": {
+					Filter: "",
+					Fields: []string{
+						"time",
+					},
+				},
+				},
+
+				Globber: scoop_protocol.GlobberConfig{
+					MaxSize:      990000,
+					MaxAge:       "1s",
+					BufferLength: 1024,
+				},
+				Batcher: scoop_protocol.BatcherConfig{
+					MaxSize:      990000,
+					MaxEntries:   500,
+					MaxAge:       "1s",
+					BufferLength: 1024,
+				},
+			},
+		},
+	})
+	knownScoopProtocolKinesisConfigDelete, _ = json.Marshal([]scoop_protocol.AnnotatedKinesisConfig{
+		{
+			AWSAccount:       123123,
+			Team:             "scieng",
+			Version:          1,
+			Contact:          "me",
+			Usage:            "testing",
+			ConsumingLibrary: "go test",
+			SpadeConfig: scoop_protocol.KinesisWriterConfig{
+				StreamName:           "foo",
+				StreamRole:           "bar",
+				StreamType:           "stream",
+				Compress:             false,
+				BufferSize:           1024,
+				MaxAttemptsPerRecord: 10,
+				RetryDelay:           "1s",
+				Events: map[string]*struct {
+					Filter     string
+					FilterFunc func(map[string]string) bool `json:"-"`
+					Fields     []string
+				}{"event": {
+					Filter: "",
+					Fields: []string{
+						"time",
+						"time_utc",
+					},
+				},
+				},
+
+				Globber: scoop_protocol.GlobberConfig{
+					MaxSize:      990000,
+					MaxAge:       "1s",
+					BufferLength: 1024,
+				},
+				Batcher: scoop_protocol.BatcherConfig{
+					MaxSize:      990000,
+					MaxEntries:   500,
+					MaxAge:       "1s",
+					BufferLength: 1024,
+				},
+			},
+		},
+	})
 )
 
 func TestRefresh(t *testing.T) {
@@ -49,40 +242,48 @@ func TestRefresh(t *testing.T) {
 			failFetch: []bool{
 				false,
 				false,
+				false,
+				false,
 			},
-			configs: [][]scoop_protocol.Config{
-				knownScoopProtocolConfig1,
-				knownScoopProtocolConfig2,
+			configs: [][]byte{
+				knownScoopProtocolKinesisConfigInit,
+				knownScoopProtocolKinesisConfigUpdate,
+				knownScoopProtocolKinesisConfigAdd,
+				knownScoopProtocolKinesisConfigDelete,
 			},
 		},
 		1*time.Microsecond,
 		1,
 		reporter.WrapCactusStatter(c, 0.1),
-		nil,
+		&testMultee{},
+		session.New(),
+		func(*session.Session, statsd.Statter, scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
+			return nil, nil
+		},
 	)
 	if err != nil {
 		t.Fatalf("was expecting no error but got %v\n", err)
 		t.FailNow()
 
 	}
-	_, err = dl.GetColumnsForEvent("foo")
-	if err != nil {
-		t.Fatal("expected to track foo")
+
+	if len(dl.configs) != 1 {
+		t.Fatal("expected to have 1 config right now")
 		t.FailNow()
 	}
 
 	go dl.Crank()
-	time.Sleep(101 * time.Millisecond)
-	_, err = dl.GetColumnsForEvent("bar")
-	if err != nil {
-		t.Fatal("expected to track bar")
+	time.Sleep(time.Second)
+	if len(dl.configs) != 1 {
+		t.Fatal("expected to have 1 config right now")
 		t.FailNow()
 	}
-	_, err = dl.GetColumnsForEvent("foo")
-	if err == nil {
-		t.Fatal("expected to not track foo")
+
+	if dl.configs[0].SpadeConfig.StreamType != "stream" {
+		t.Fatal("expected to have a stream left after delete")
 		t.FailNow()
 	}
+
 	dl.closer <- true
 }
 
@@ -101,7 +302,11 @@ func TestRetryPull(t *testing.T) {
 		1*time.Second,
 		1*time.Microsecond,
 		reporter.WrapCactusStatter(c, 0.1),
-		nil,
+		&testMultee{},
+		session.New(),
+		func(*session.Session, statsd.Statter, scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
+			return nil, nil
+		},
 	)
 	if err == nil {
 		t.Fatalf("expected loader to timeout\n")
@@ -109,21 +314,28 @@ func TestRetryPull(t *testing.T) {
 	}
 }
 
+type testMultee struct {
+}
+
 type testFetcher struct {
 	failFetch []bool
-	configs   [][]scoop_protocol.Config
+	configs   [][]byte
 
 	i int
 }
 
 type testReadWriteCloser struct {
-	config []scoop_protocol.Config
+	config    []byte
+	readSoFar int
 }
 
 func (trwc *testReadWriteCloser) Read(p []byte) (int, error) {
-	var b []byte
-	b, _ = json.Marshal(trwc.config)
-	return copy(p, b), io.EOF
+	if len(p) <= len(trwc.config)-trwc.readSoFar {
+		trwc.readSoFar += bytes.MinRead
+		return copy(p, trwc.config[trwc.readSoFar-bytes.MinRead:trwc.readSoFar]), nil
+	}
+
+	return copy(p, trwc.config[trwc.readSoFar:]), io.EOF
 }
 
 func (trwc *testReadWriteCloser) Write(p []byte) (int, error) {
@@ -155,6 +367,15 @@ func (t *testFetcher) Fetch() (io.ReadCloser, error) {
 
 func (t *testFetcher) ConfigDestination(d string) (io.WriteCloser, error) {
 	return &testReadWriteCloser{
-		config: knownScoopProtocolConfig1,
+		config: knownScoopProtocolKinesisConfigInit,
 	}, nil
+}
+
+func (t *testMultee) Add(key string, w writer.SpadeWriter) {
+}
+
+func (t *testMultee) Drop(key string) {
+}
+
+func (t *testMultee) Replace(key string, w writer.SpadeWriter) {
 }

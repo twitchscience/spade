@@ -168,7 +168,8 @@ func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.Sta
 		kinesisConfigRetryDelay,
 		stats,
 		multee,
-		session)
+		session,
+		writer.NewKinesisWriter)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create kinesis config dynamic loader")
 	}

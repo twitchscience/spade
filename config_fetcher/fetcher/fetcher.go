@@ -1,12 +1,16 @@
 package fetcher
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
 // ConfigFetcher is responsible for obtaining and/or writing configs from Blueprint.
@@ -70,6 +74,32 @@ func New(url string, validator func(b []byte) error) ConfigFetcher {
 		url:       url,
 		validator: validator,
 	}
+}
+
+// ValidateFetchedSchema validates a fetched schema
+func ValidateFetchedSchema(b []byte) error {
+	if len(b) == 0 {
+		return fmt.Errorf("There are no bytes to validate schema")
+	}
+	var cfgs []scoop_protocol.Config
+	err := json.Unmarshal(b, &cfgs)
+	if err != nil {
+		return fmt.Errorf("Result not a valid []schema.Event: %s; error: %s", string(b), err)
+	}
+	return nil
+}
+
+// ValidateFetchedKinesisConfig validates a fetched Kinesis config
+func ValidateFetchedKinesisConfig(b []byte) error {
+	if len(b) == 0 {
+		return fmt.Errorf("There are no bytes to validate kinesis config")
+	}
+	var cfgs []scoop_protocol.AnnotatedKinesisConfig
+	err := json.Unmarshal(b, &cfgs)
+	if err != nil {
+		return fmt.Errorf("Result not a valid []writer.AnnotatedKinesisConfig: %s; error: %s", string(b), err)
+	}
+	return nil
 }
 
 // FetchAndWrite reads a config, validates it with the provided validator and writes it out.
