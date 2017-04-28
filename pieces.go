@@ -30,9 +30,10 @@ import (
 )
 
 const (
-	schemaReloadFrequency   = 5 * time.Minute
-	schemaRetryDelay        = 2 * time.Second
-	kinesisConfigRetryDelay = 2 * time.Second
+	schemaReloadFrequency        = 5 * time.Minute
+	schemaRetryDelay             = 2 * time.Second
+	kinesisConfigReloadFrequency = 10 * time.Minute
+	kinesisConfigRetryDelay      = 2 * time.Second
 )
 
 func createStatsdStatter() statsd.Statter {
