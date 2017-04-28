@@ -60,7 +60,7 @@ func NewDynamicLoader(
 ) (*DynamicLoader, error) {
 	d := DynamicLoader{
 		fetcher:                fetcher,
-		reloadTime:             5 * time.Second, //reloadTime,
+		reloadTime:             reloadTime,
 		retryDelay:             retryDelay,
 		configs:                []scoop_protocol.AnnotatedKinesisConfig{},
 		lock:                   &sync.RWMutex{},
