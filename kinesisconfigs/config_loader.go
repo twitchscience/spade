@@ -7,11 +7,8 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
@@ -22,30 +19,16 @@ import (
 // A character guarenteed to not be in the key to delimit it
 const kinesisKeyDelimiter = "|"
 
-// StaticLoader is a static set of transformers.
-type StaticLoader struct {
-	configs []scoop_protocol.AnnotatedKinesisConfig
-}
-
-// NewStaticLoader creates a StaticLoader from the given configs.
-func NewStaticLoader(config []scoop_protocol.AnnotatedKinesisConfig) *StaticLoader {
-	return &StaticLoader{
-		configs: config,
-	}
-}
-
 // DynamicLoader fetches configs on an interval, with stats on the fetching process.
 type DynamicLoader struct {
 	fetcher                fetcher.ConfigFetcher
 	reloadTime             time.Duration
 	retryDelay             time.Duration
 	configs                []scoop_protocol.AnnotatedKinesisConfig
-	lock                   *sync.RWMutex
 	closer                 chan bool
 	stats                  reporter.StatsLogger
 	multee                 writer.SpadeWriterManager
-	session                *session.Session
-	kinesisWriterGenerator func(*session.Session, statsd.Statter, scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error)
+	kinesisWriterGenerator func(scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error)
 }
 
 // NewDynamicLoader returns a new DynamicLoader, performing the first fetch.
@@ -55,19 +38,16 @@ func NewDynamicLoader(
 	retryDelay time.Duration,
 	stats reporter.StatsLogger,
 	multee writer.SpadeWriterManager,
-	session *session.Session,
-	kinesisWriterGenerator func(*session.Session, statsd.Statter, scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error),
+	kinesisWriterGenerator func(scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error),
 ) (*DynamicLoader, error) {
 	d := DynamicLoader{
 		fetcher:                fetcher,
 		reloadTime:             reloadTime,
 		retryDelay:             retryDelay,
 		configs:                []scoop_protocol.AnnotatedKinesisConfig{},
-		lock:                   &sync.RWMutex{},
 		closer:                 make(chan bool),
 		stats:                  stats,
 		multee:                 multee,
-		session:                session,
 		kinesisWriterGenerator: kinesisWriterGenerator,
 	}
 	config, err := d.retryPull(5, retryDelay)
@@ -76,7 +56,7 @@ func NewDynamicLoader(
 	}
 	d.configs = config
 
-	err = d.StartInitialWriters()
+	err = d.startInitialWriters()
 	if err != nil {
 		return nil, fmt.Errorf("Error initializing kinesis writers: %s", err)
 	}
@@ -85,11 +65,11 @@ func NewDynamicLoader(
 }
 
 // StartInitialWriters starts the initial batch of Kinesis Writers
-func (d *DynamicLoader) StartInitialWriters() error {
+func (d *DynamicLoader) startInitialWriters() error {
 	// start the kinesis writers defined by Blueprint
 	for _, newConfig := range d.configs {
 		k := buildKey(newConfig)
-		w, err := d.kinesisWriterGenerator(d.session, d.stats.GetStatter(), newConfig.SpadeConfig)
+		w, err := d.kinesisWriterGenerator(newConfig.SpadeConfig)
 		if err != nil {
 			return fmt.Errorf("Failed to create Kinesis writer %s at loader initialization: %s", k, err)
 		}
@@ -98,15 +78,10 @@ func (d *DynamicLoader) StartInitialWriters() error {
 	return nil
 }
 
-// GetKinesisConfigs returns the transformers for the given event.
-func (s *StaticLoader) GetKinesisConfigs() []scoop_protocol.AnnotatedKinesisConfig {
-	return s.configs
-}
-
 func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) ([]scoop_protocol.AnnotatedKinesisConfig, error) {
 	var err error
 	var config []scoop_protocol.AnnotatedKinesisConfig
-	for i := 1; i < (n + 1); i++ {
+	for i := 1; i <= n; i++ {
 		config, err = d.pullConfigIn()
 		if err == nil {
 			return config, nil
@@ -132,10 +107,10 @@ func (d *DynamicLoader) pullConfigIn() ([]scoop_protocol.AnnotatedKinesisConfig,
 		return []scoop_protocol.AnnotatedKinesisConfig{}, fmt.Errorf("could not unmarshal annotated kinesis response: %s", err)
 	}
 	// validate
-	for i := range acfgs {
-		err = acfgs[i].SpadeConfig.Validate()
+	for _, kinesisConfig := range acfgs {
+		err = kinesisConfig.SpadeConfig.Validate()
 		if err != nil {
-			return nil, fmt.Errorf("could not validate kinesis configuration %s: %s", acfgs[i].SpadeConfig.StreamName, err)
+			return nil, fmt.Errorf("could not validate kinesis configuration %s: %s", kinesisConfig.SpadeConfig.StreamName, err)
 		}
 	}
 	return acfgs, nil
@@ -144,13 +119,6 @@ func (d *DynamicLoader) pullConfigIn() ([]scoop_protocol.AnnotatedKinesisConfig,
 // Close stops the DynamicLoader's fetching process.
 func (d *DynamicLoader) Close() {
 	d.closer <- true
-}
-
-// GetKinesisConfigs returns all of the Kinesis streams currently configured.
-func (d *DynamicLoader) GetKinesisConfigs() []scoop_protocol.AnnotatedKinesisConfig {
-	d.lock.RLock()
-	defer d.lock.RUnlock()
-	return d.configs
 }
 
 func buildKey(c scoop_protocol.AnnotatedKinesisConfig) string {
@@ -163,6 +131,8 @@ func (d *DynamicLoader) Crank() {
 	tick := time.NewTicker(d.reloadTime + time.Duration(rand.Intn(100))*time.Millisecond)
 	for {
 		select {
+		case <-d.closer:
+			return
 		case <-tick.C:
 			// can put a circuit breaker here.
 			now := time.Now()
@@ -174,7 +144,6 @@ func (d *DynamicLoader) Crank() {
 			}
 			d.stats.Timing("kinesisconfig.success", time.Since(now))
 
-			d.lock.Lock() // this locked block starts here...
 			newConfigsLookup := make(map[string]*scoop_protocol.AnnotatedKinesisConfig)
 			for i := range newConfigs {
 				k := buildKey(newConfigs[i])
@@ -187,36 +156,40 @@ func (d *DynamicLoader) Crank() {
 					// the new configs no longer have something we had before - it got dropped
 					logger.Infof("Dropping writer %s", k)
 					d.multee.Drop(k)
-				} else {
-					// the new config already exist - check for updated version
-					if existingConfig.Version > newConfig.Version {
-						// if incoming version is lower than existing, log error
-						logger.
-							WithField("key", k).
-							WithField("existing_version", existingConfig.Version).
-							WithField("new_version", newConfig.Version).
-							Error("Incoming Kinesis config higher than previous version")
-					} else if existingConfig.Version < newConfig.Version {
-						// if incoming version is higher than existing - replace the existing writer
-						w, err := d.kinesisWriterGenerator(d.session, d.stats.GetStatter(), newConfig.SpadeConfig)
-						if err != nil {
-							logger.WithError(err).
-								WithField("key", k).
-								Error("Failed to create Kinesis writer when replacing kinesis writer")
-						}
-						logger.Infof("Replacing writer %s", k)
-						d.multee.Replace(k, w)
-					}
-					// do nothing if version is the same
-
-					// remove the newConfig from the lookup
-					delete(newConfigsLookup, k)
+					continue
 				}
+
+				// remove the newConfig from the lookup
+				delete(newConfigsLookup, k)
+
+				// do nothing if version is the same
+				if existingConfig.Version == newConfig.Version {
+					continue
+				}
+				// the new config already exist - check for updated version
+				if existingConfig.Version > newConfig.Version {
+					// if incoming version is lower than existing, log error
+					logger.
+						WithField("key", k).
+						WithField("existing_version", existingConfig.Version).
+						WithField("new_version", newConfig.Version).
+						Error("Incoming Kinesis config higher than previous version")
+					continue
+				}
+				// if incoming version is higher than existing - replace the existing writer
+				w, err := d.kinesisWriterGenerator(newConfig.SpadeConfig)
+				if err != nil {
+					logger.WithError(err).
+						WithField("key", k).
+						Error("Failed to create Kinesis writer when replacing kinesis writer")
+				}
+				logger.Infof("Replacing writer %s", k)
+				d.multee.Replace(k, w)
 			}
 
 			// the leftovers are new configs we don't know about yet - add them
 			for k, newConfig := range newConfigsLookup {
-				w, err := d.kinesisWriterGenerator(d.session, d.stats.GetStatter(), newConfig.SpadeConfig)
+				w, err := d.kinesisWriterGenerator(newConfig.SpadeConfig)
 				if err != nil {
 					logger.WithError(err).
 						WithField("key", k).
@@ -228,10 +201,6 @@ func (d *DynamicLoader) Crank() {
 
 			// done with updating the actual writers, replace the config
 			d.configs = newConfigs
-
-			d.lock.Unlock() // ...and ends here
-		case <-d.closer:
-			return
 		}
 	}
 }

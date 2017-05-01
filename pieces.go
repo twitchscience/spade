@@ -16,6 +16,7 @@ import (
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/uploader"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/cache"
 	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
@@ -168,8 +169,10 @@ func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.Sta
 		kinesisConfigRetryDelay,
 		stats,
 		multee,
-		session,
-		writer.NewKinesisWriter)
+		func(config scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
+			return writer.NewKinesisWriter(session, stats.GetStatter(), config)
+		},
+	)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create kinesis config dynamic loader")
 	}
