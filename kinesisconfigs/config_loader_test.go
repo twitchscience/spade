@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/reporter"
@@ -256,32 +255,26 @@ func TestRefresh(t *testing.T) {
 		1,
 		reporter.WrapCactusStatter(c, 0.1),
 		&testMultee{},
-		session.New(),
-		func(*session.Session, statsd.Statter, scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
+		func(scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
 			return nil, nil
 		},
 	)
 	if err != nil {
 		t.Fatalf("was expecting no error but got %v\n", err)
-		t.FailNow()
-
 	}
 
 	if len(dl.configs) != 1 {
 		t.Fatal("expected to have 1 config right now")
-		t.FailNow()
 	}
 
 	go dl.Crank()
 	time.Sleep(time.Second)
 	if len(dl.configs) != 1 {
 		t.Fatal("expected to have 1 config right now")
-		t.FailNow()
 	}
 
 	if dl.configs[0].SpadeConfig.StreamType != "stream" {
 		t.Fatal("expected to have a stream left after delete")
-		t.FailNow()
 	}
 
 	dl.closer <- true
@@ -303,14 +296,12 @@ func TestRetryPull(t *testing.T) {
 		1*time.Microsecond,
 		reporter.WrapCactusStatter(c, 0.1),
 		&testMultee{},
-		session.New(),
-		func(*session.Session, statsd.Statter, scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
+		func(scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
 			return nil, nil
 		},
 	)
 	if err == nil {
 		t.Fatalf("expected loader to timeout\n")
-		t.FailNow()
 	}
 }
 
