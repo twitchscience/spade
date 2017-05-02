@@ -3,6 +3,7 @@ package main
 // I need a better name for this file
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -15,11 +16,13 @@ import (
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/uploader"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/cache"
 	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
+	"github.com/twitchscience/spade/kinesisconfigs"
 	"github.com/twitchscience/spade/lookup"
 	"github.com/twitchscience/spade/reporter"
 	tableConfig "github.com/twitchscience/spade/tables"
@@ -28,8 +31,10 @@ import (
 )
 
 const (
-	schemaReloadFrequency = 5 * time.Minute
-	schemaRetryDelay      = 2 * time.Second
+	schemaReloadFrequency        = 5 * time.Minute
+	schemaRetryDelay             = 2 * time.Second
+	kinesisConfigReloadFrequency = 10 * time.Minute
+	kinesisConfigRetryDelay      = 2 * time.Second
 )
 
 func createStatsdStatter() statsd.Statter {
@@ -157,6 +162,25 @@ func createSchemaLoader(
 	return loader
 }
 
+func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger, multee writer.SpadeWriterManager, session *session.Session) *kinesisconfigs.DynamicLoader {
+	loader, err := kinesisconfigs.NewDynamicLoader(
+		fetcher,
+		kinesisConfigReloadFrequency,
+		kinesisConfigRetryDelay,
+		stats,
+		multee,
+		func(config scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
+			return writer.NewKinesisWriter(session, stats.GetStatter(), config)
+		},
+	)
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to create kinesis config dynamic loader")
+	}
+
+	logger.Go(loader.Crank)
+	return loader
+}
+
 func createPipe(session *session.Session, stats statsd.Statter, replay bool) consumer.ResultPipe {
 	if replay {
 		return consumer.NewStandardInputPipe()
@@ -179,17 +203,15 @@ func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
 	return u
 }
 
-func createKinesisWriters(session *session.Session, stats statsd.Statter) []writer.SpadeWriter {
-	var writers []writer.SpadeWriter
+// createStaticKinesisWriters creates the writers from JSON configs, which are static
+func createStaticKinesisWriters(multee *writer.Multee, session *session.Session, stats statsd.Statter) {
 	for _, c := range config.KinesisOutputs {
 		w, err := writer.NewKinesisWriter(session, stats, c)
 		if err != nil {
 			logger.WithError(err).
 				WithField("stream_name", c.StreamName).
-				Fatal("Failed to create Kinesis writer")
+				Fatal("Failed to create static Kinesis writer")
 		}
-		writers = append(writers, w)
+		multee.Add(fmt.Sprintf("static_%s_%s_%s", c.StreamRole, c.StreamType, c.StreamName), w)
 	}
-
-	return writers
 }

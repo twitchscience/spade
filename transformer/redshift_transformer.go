@@ -13,9 +13,9 @@ import (
 	"github.com/twitchscience/spade/lookup"
 )
 
-// RedshiftTransformer turns MixpanelEvents into WriteRequests using the given ConfigLoader.
+// RedshiftTransformer turns MixpanelEvents into WriteRequests using the given SchemaConfigLoader.
 type RedshiftTransformer struct {
-	Configs ConfigLoader
+	Configs SchemaConfigLoader
 	stats   reporter.StatsLogger
 }
 
@@ -24,8 +24,8 @@ type nontrackedEvent struct {
 	Properties json.RawMessage `json:"properties"`
 }
 
-// NewRedshiftTransformer creates a new RedshiftTransformer using the given ConfigLoader.
-func NewRedshiftTransformer(configs ConfigLoader, stats reporter.StatsLogger) Transformer {
+// NewRedshiftTransformer creates a new RedshiftTransformer using the given SchemaConfigLoader.
+func NewRedshiftTransformer(configs SchemaConfigLoader, stats reporter.StatsLogger) Transformer {
 	return &RedshiftTransformer{
 		Configs: configs,
 		stats:   stats,

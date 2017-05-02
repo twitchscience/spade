@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
 )
 
@@ -13,6 +14,7 @@ const reportBuffer = 400000
 type StatsLogger interface {
 	Timing(string, time.Duration)
 	IncrBy(string, int)
+	GetStatter() statsd.Statter
 }
 
 // Reporter Records Results and returns stats on them.

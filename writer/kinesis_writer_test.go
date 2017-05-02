@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/firehose"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/stretchr/testify/assert"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
 var FirehoseRedshiftStreamTestConfig = []byte(`
@@ -112,13 +113,13 @@ func (f *firehoseMock) UpdateDestination(*firehose.UpdateDestinationInput) (*fir
 }
 
 func TestConfigValidation(t *testing.T) {
-	config := KinesisWriterConfig{}
+	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
 	assert.Nil(t, config.Validate(), "config could not be validated")
 }
 
 func TestRedshiftStreamAndCompressValidation(t *testing.T) {
-	config := KinesisWriterConfig{}
+	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
 	config.Compress = true
 
@@ -127,7 +128,7 @@ func TestRedshiftStreamAndCompressValidation(t *testing.T) {
 }
 
 func TestRedshiftStreamAndStreamValidation(t *testing.T) {
-	config := KinesisWriterConfig{}
+	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
 	config.StreamType = "stream"
 
@@ -182,7 +183,7 @@ func TestRedshiftStreamMode(t *testing.T) {
 		},
 	}
 
-	config := KinesisWriterConfig{}
+	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
 
 	// create mock objects

@@ -6,26 +6,77 @@ import (
 	"github.com/twitchscience/aws_utils/logger"
 )
 
-// Multee implements the `SpadeWriter` interface and forwards all calls
-// to a slice of targets.
+// Multee implements the `SpadeWriter` and 'SpadeWriterManager' interface and forwards all calls
+// to a map of targets.
 type Multee struct {
 	// targets is the spadewriters we will Multee events to
-	targets []SpadeWriter
+	targets map[string]SpadeWriter
 	sync.RWMutex
 }
 
-// Add adds a new writer to the slice
-func (t *Multee) Add(w SpadeWriter) {
-	t.Lock()
-	defer t.Unlock()
-	t.targets = append(t.targets, w)
+// SpadeWriterManager allows operations on a set of SpadeWriters
+type SpadeWriterManager interface {
+	Add(key string, w SpadeWriter)
+	Drop(key string)
+	Replace(key string, newWriter SpadeWriter)
 }
 
-// AddMany adds muliple writers to the slice
-func (t *Multee) AddMany(ws []SpadeWriter) {
+// Add adds a new writer to the target map
+func (t *Multee) Add(key string, w SpadeWriter) {
 	t.Lock()
 	defer t.Unlock()
-	t.targets = append(t.targets, ws...)
+	_, exists := t.targets[key]
+	if exists {
+		logger.WithField("key", key).Error("Could not add SpadeWriter due to key collision")
+		return
+	}
+	t.targets[key] = w
+}
+
+// NewMultee makes a empty multee and returns it
+func NewMultee() *Multee {
+	return &Multee{
+		targets: make(map[string]SpadeWriter),
+	}
+}
+
+// Drop drops an existing writer from the target map
+func (t *Multee) Drop(key string) {
+	t.Lock()
+	defer t.Unlock()
+	logger.WithField("key", key).Info("Dropping writer...")
+	writer, exists := t.targets[key]
+	if !exists {
+		logger.WithField("key", key).Error("Could not drop SpadeWriter due to non existent key")
+		return
+	}
+	err := writer.Close()
+	if err != nil {
+		logger.WithError(err).
+			WithField("writer_key", key).
+			Error("Failed to close SpadeWriter on drop")
+	}
+	delete(t.targets, key)
+	logger.WithField("key", key).Info("Done dropping writer...")
+}
+
+// Replace adds a new writer to the target map
+func (t *Multee) Replace(key string, newWriter SpadeWriter) {
+	t.Lock()
+	defer t.Unlock()
+	oldWriter, exists := t.targets[key]
+	if !exists {
+		logger.WithField("key", key).Error("Could not replace SpadeWriter due to non existent key")
+		return
+	}
+	err := oldWriter.Close()
+	if err != nil {
+		logger.WithError(err).
+			WithField("writer_key", key).
+			Error("Failed to close SpadeWriter on replace")
+	}
+	delete(t.targets, key)
+	t.targets[key] = newWriter
 }
 
 // Write forwards a writerequest to multiple targets
@@ -44,14 +95,14 @@ func (t *Multee) Rotate() (bool, error) {
 	defer t.RUnlock()
 
 	allDone := true
-	for i, writer := range t.targets {
+	for k, writer := range t.targets {
 		// losing errors here. Alternatives are to
 		// not rotate writers further down the
 		// chain, or to return an arbitrary error
 		// out of all possible ones that occured
 		done, err := writer.Rotate()
 		if err != nil {
-			logger.WithError(err).WithField("writer_index", i).Error("Failed to forward rotation request")
+			logger.WithError(err).WithField("writer_key", k).Error("Failed to forward rotation request")
 			allDone = false
 		} else {
 			allDone = allDone && done
@@ -67,10 +118,9 @@ func (t *Multee) Close() error {
 
 	var wg sync.WaitGroup
 	wg.Add(len(t.targets))
-
-	for idx, writer := range t.targets {
+	for key, writer := range t.targets {
+		k := key
 		w := writer
-		i := idx
 		// losing errors here. Alternative is to
 		// return an arbitrary error out of all
 		// possible ones that occured
@@ -79,7 +129,7 @@ func (t *Multee) Close() error {
 			err := w.Close()
 			if err != nil {
 				logger.WithError(err).
-					WithField("writer_index", i).
+					WithField("writer_key", k).
 					Error("Failed to forward rotation request")
 			}
 		})

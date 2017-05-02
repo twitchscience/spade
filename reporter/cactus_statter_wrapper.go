@@ -35,3 +35,8 @@ func (c *CactusStatterWrapper) IncrBy(stat string, value int) {
 		logger.WithError(err).WithField("stat", stat).Error("Failed to report IncrBy")
 	}
 }
+
+// GetStatter returns the statsd statter as is
+func (c *CactusStatterWrapper) GetStatter() statsd.Statter {
+	return c.statter
+}

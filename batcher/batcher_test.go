@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
 var (
@@ -16,7 +17,7 @@ var (
 )
 
 func TestInvalidConfig(t *testing.T) {
-	validConfig := Config{
+	validConfig := scoop_protocol.BatcherConfig{
 		MaxSize:      1 * 1024 * 1024,
 		MaxEntries:   -1,
 		MaxAge:       "1m",
@@ -42,7 +43,7 @@ func TestInvalidConfig(t *testing.T) {
 }
 
 func TestBatcher(t *testing.T) {
-	config := Config{
+	config := scoop_protocol.BatcherConfig{
 		MaxSize:      1 * 1024 * 1024,
 		MaxEntries:   -1,
 		MaxAge:       "1m",
@@ -66,7 +67,7 @@ func TestBatcher(t *testing.T) {
 }
 
 func TestTimeout(t *testing.T) {
-	config := Config{
+	config := scoop_protocol.BatcherConfig{
 		MaxSize:      1 * 1024 * 1024,
 		MaxEntries:   -1,
 		MaxAge:       "500ms",
@@ -90,7 +91,7 @@ func TestTimeout(t *testing.T) {
 }
 
 func TestSizeLimit(t *testing.T) {
-	config := Config{
+	config := scoop_protocol.BatcherConfig{
 		MaxSize:      10,
 		MaxEntries:   -1,
 		MaxAge:       "1m",
@@ -114,7 +115,7 @@ func TestSizeLimit(t *testing.T) {
 }
 
 func TestMaxEntryLimit(t *testing.T) {
-	config := Config{
+	config := scoop_protocol.BatcherConfig{
 		MaxSize:      1 * 1024 * 1024,
 		MaxEntries:   2,
 		MaxAge:       "1m",
