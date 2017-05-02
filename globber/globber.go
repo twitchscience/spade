@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"compress/flate"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/twitchscience/aws_utils/logger"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
 var (
@@ -23,47 +23,10 @@ var (
 // call for every completed glob
 type Complete func([]byte)
 
-// Config is used to configure a globber instance
-type Config struct {
-	// MaxSize is the max size per glob before compression
-	MaxSize int
-
-	// MaxAge is the max age of the oldest entry in the glob
-	MaxAge string
-
-	// BufferLength is the length of the channel where newly
-	// submitted entries are stored, decreasing the size of this
-	// buffer can cause stalls, and increasing the size can increase
-	// shutdown time
-	BufferLength int
-}
-
-// Validate returns an error if the config is invalid, nil otherwise.
-func (c *Config) Validate() error {
-	maxAge, err := time.ParseDuration(c.MaxAge)
-	if err != nil {
-		return err
-	}
-
-	if maxAge <= 0 {
-		return errors.New("MaxAge must be a positive value")
-	}
-
-	if c.MaxSize <= 0 {
-		return errors.New("MaxSize must be a positive value")
-	}
-
-	if c.BufferLength == 0 {
-		return errors.New("BufferLength must be a positive value")
-	}
-
-	return nil
-}
-
 // A Globber is an object that will combine a bunch of json marshallable
 // objects into compressed json array
 type Globber struct {
-	config     Config
+	config     scoop_protocol.GlobberConfig
 	completor  Complete
 	compressor *flate.Writer
 	incoming   chan []byte
@@ -75,7 +38,7 @@ type Globber struct {
 }
 
 // New returns a newly created instance of a Globber
-func New(config Config, completor Complete) (*Globber, error) {
+func New(config scoop_protocol.GlobberConfig, completor Complete) (*Globber, error) {
 	err := config.Validate()
 	if err != nil {
 		return nil, fmt.Errorf("invalid config: %s", err)

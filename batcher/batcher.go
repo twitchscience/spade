@@ -1,58 +1,13 @@
 package batcher
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/twitchscience/aws_utils/logger"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
-
-// Config is used to configure a batcher instance
-type Config struct {
-	// MaxSize is the max combined size of the batch
-	MaxSize int
-
-	// MaxEntries is the max number of entries that can be batched together
-	// if batches does not have an entry limit, set MaxEntries as -1
-	MaxEntries int
-
-	// MaxAge is the max age of the oldest entry in the glob
-	MaxAge string
-
-	// BufferLength is the length of the channel where newly
-	// submitted entries are stored, decreasing the size of this
-	// buffer can cause stalls, and increasing the size can increase
-	// shutdown time
-	BufferLength int
-}
-
-// Validate returns an error if the config is invalid, nil otherwise.
-func (c *Config) Validate() error {
-	maxAge, err := time.ParseDuration(c.MaxAge)
-	if err != nil {
-		return err
-	}
-
-	if maxAge <= 0 {
-		return errors.New("MaxAge must be a positive value")
-	}
-
-	if c.MaxSize <= 0 {
-		return errors.New("MaxSize must be a positive value")
-	}
-
-	if c.MaxEntries <= 0 && c.MaxEntries != -1 {
-		return errors.New("MaxEntries must be a positive value or -1")
-	}
-
-	if c.BufferLength == 0 {
-		return errors.New("BufferLength must be a positive value")
-	}
-
-	return nil
-}
 
 // Complete is the type of a function that Batcher will
 // call for every completed batch
@@ -61,7 +16,7 @@ type Complete func([][]byte)
 // A Batcher will batch togther a slice of byte slices, based
 // on a size and timer criteria
 type Batcher struct {
-	config         Config
+	config         scoop_protocol.BatcherConfig
 	completor      Complete
 	incoming       chan []byte
 	pending        [][]byte
@@ -74,7 +29,7 @@ type Batcher struct {
 }
 
 // New returns a newly created instance of Batcher
-func New(config Config, completor Complete) (*Batcher, error) {
+func New(config scoop_protocol.BatcherConfig, completor Complete) (*Batcher, error) {
 	err := config.Validate()
 	if err != nil {
 		return nil, fmt.Errorf("invalid config: %s", err)

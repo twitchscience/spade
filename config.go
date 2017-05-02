@@ -7,11 +7,11 @@ import (
 	"os"
 
 	"github.com/twitchscience/aws_utils/logger"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/lookup"
-	"github.com/twitchscience/spade/writer"
 )
 
 var (
@@ -22,6 +22,8 @@ var (
 var config struct {
 	// BlueprintSchemasURL is the url to blueprint schemas
 	BlueprintSchemasURL string
+	// BlueprintKinesisConfigsURL is the url to blueprint kinesisconfigs
+	BlueprintKinesisConfigsURL string
 	// ProcessorErrorTopicARN is the arn of the SNS topic for processor errors
 	ProcessorErrorTopicARN string
 	// AceTopicARN is the arn of the SNS topic for events going to Ace
@@ -50,7 +52,7 @@ var config struct {
 	RollbarEnvironment string
 
 	// KinesisWriters contain a list of configs for KinesisWriters
-	KinesisOutputs []writer.KinesisWriterConfig
+	KinesisOutputs []scoop_protocol.KinesisWriterConfig
 
 	// JSONValueFetchers is a map of id to JSONValueFetcherConfigs
 	JSONValueFetchers map[string]lookup.JSONValueFetcherConfig
@@ -101,6 +103,7 @@ func checkNonempty(str string) error {
 func validateConfig() error {
 	for _, str := range []string{
 		config.BlueprintSchemasURL,
+		config.BlueprintKinesisConfigsURL,
 		config.AceBucketName,
 		config.NonTrackedBucketName,
 		config.Geoip.ConfigBucket,
