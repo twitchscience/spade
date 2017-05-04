@@ -29,6 +29,7 @@ type DynamicLoader struct {
 	stats                  reporter.StatsLogger
 	multee                 writer.SpadeWriterManager
 	kinesisWriterGenerator func(scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error)
+	staticKeys             map[string]bool
 }
 
 // NewDynamicLoader returns a new DynamicLoader, performing the first fetch.
@@ -39,6 +40,7 @@ func NewDynamicLoader(
 	stats reporter.StatsLogger,
 	multee writer.SpadeWriterManager,
 	kinesisWriterGenerator func(scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error),
+	staticConfigs []scoop_protocol.KinesisWriterConfig,
 ) (*DynamicLoader, error) {
 	d := DynamicLoader{
 		fetcher:                fetcher,
@@ -49,7 +51,13 @@ func NewDynamicLoader(
 		stats:                  stats,
 		multee:                 multee,
 		kinesisWriterGenerator: kinesisWriterGenerator,
+		staticKeys:             make(map[string]bool),
 	}
+
+	for _, staticConfig := range staticConfigs {
+		d.staticKeys[buildStaticKey(staticConfig)] = true
+	}
+
 	config, err := d.retryPull(5, retryDelay)
 	if err != nil {
 		return nil, fmt.Errorf("kinesis config retry loop failed: %s", err)
@@ -113,7 +121,16 @@ func (d *DynamicLoader) pullConfigIn() ([]scoop_protocol.AnnotatedKinesisConfig,
 			return nil, fmt.Errorf("could not validate kinesis configuration %s: %s", kinesisConfig.SpadeConfig.StreamName, err)
 		}
 	}
-	return acfgs, nil
+
+	// dedupe it so it has no overlap with the static set
+	deduppedAcfgs := []scoop_protocol.AnnotatedKinesisConfig{}
+	for _, kinesisConfig := range acfgs {
+		if !d.staticKeys[buildStaticKey(kinesisConfig.SpadeConfig)] {
+			deduppedAcfgs = append(deduppedAcfgs, kinesisConfig)
+		}
+	}
+
+	return deduppedAcfgs, nil
 }
 
 // Close stops the DynamicLoader's fetching process.
@@ -123,6 +140,10 @@ func (d *DynamicLoader) Close() {
 
 func buildKey(c scoop_protocol.AnnotatedKinesisConfig) string {
 	return strings.Join([]string{strconv.FormatInt(c.AWSAccount, 10), c.SpadeConfig.StreamType, c.SpadeConfig.StreamName}, kinesisKeyDelimiter)
+}
+
+func buildStaticKey(c scoop_protocol.KinesisWriterConfig) string {
+	return strings.Join([]string{"static", c.StreamRole, c.StreamType, c.StreamName}, kinesisKeyDelimiter)
 }
 
 // Crank is a blocking function that refreshes the config on an interval.
