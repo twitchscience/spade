@@ -172,6 +172,7 @@ func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.Sta
 		func(config scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
 			return writer.NewKinesisWriter(session, stats.GetStatter(), config)
 		},
+		config.KinesisOutputs,
 	)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create kinesis config dynamic loader")
