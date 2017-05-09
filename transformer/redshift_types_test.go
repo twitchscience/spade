@@ -112,6 +112,10 @@ func TestUnixTimestampConversion(t *testing.T) {
 	otherDateTime := RedshiftType{genTimeFormat("2006-01-02 15:04:05"), "_", "_", nil}
 	_typeRunner(t, "2013-10-17 11:05:55", otherDateTime, "2013-10-17 11:05:55", false)
 	_typeRunner(t, "2013-10-17 105:55", otherDateTime, "", true)
+
+	// serialized golang time doesn't work
+	golangTime, _ := json.Marshal(time.Now())
+	_typeRunner(t, string(golangTime), otherDateTime, "", true)
 }
 
 func TestUnixUTCTimestampConversion(t *testing.T) {
