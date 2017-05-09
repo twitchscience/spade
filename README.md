@@ -46,6 +46,11 @@ in the daemon's table_config.json file (an example of how that config looks is c
 
 This in turn will trigger an ingest of the data into Redshift.
 
+## Testing
+
+If you are on a mac, to run the tests you need to brew install `pkg-config` and `gzrt`.  If you are running this
+on a mac with Xcode 8.3 and Go < 1.8.1, then you need to provide `-ldflags -s` to your run.
+
 ## Replay mode
 
 It is also possible to replay data from an S3 bucket of deglobbed inputs
