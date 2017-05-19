@@ -30,13 +30,6 @@ import (
 	"github.com/twitchscience/spade/writer"
 )
 
-const (
-	schemaReloadFrequency        = 5 * time.Minute
-	schemaRetryDelay             = 2 * time.Second
-	kinesisConfigReloadFrequency = 10 * time.Minute
-	kinesisConfigRetryDelay      = 2 * time.Second
-)
-
 func createStatsdStatter() statsd.Statter {
 	// - If the env is not set up we wil use a noop connection
 	statsdHostport := os.Getenv("STATSD_HOSTPORT")
@@ -152,8 +145,8 @@ func createSchemaLoader(
 	tConfigs map[string]transformer.MappingTransformerConfig,
 ) *tableConfig.DynamicLoader {
 
-	loader, err := tableConfig.NewDynamicLoader(fetcher, schemaReloadFrequency, schemaRetryDelay,
-		stats, tConfigs)
+	loader, err := tableConfig.NewDynamicLoader(fetcher, config.SchemaReloadFrequency.Duration,
+		config.SchemaRetryDelay.Duration, stats, tConfigs)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create schema dynamic loader")
 	}
@@ -165,8 +158,8 @@ func createSchemaLoader(
 func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger, multee writer.SpadeWriterManager, session *session.Session) *kinesisconfigs.DynamicLoader {
 	loader, err := kinesisconfigs.NewDynamicLoader(
 		fetcher,
-		kinesisConfigReloadFrequency,
-		kinesisConfigRetryDelay,
+		config.KinesisConfigReloadFrequency.Duration,
+		config.KinesisConfigRetryDelay.Duration,
 		stats,
 		multee,
 		func(config scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {

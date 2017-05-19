@@ -65,10 +65,6 @@ func unescape(s []byte) ([]byte, error) {
 		case '%':
 			numPercents++
 			if i+2 >= len(s) || !ishex(s[i+1]) || !ishex(s[i+2]) {
-				s = s[i:]
-				if len(s) > 3 {
-					s = s[0:3]
-				}
 				return nil, errors.New("invalid URL escape")
 			}
 			i += 3

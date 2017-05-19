@@ -1,6 +1,6 @@
 {
 	"ImportPath": "github.com/twitchscience/spade",
-	"GoVersion": "go1.6",
+	"GoVersion": "go1.7",
 	"GodepVersion": "v79",
 	"Packages": [
 		"./..."
@@ -334,6 +334,10 @@
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/transformer",
 			"Rev": "a81b7b6dbec2a0e226d811db264d04bac4c2db89"
+		},
+		{
+			"ImportPath": "github.com/vrischmann/jsonutil",
+			"Rev": "d44b59f0575ca3785e670025e2488efe0a4a10c4"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",
