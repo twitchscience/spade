@@ -50,33 +50,39 @@ func (t *Multee) Drop(key string) {
 		logger.WithField("key", key).Error("Could not drop SpadeWriter due to non existent key")
 		return
 	}
-	err := writer.Close()
-	if err != nil {
-		logger.WithError(err).
-			WithField("writer_key", key).
-			Error("Failed to close SpadeWriter on drop")
-	}
+	logger.Go(func() {
+		err := writer.Close()
+		if err != nil {
+			logger.WithError(err).
+				WithField("writer_key", key).
+				Error("Failed to close SpadeWriter on drop")
+		}
+	})
 	delete(t.targets, key)
-	logger.WithField("key", key).Info("Done dropping writer...")
+	logger.WithField("key", key).Info("Done dropping writer")
 }
 
 // Replace adds a new writer to the target map
 func (t *Multee) Replace(key string, newWriter SpadeWriter) {
 	t.Lock()
 	defer t.Unlock()
+	logger.WithField("key", key).Info("Replacing writer...")
 	oldWriter, exists := t.targets[key]
 	if !exists {
 		logger.WithField("key", key).Error("Could not replace SpadeWriter due to non existent key")
 		return
 	}
-	err := oldWriter.Close()
-	if err != nil {
-		logger.WithError(err).
-			WithField("writer_key", key).
-			Error("Failed to close SpadeWriter on replace")
-	}
+	logger.Go(func() {
+		err := oldWriter.Close()
+		if err != nil {
+			logger.WithError(err).
+				WithField("writer_key", key).
+				Error("Failed to close SpadeWriter on replace")
+		}
+	})
 	delete(t.targets, key)
 	t.targets[key] = newWriter
+	logger.WithField("key", key).Info("Done replacing writer")
 }
 
 // Write forwards a writerequest to multiple targets

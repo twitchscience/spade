@@ -40,7 +40,11 @@ type Client struct {
 
 // NewClient returns a Client with a default aws session to interact with a elasticache cluster.
 func NewClient(config Config) (*Client, error) {
-	return NewClientWithSession(session.New(), config)
+	sess, err := session.NewSession()
+	if err != nil {
+		return nil, err
+	}
+	return NewClientWithSession(sess, config)
 }
 
 // NewClientWithSession should be used if you want to override the elasticache instance with a

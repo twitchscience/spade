@@ -5,6 +5,9 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"time"
+
+	"github.com/vrischmann/jsonutil"
 
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
@@ -65,9 +68,24 @@ var config struct {
 
 	// LRULifetimeSeconds is the lifetime of an item in the local cache, in seconds.
 	LRULifetimeSeconds int64
+
+	// How often to load table schemas from Blueprint.
+	SchemaReloadFrequency jsonutil.Duration
+	// How long to sleep if there's an error loading table schemas from Blueprint.
+	SchemaRetryDelay jsonutil.Duration
+	// How often to load kinesis configs from Blueprint.
+	KinesisConfigReloadFrequency jsonutil.Duration
+	// How long to sleep if there's an error loading kinesis configs from Blueprint.
+	KinesisConfigRetryDelay jsonutil.Duration
 }
 
 func loadConfig() {
+	// Default values
+	config.SchemaReloadFrequency = jsonutil.FromDuration(5 * time.Minute)
+	config.SchemaRetryDelay = jsonutil.FromDuration(2 * time.Second)
+	config.KinesisConfigReloadFrequency = jsonutil.FromDuration(10 * time.Minute)
+	config.KinesisConfigRetryDelay = jsonutil.FromDuration(2 * time.Second)
+
 	entry := logger.WithField("config_file", *configFilename)
 	f, err := os.Open(*configFilename)
 	if err != nil {
