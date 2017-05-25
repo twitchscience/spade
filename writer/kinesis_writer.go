@@ -181,6 +181,9 @@ func (w *KinesisWriter) submit(name string, columns map[string]string) {
 	}
 
 	pruned := make(map[string]string)
+	if w.config.EventNameTargetField != "" {
+		pruned[w.config.EventNameTargetField] = name
+	}
 	for _, field := range event.Fields {
 		if val, ok := columns[field]; ok {
 			pruned[field] = val
