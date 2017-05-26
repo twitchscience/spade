@@ -236,6 +236,11 @@
 			"Rev": "91c326c3f7bd20f0226d3d1c289dd9f8ce28d33d"
 		},
 		{
+			"ImportPath": "github.com/cactus/go-statsd-client/statsd/statsdtest",
+			"Comment": "v3.1.0",
+			"Rev": "91c326c3f7bd20f0226d3d1c289dd9f8ce28d33d"
+		},
+		{
 			"ImportPath": "github.com/davecgh/go-spew/spew",
 			"Rev": "5215b55f46b2b919f50a1df0eaa5886afe4e3b3d"
 		},
