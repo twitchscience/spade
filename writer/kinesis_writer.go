@@ -347,7 +347,11 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 		for j, result := range res.Records {
 			if aws.StringValue(result.ErrorCode) != "" {
 				switch aws.StringValue(result.ErrorCode) {
+				// Kinesis stream throttling
 				case "ProvisionedThroughputExceededException":
+					provisionThroughputExceeded++
+				// Firehose throttling
+				case "ServiceUnavailableException":
 					provisionThroughputExceeded++
 				case "InternalFailure":
 					internalFailure++
