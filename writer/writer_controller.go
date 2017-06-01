@@ -1,7 +1,6 @@
 package writer
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -108,12 +107,6 @@ func NewWriterController(
 	return c, nil
 }
 
-// we put the event name in twice so that everything has a
-// common prefix when we upload to s3
-func getFilename(path, writerCategory string) string {
-	return fmt.Sprintf("%s/%s.gz", path, writerCategory)
-}
-
 func (c *writerController) Write(req *WriteRequest) {
 	c.inbound <- req
 }
@@ -124,7 +117,7 @@ func (c *writerController) Listen() {
 		select {
 		case send := <-c.rotateChan:
 			send <- c.rotate()
-		case req, ok:= <-c.inbound:
+		case req, ok := <-c.inbound:
 			if !ok {
 				c.closeChan <- c.close()
 				return

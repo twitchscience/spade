@@ -149,8 +149,8 @@ func extractEventName(filename string) string {
 
 func extractEventVersion(filename string) (int, error) {
 	path := strings.LastIndex(filename, ".v") + 2
-	ext := strings.Index(filename, ".gz")
-	if ext < 0 {
+	ext := path + strings.Index(filename[path:], ".")
+	if ext < path {
 		ext = len(filename)
 	}
 	return strconv.Atoi(filename[path:ext])
@@ -164,7 +164,7 @@ type ProcessorErrorHandler struct {
 
 // SendError sends the sending error to an topic.
 func (p *ProcessorErrorHandler) SendError(err error) {
-	logger.WithError(err).Error("Failed to send message to topic")
+	logger.WithError(err).Error("Failed to upload file")
 	if e := p.notifier.SendMessage("error", p.topicARN, err); e != nil {
 		logger.WithError(e).Error("Failed to send error")
 	}
@@ -175,7 +175,7 @@ type NullErrorHandler struct{}
 
 // SendError logs the given error.
 func (n *NullErrorHandler) SendError(err error) {
-	logger.WithError(err).Error("Failed to send message to topic")
+	logger.WithError(err).Error("Failed to upload file")
 }
 
 func buildErrorHandler(sns snsiface.SNSAPI, errorTopicArn string, nullNotifier bool) uploader.ErrorNotifierHarness {
@@ -293,12 +293,13 @@ func walkEventFiles(eventsDir string, f func(path string)) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() && path != eventsDir {
+		if info.IsDir() {
+			if path == eventsDir {
+				return nil
+			}
 			return filepath.SkipDir
 		}
-		if strings.HasSuffix(path, ".gz") {
-			f(path)
-		}
+		f(path)
 		return nil
 	})
 }
