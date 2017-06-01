@@ -34,8 +34,8 @@ func TestExtractEventVersion(t *testing.T) {
 	}
 
 	testFunc(5, "/opt/science/spade/data/events/minute-watched.v5.gz")
-	testFunc(22, "/opt/science/spade/data/upload/minute-watched.v22.gz")
-	testFunc(16, "/opt/science/spade/data/upload/minute-watched.v16.gz.gz")
+	testFunc(22, "/opt/science/spade/data/upload/minute-watched.v22.2346789")
+	testFunc(16, "/opt/science/spade/data/upload/minute-watched.v16.234689.gz")
 	testFunc(199, "minute-watched.v199.gz")
 	testFunc(0, "/opt/science/spade/data/events/minute-watched.v0")
 }

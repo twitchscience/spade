@@ -52,8 +52,8 @@ func getRedshiftKeyName(filename string, info *InstanceInfo, now time.Time, runT
 	}
 
 	vStart := strings.LastIndex(filename, ".v") + 1
-	vEnd := strings.Index(filename, ".gz")
-	if vEnd < 0 {
+	vEnd := vStart + strings.Index(filename[vStart:], ".")
+	if vEnd < vStart {
 		vEnd = len(filename)
 	}
 

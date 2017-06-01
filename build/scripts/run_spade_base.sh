@@ -18,7 +18,7 @@ SPADE_LOG_DIR="${SPADE_DIR}/log"
 export HOST="$(curl 169.254.169.254/latest/meta-data/hostname)"
 
 STATSD_PREFIX="${OWNER}.${CLOUD_APP}.${CLOUD_DEV_PHASE:-${CLOUD_ENVIRONMENT}}.${EC2_REGION}.${CLOUD_AUTO_SCALE_GROUP##*-}"
-mkdir -p ${SPADE_DATA_DIR}/spade_logging ${SPADE_DATA_DIR}/events ${SPADE_DATA_DIR}/upload
+mkdir -p ${SPADE_DATA_DIR}/events ${SPADE_DATA_DIR}/nontracked
 
 export CONFIG_PREFIX="s3://$S3_CONFIG_BUCKET/$VPC_SUBNET_TAG/$CLOUD_APP/$CLOUD_ENVIRONMENT"
 aws s3 cp --region us-west-2 "$CONFIG_PREFIX/conf.sh" "$SPADE_DIR/config/conf.sh"

@@ -314,7 +314,7 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/gologging/key_name_generator",
-			"Rev": "466a4eb9056b2ca7a77712d799728911322507b2"
+			"Rev": "50346ad0e3c8d80f93157992e77dfe1d745412b0"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/kinsumer",

@@ -229,19 +229,7 @@ func (s *spadeProcessor) shutdown() {
 	}
 	s.geoIPUpdater.Close()
 
-	// Close the pool before cleaning up the files
 	s.spadeUploaderPool.Close()
-
-	err := uploader.ClearEventsFolder(s.spadeUploaderPool, *_dir+"/"+writer.EventsDir+"/")
-	if err != nil {
-		logger.WithError(err).Error("Failed to clear events directory")
-	}
-
-	err = uploader.ClearEventsFolder(s.blueprintUploaderPool, *_dir+"/"+writer.NonTrackedDir+"/")
-	if err != nil {
-		logger.WithError(err).Error("Failed to clear untracked events directory")
-	}
-
 	s.blueprintUploaderPool.Close()
 }
 

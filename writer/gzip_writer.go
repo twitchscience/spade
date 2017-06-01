@@ -2,7 +2,7 @@ package writer
 
 import (
 	"compress/gzip"
-	"fmt"
+	"io/ioutil"
 	"os"
 	"sync"
 	"time"
@@ -11,7 +11,6 @@ import (
 	"github.com/twitchscience/aws_utils/uploader"
 	"github.com/twitchscience/spade/gzpool"
 	"github.com/twitchscience/spade/reporter"
-	spade_uploader "github.com/twitchscience/spade/uploader"
 )
 
 var (
@@ -32,22 +31,15 @@ func NewGzipWriter(
 	rotateOn RotateConditions,
 ) (SpadeWriter, error) {
 	path := folder + "/" + subfolder
-	dirErr := os.MkdirAll(path, 0766)
-	if dirErr != nil {
-		return nil, dirErr
-	}
-	filename := getFilename(path, writerType)
-	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	// Append a period to keep the version separate from the TempFile suffix.
+	file, err := ioutil.TempFile(path, writerType+".")
 	if err != nil {
 		return nil, err
 	}
 
-	gzWriter := gzPool.Get(file)
 	writer := &gzipFileWriter{
-		ParentFolder:     folder,
-		FullName:         filename,
 		File:             file,
-		GzWriter:         gzWriter,
+		GzWriter:         gzPool.Get(file),
 		Reporter:         reporter,
 		uploader:         uploader,
 		RotateConditions: rotateOn,
@@ -62,8 +54,6 @@ func NewGzipWriter(
 
 type gzipFileWriter struct {
 	sync.WaitGroup
-	ParentFolder     string
-	FullName         string
 	File             *os.File
 	GzWriter         *gzip.Writer
 	Reporter         reporter.Reporter
@@ -80,7 +70,7 @@ func (w *gzipFileWriter) Rotate() (bool, error) {
 		return false, err
 	}
 
-	if ok, _ := isRotateNeeded(inode, w.FullName, w.RotateConditions); ok {
+	if ok, _ := isRotateNeeded(inode, w.RotateConditions); ok {
 		err = w.Close()
 		if err != nil {
 			return false, err
@@ -97,13 +87,6 @@ func (w *gzipFileWriter) Close() error {
 	close(w.in)
 	w.Wait()
 
-	inode, err := w.File.Stat()
-	if err != nil {
-		return err
-	}
-	if gzFlushErr := w.GzWriter.Flush(); gzFlushErr != nil {
-		return gzFlushErr
-	}
 	if gzCloseErr := w.GzWriter.Close(); gzCloseErr != nil {
 		return gzCloseErr
 	}
@@ -111,20 +94,11 @@ func (w *gzipFileWriter) Close() error {
 	if closeErr := w.File.Close(); closeErr != nil {
 		return closeErr
 	}
-	dirErr := os.MkdirAll(w.ParentFolder+"/upload/", 0766)
-	if dirErr != nil {
-		return dirErr
-	}
 
-	// We have to move the file so that we are free to
-	// overwrite this file next log processed.
-	rotatedFileName := fmt.Sprintf("%s/upload/%s.gz",
-		w.ParentFolder, inode.Name())
-
-	if err := os.Rename(w.FullName, rotatedFileName); err != nil {
-		return err
-	}
-	spade_uploader.SafeGzipUpload(w.uploader, rotatedFileName)
+	w.uploader.Upload(&uploader.UploadRequest{
+		Filename: w.File.Name(),
+		FileType: uploader.Gzip,
+	})
 	return nil
 }
 
