@@ -3,7 +3,6 @@ package globber
 import (
 	"bytes"
 	"compress/flate"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -62,14 +61,8 @@ func New(config scoop_protocol.GlobberConfig, completor Complete) (*Globber, err
 }
 
 // Submit submits an object for globbing
-func (g *Globber) Submit(entry interface{}) error {
-	e, err := json.Marshal(entry)
-	if err != nil {
-		return fmt.Errorf("failed to marshal object: %v", err)
-	}
-
+func (g *Globber) Submit(e []byte) {
 	g.incoming <- e
-	return nil
 }
 
 // Close stops the globbing process. Will return after all

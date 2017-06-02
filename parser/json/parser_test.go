@@ -81,7 +81,8 @@ func TestSuccessfulJsonLogParser(t *testing.T) {
 	uuid := "123abc"
 	userAgent := "TestBrowser"
 	for _, tt := range tests {
-		b, err := spade.Marshal(spade.NewEvent(receivedAt, net.IPv4(10, 0, 0, 1), "10.0.0.1", uuid, tt.logLine, userAgent))
+		b, err := spade.Marshal(spade.NewEvent(receivedAt, net.IPv4(10, 0, 0, 1), "10.0.0.1", uuid,
+			tt.logLine, userAgent, spade.INTERNAL_EDGE))
 		if err != nil {
 			t.Fatalf("create event: unexpected error %v", err)
 		}

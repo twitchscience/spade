@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
@@ -63,12 +64,12 @@ func decompress(b []byte) ([]byte, error) {
 
 func TestGlobber(t *testing.T) {
 	data := []map[string]string{
-		map[string]string{
+		{
 			"one":  "english",
 			"zwei": "german",
 			"trzy": "polish",
 		},
-		map[string]string{
+		{
 			"oink": "pig",
 			"moo":  "cow",
 			"bark": "tree",
@@ -88,14 +89,14 @@ func TestGlobber(t *testing.T) {
 
 	g, err := New(config, func(b []byte) {
 		r, e := decompress(b)
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		result = r
 	})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	for _, e := range data {
-		err := g.Submit(e)
-		assert.NoError(t, err)
+		b, _ := json.Marshal(e)
+		g.Submit(b)
 	}
 	g.Close()
 

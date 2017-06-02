@@ -52,6 +52,12 @@ func (w *Statter) IncStat(stat int, amount int64) {
 	}
 }
 
+// EventForwarder receives events and forwards them to Kinesis or another EventForwarder.
+type EventForwarder interface {
+	Submit([]byte)
+	Close()
+}
+
 // BatchWriter is an interface to write batches to an external sink.
 type BatchWriter interface {
 	SendBatch([][]byte)
@@ -75,8 +81,8 @@ type FirehoseBatchWriter struct {
 type KinesisWriter struct {
 	incoming    chan *WriteRequest
 	batches     chan [][]byte
-	globber     *globber.Globber
-	batcher     *batcher.Batcher
+	globber     EventForwarder
+	batcher     EventForwarder
 	config      scoop_protocol.KinesisWriterConfig
 	batchWriter BatchWriter
 
@@ -185,9 +191,9 @@ func (w *KinesisWriter) submit(name string, columns map[string]string) {
 		pruned[w.config.EventNameTargetField] = name
 	}
 	for _, field := range event.Fields {
-		if val, ok := columns[field]; ok {
+		if val, ok := columns[field]; ok && val != "" {
 			pruned[field] = val
-		} else {
+		} else if !w.config.ExcludeEmptyFields {
 			pruned[field] = ""
 		}
 	}
@@ -195,19 +201,27 @@ func (w *KinesisWriter) submit(name string, columns map[string]string) {
 	if len(pruned) > 0 {
 		// if we want data compressed, we send it to globber
 		if w.config.Compress {
-			err := w.globber.Submit(struct {
+			entry := struct {
 				Name   string
 				Fields map[string]string
 			}{
 				Name:   name,
 				Fields: pruned,
-			})
+			}
+			b, err := json.Marshal(entry)
 			if err != nil {
 				logger.WithError(err).WithField("name", name).Error(
-					"Failed to Submit to globber")
+					"Failed to marhsal Kinesis entry for globber")
+				return
 			}
+			w.globber.Submit(b)
 		} else {
-			e, _ := json.Marshal(pruned)
+			e, err := json.Marshal(pruned)
+			if err != nil {
+				logger.WithError(err).WithField("name", name).Error(
+					"Failed to marhsal Kinesis entry for batcher")
+				return
+			}
 			w.batcher.Submit(e)
 		}
 	}
@@ -385,7 +399,7 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 	w.statter.IncStat(statRecordsDropped, int64(len(args.Records)))
 }
 
-// SendBatch writes the given batch to a firehose, configured by the KinesisWriter
+// SendBatch writes the given batch to a firehose, configured by the FirehoseBatchWriter
 func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 	if len(batch) == 0 {
 		return

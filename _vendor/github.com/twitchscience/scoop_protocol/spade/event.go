@@ -16,6 +16,8 @@ import (
 // thing in Protobuf and Thrift is to have your namespace dicate version
 const PROTOCOL_VERSION = 4
 const COMPRESSION_VERSION byte = 1
+const INTERNAL_EDGE = "internal"
+const EXTERNAL_EDGE = "external"
 
 type Event struct {
 	ReceivedAt    time.Time `json:"receivedAt"`
@@ -25,9 +27,10 @@ type Event struct {
 	Data          string    `json:"data"`
 	UserAgent     string    `json:"userAgent"`
 	Version       int       `json:"recordversion"`
+	EdgeType      string    `json:"edgeType"`
 }
 
-func NewEvent(receivedAt time.Time, clientIp net.IP, xForwardedFor, uuid, data, userAgent string) *Event {
+func NewEvent(receivedAt time.Time, clientIp net.IP, xForwardedFor, uuid, data, userAgent string, edgeType string) *Event {
 	return &Event{
 		ReceivedAt:    receivedAt,
 		ClientIp:      clientIp,
@@ -36,6 +39,7 @@ func NewEvent(receivedAt time.Time, clientIp net.IP, xForwardedFor, uuid, data, 
 		Data:          data,
 		UserAgent:     userAgent,
 		Version:       PROTOCOL_VERSION,
+		EdgeType:      edgeType,
 	}
 }
 
