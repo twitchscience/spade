@@ -326,19 +326,19 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
-			"Rev": "4a614020a07f21acc2f2c31f61df53bed8374848"
+			"Rev": "9a0ded95e9b11b4b58f1253a6bf88974dc9ae50b"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/scoop_protocol",
-			"Rev": "4a614020a07f21acc2f2c31f61df53bed8374848"
+			"Rev": "9a0ded95e9b11b4b58f1253a6bf88974dc9ae50b"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/spade",
-			"Rev": "4a614020a07f21acc2f2c31f61df53bed8374848"
+			"Rev": "9a0ded95e9b11b4b58f1253a6bf88974dc9ae50b"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/transformer",
-			"Rev": "4a614020a07f21acc2f2c31f61df53bed8374848"
+			"Rev": "9a0ded95e9b11b4b58f1253a6bf88974dc9ae50b"
 		},
 		{
 			"ImportPath": "github.com/vrischmann/jsonutil",
