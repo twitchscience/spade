@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -63,11 +65,31 @@ type BatchWriter interface {
 	SendBatch([][]byte)
 }
 
+// taskRateLimiter receives tasks as closures and executes them if they fall within the
+// rate limit specified at construction. Otherwise it drops the tasks on the floor.
+type taskRateLimiter struct {
+	rateLimiter *rate.Limiter
+}
+
+func newTaskRateLimiter(tasksBeforeThrottling int, secondsPerThrottledTask int64) *taskRateLimiter {
+	return &taskRateLimiter{rate.NewLimiter(
+		rate.Every(time.Duration(secondsPerThrottledTask)*time.Second),
+		tasksBeforeThrottling),
+	}
+}
+
+func (t *taskRateLimiter) attempt(f func()) {
+	if t.rateLimiter.Allow() {
+		f()
+	}
+}
+
 // StreamBatchWriter writes batches to Kinesis Streams
 type StreamBatchWriter struct {
 	client  kinesisiface.KinesisAPI
 	config  *scoop_protocol.KinesisWriterConfig
 	statter *Statter
+	limiter *taskRateLimiter
 }
 
 // FirehoseBatchWriter writes batches to Kinesis Firehose
@@ -75,6 +97,7 @@ type FirehoseBatchWriter struct {
 	client  firehoseiface.FirehoseAPI
 	config  *scoop_protocol.KinesisWriterConfig
 	statter *Statter
+	limiter *taskRateLimiter
 }
 
 // KinesisWriter is a writer that writes events to kinesis
@@ -85,6 +108,7 @@ type KinesisWriter struct {
 	batcher     EventForwarder
 	config      scoop_protocol.KinesisWriterConfig
 	batchWriter BatchWriter
+	limiter     *taskRateLimiter
 
 	sync.WaitGroup
 }
@@ -116,9 +140,14 @@ func generateStatNames(streamName string) map[int]string {
 
 // NewKinesisWriter returns an instance of SpadeWriter that writes
 // events to kinesis
-func NewKinesisWriter(session *session.Session, statter statsd.Statter, config scoop_protocol.KinesisWriterConfig) (SpadeWriter, error) {
-	err := config.Validate()
-	if err != nil {
+func NewKinesisWriter(
+	session *session.Session,
+	statter statsd.Statter,
+	config scoop_protocol.KinesisWriterConfig,
+	errorsBeforeThrottling int,
+	secondsPerError int64) (SpadeWriter, error) {
+
+	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 	var batchWriter BatchWriter
@@ -132,11 +161,12 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config s
 		session = session.Copy(&aws.Config{Credentials: credentials})
 	}
 	wStatter := NewStatter(statter, config.StreamName)
+	limiter := newTaskRateLimiter(errorsBeforeThrottling, secondsPerError)
 	switch config.StreamType {
 	case "stream":
-		batchWriter = &StreamBatchWriter{kinesis.New(session), &config, wStatter}
+		batchWriter = &StreamBatchWriter{kinesis.New(session), &config, wStatter, limiter}
 	case "firehose":
-		batchWriter = &FirehoseBatchWriter{firehose.New(session), &config, wStatter}
+		batchWriter = &FirehoseBatchWriter{firehose.New(session), &config, wStatter, limiter}
 	default:
 		return nil, fmt.Errorf("unknown stream type: %s", config.StreamType)
 	}
@@ -147,6 +177,7 @@ func NewKinesisWriter(session *session.Session, statter statsd.Statter, config s
 		batchWriter: batchWriter,
 	}
 
+	var err error
 	w.batcher, err = batcher.New(config.Batcher, func(b [][]byte) {
 		w.batches <- b
 	})
@@ -210,16 +241,20 @@ func (w *KinesisWriter) submit(name string, columns map[string]string) {
 			}
 			b, err := json.Marshal(entry)
 			if err != nil {
-				logger.WithError(err).WithField("name", name).Error(
-					"Failed to marhsal Kinesis entry for globber")
+				w.limiter.attempt(func() {
+					logger.WithError(err).WithField("name", name).Error(
+						"Failed to marshal Kinesis entry for globber")
+				})
 				return
 			}
 			w.globber.Submit(b)
 		} else {
 			e, err := json.Marshal(pruned)
 			if err != nil {
-				logger.WithError(err).WithField("name", name).Error(
-					"Failed to marhsal Kinesis entry for batcher")
+				w.limiter.attempt(func() {
+					logger.WithError(err).WithField("name", name).Error(
+						"Failed to marshal Kinesis entry for batcher")
+				})
 				return
 			}
 			w.batcher.Submit(e)
@@ -314,14 +349,18 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 			})
 		}
 		if marshalErr != nil {
-			logger.WithField("stream", w.config.StreamName).
-				WithError(marshalErr).
-				Error("Failed to marshal into Record")
+			w.limiter.attempt(func() {
+				logger.WithField("stream", w.config.StreamName).
+					WithError(marshalErr).
+					Error("Failed to marshal into Record")
+			})
 		}
 		if unmarshalErr != nil {
-			logger.WithField("stream", w.config.StreamName).
-				WithError(unmarshalErr).
-				Error("Failed to unmarshal into Record")
+			w.limiter.attempt(func() {
+				logger.WithField("stream", w.config.StreamName).
+					WithError(unmarshalErr).
+					Error("Failed to unmarshal into Record")
+			})
 		}
 		records[i] = &kinesis.PutRecordsRequestEntry{
 			PartitionKey: aws.String(UUID.String()),
@@ -391,11 +430,13 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 
 		time.Sleep(retryDelay)
 	}
-	logger.WithField("failures", len(args.Records)).
-		WithField("attempts", len(records)).
-		WithField("stream", w.config.StreamName).
-		WithError(err).
-		Error("Failed to send records to Kinesis")
+	w.limiter.attempt(func() {
+		logger.WithField("failures", len(args.Records)).
+			WithField("attempts", len(records)).
+			WithField("stream", w.config.StreamName).
+			WithError(err).
+			Error("Failed to send records to Kinesis")
+	})
 	w.statter.IncStat(statRecordsDropped, int64(len(args.Records)))
 }
 
@@ -437,14 +478,18 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 			})
 		}
 		if marshalErr != nil {
-			logger.WithField("firehose", w.config.StreamName).
-				WithError(marshalErr).
-				Error("Failed to marshal into Record")
+			w.limiter.attempt(func() {
+				logger.WithField("firehose", w.config.StreamName).
+					WithError(marshalErr).
+					Error("Failed to marshal into Record")
+			})
 		}
 		if unmarshalErr != nil {
-			logger.WithField("firehose", w.config.StreamName).
-				WithError(unmarshalErr).
-				Error("Failed to unmarshal into Record")
+			w.limiter.attempt(func() {
+				logger.WithField("firehose", w.config.StreamName).
+					WithError(unmarshalErr).
+					Error("Failed to unmarshal into Record")
+			})
 		}
 		// Add '\n' as a record separator
 		data = append(data, '\n')
@@ -511,11 +556,13 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 
 		time.Sleep(retryDelay)
 	}
-	logger.WithField("failures", len(args.Records)).
-		WithField("attempts", len(records)).
-		WithField("stream", w.config.StreamName).
-		WithError(err).
-		Error("Failed to send records to Firehose")
+	w.limiter.attempt(func() {
+		logger.WithField("failures", len(args.Records)).
+			WithField("attempts", len(records)).
+			WithField("stream", w.config.StreamName).
+			WithError(err).
+			Error("Failed to send records to Firehose")
+	})
 	w.statter.IncStat(statRecordsDropped, int64(len(args.Records)))
 }
 

@@ -54,6 +54,33 @@ var FirehoseRedshiftStreamTestConfig = []byte(`
     }
   `)
 
+func TestTaskRateLimiterPeriodZeroDoesNotThrottle(t *testing.T) {
+	l := newTaskRateLimiter(0, 0)
+	count := 0
+	for i := 0; i < 10; i++ {
+		l.attempt(func() { count++ })
+	}
+	assert.Equal(t, 10, count)
+}
+
+func TestTaskRateLimiterPeriodNonzeroThrottles(t *testing.T) {
+	l := newTaskRateLimiter(0, 3600)
+	count := 0
+	for i := 0; i < 10; i++ {
+		l.attempt(func() { count++ })
+	}
+	assert.Equal(t, 0, count)
+}
+
+func TestTaskRateLimiterThrottlesAfterInitialTasks(t *testing.T) {
+	l := newTaskRateLimiter(5, 3600)
+	count := 0
+	for i := 0; i < 10; i++ {
+		l.attempt(func() { count++ })
+	}
+	assert.Equal(t, 5, count)
+}
+
 // mocking firehoseAPI
 type firehoseMock struct {
 	received []map[string]string
@@ -207,7 +234,7 @@ func TestStream(t *testing.T) {
 		statNames: map[int]string{},
 	}
 	mockKinesis := kinesisMock{response: &kinesis.PutRecordsOutput{}}
-	writer := &StreamBatchWriter{&mockKinesis, &config, mockStatter}
+	writer := &StreamBatchWriter{&mockKinesis, &config, mockStatter, newTaskRateLimiter(0, 0)}
 
 	// matching input format
 	inputBatch := [][]byte{}
@@ -258,7 +285,7 @@ func TestRedshiftStreamMode(t *testing.T) {
 		statNames: map[int]string{},
 	}
 	mockFirehose := firehoseMock{response: &firehose.PutRecordBatchOutput{}}
-	batchWriter := &FirehoseBatchWriter{&mockFirehose, &config, mockStatter}
+	batchWriter := &FirehoseBatchWriter{&mockFirehose, &config, mockStatter, newTaskRateLimiter(0, 0)}
 
 	// matching input format
 	inputBatch := [][]byte{}
@@ -305,7 +332,7 @@ func TestRedshiftStreamStatting(t *testing.T) {
 			{ErrorCode: aws.String("InternalFailure")},
 		},
 	}}
-	batchWriter := &FirehoseBatchWriter{&mockFirehose, &config, mockStatter}
+	batchWriter := &FirehoseBatchWriter{&mockFirehose, &config, mockStatter, newTaskRateLimiter(0, 0)}
 
 	// matching input format
 	inputBatch := [][]byte{}

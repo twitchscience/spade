@@ -162,8 +162,13 @@ func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.Sta
 		config.KinesisConfigRetryDelay.Duration,
 		stats,
 		multee,
-		func(config scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
-			return writer.NewKinesisWriter(session, stats.GetStatter(), config)
+		func(cfg scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
+			return writer.NewKinesisWriter(
+				session,
+				stats.GetStatter(),
+				cfg,
+				config.KinesisWriterErrorsBeforeThrottling,
+				config.KinesisWriterErrorThrottlePeriodSeconds)
 		},
 		config.KinesisOutputs,
 	)
@@ -200,7 +205,12 @@ func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
 // createStaticKinesisWriters creates the writers from JSON configs, which are static
 func createStaticKinesisWriters(multee *writer.Multee, session *session.Session, stats statsd.Statter) {
 	for _, c := range config.KinesisOutputs {
-		w, err := writer.NewKinesisWriter(session, stats, c)
+		w, err := writer.NewKinesisWriter(
+			session,
+			stats,
+			c,
+			config.KinesisWriterErrorsBeforeThrottling,
+			config.KinesisWriterErrorThrottlePeriodSeconds)
 		if err != nil {
 			logger.WithError(err).
 				WithField("stream_name", c.StreamName).

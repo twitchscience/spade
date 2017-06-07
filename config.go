@@ -54,8 +54,15 @@ var config struct {
 	// RollbarEnvironment is the environment we report we are running in to Rollbar
 	RollbarEnvironment string
 
-	// KinesisWriters contain a list of configs for KinesisWriters
+	// KinesisOutputs contains configs for KinesisWriters.
 	KinesisOutputs []scoop_protocol.KinesisWriterConfig
+	// KinesisWriterErrorsBeforeThrottling is the number of errors each Kinesis writer is permitted
+	// to write to Rollbar before throttling kicks in.  Set to 0 to start throttling immediately.
+	KinesisWriterErrorsBeforeThrottling int
+	// KinesisWriterErrorThrottlePeriodSeconds is the error throttle period for each Kinesis writer
+	// (i.e. once throttling switches on, only one error will be sent to Rollbar per period).
+	// Set to 0 to turn throttling off and send all errors to Rollbar.
+	KinesisWriterErrorThrottlePeriodSeconds int64
 
 	// JSONValueFetchers is a map of id to JSONValueFetcherConfigs
 	JSONValueFetchers map[string]lookup.JSONValueFetcherConfig
@@ -158,6 +165,16 @@ func validateConfig() error {
 	} {
 		if i <= 0 {
 			return errors.New("nonpositive integer found in config, must provide positive integer")
+		}
+	}
+
+	for _, i := range []int64{
+		config.KinesisWriterErrorThrottlePeriodSeconds,
+		int64(config.KinesisWriterErrorsBeforeThrottling),
+	} {
+		if i < 0 {
+			return errors.New(
+				"negative integer found in config, must provide nonnegative integer or leave blank")
 		}
 	}
 
