@@ -273,7 +273,7 @@ func TestEmptyPropertyProcessing(t *testing.T) {
 	_exampleRequest := &parseRequest{
 		[]byte(`{"receivedAt": "2013-10-17T18:05:55.338Z", "clientIp": "10.1.40.26", ` +
 			`"data": "eyJldmVudCI6ImxvZ2luIiwicHJvcGVydGllcyI6e319", "uuid": "uuid1", ` +
-			`"recordversion": 3}`),
+			`"recordversion": 3, "edgeType": "internal"}`),
 		now,
 	}
 	logTime := time.Unix(1382033155, 0)

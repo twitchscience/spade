@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/reporter"
 )
 
@@ -15,6 +16,7 @@ type MixpanelEvent struct {
 	UUID       string            // UUID of the event as assigned by the edge
 	ClientIP   string            // the ipv4 of the client
 	Event      string            // the type of the event
+	EdgeType   string            // the type of the edge (internal/external)
 	UserAgent  string            // the user agent from an edge request
 	Properties json.RawMessage   // the raw bytes of the json properties sub object
 	Failure    reporter.FailMode // a flag for failure modes
@@ -28,13 +30,14 @@ func MakePanickedEvent(line Parseable) *MixpanelEvent {
 		UUID:       "error",
 		ClientIP:   "",
 		Event:      "Unknown",
+		EdgeType:   spade.INTERNAL_EDGE,
 		Properties: json.RawMessage(line.Data()),
 		Failure:    reporter.PanickedInProcessing,
 	}
 }
 
 // MakeErrorEvent returns an event indicating an error happened while parsing the event.
-func MakeErrorEvent(line Parseable, uuid string, when string) *MixpanelEvent {
+func MakeErrorEvent(line Parseable, uuid string, when string, edgeType string) *MixpanelEvent {
 	if uuid == "" || len(uuid) > 64 {
 		uuid = "error"
 	}
@@ -50,6 +53,7 @@ func MakeErrorEvent(line Parseable, uuid string, when string) *MixpanelEvent {
 		UUID:       uuid,
 		ClientIP:   "",
 		Event:      "Unknown",
+		EdgeType:   edgeType,
 		Properties: json.RawMessage{},
 		Failure:    reporter.UnableToParseData,
 	}

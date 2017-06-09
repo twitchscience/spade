@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/twitchscience/aws_utils/logger"
+	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/writer"
@@ -129,6 +131,13 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 	if err := decoder.Decode(&temp); err != nil {
 		return "", nil, err
 	}
+
+	if event.EdgeType == spade.INTERNAL_EDGE || event.EdgeType == spade.EXTERNAL_EDGE {
+		t.stats.IncrBy(fmt.Sprintf("edge-type.%s.%s", event.Event, event.EdgeType), 1)
+	} else {
+		logger.WithField("edgeType", event.EdgeType).Error("Invalid edge type")
+	}
+
 	// Always replace the timestamp with server Time
 	if _, ok := temp["time"]; ok {
 		temp["client_time"] = temp["time"]

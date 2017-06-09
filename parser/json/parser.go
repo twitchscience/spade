@@ -63,11 +63,11 @@ func (j *jsonLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, err
 	var rawEvent spade.Event
 	err := spade.Unmarshal(raw.Data(), &rawEvent)
 	if err != nil {
-		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, "", "")}, err
+		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, "", "", rawEvent.EdgeType)}, err
 	}
 
 	if j.rejectIfBadFirstIP && rawEvent.Version == 3 && !wasValidEdgeIP(rawEvent.XForwardedFor) {
-		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, rawEvent.Uuid, strconv.FormatInt(rawEvent.ReceivedAt.Unix(), 10))},
+		return []parser.MixpanelEvent{*parser.MakeErrorEvent(raw, rawEvent.Uuid, strconv.FormatInt(rawEvent.ReceivedAt.Unix(), 10), rawEvent.EdgeType)},
 			fmt.Errorf("Event uuid %s had invalid first client IP", rawEvent.Uuid)
 	}
 
@@ -75,7 +75,7 @@ func (j *jsonLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, err
 	events, err := parser.DecodeBase64(parsedEvent, &parser.ByteQueryUnescaper{})
 	if err != nil {
 		return []parser.MixpanelEvent{
-			*parser.MakeErrorEvent(raw, rawEvent.Uuid, parsedEvent.Time()),
+			*parser.MakeErrorEvent(raw, rawEvent.Uuid, parsedEvent.Time(), rawEvent.EdgeType),
 		}, err
 	}
 
@@ -86,6 +86,7 @@ func (j *jsonLogParser) Parse(raw parser.Parseable) ([]parser.MixpanelEvent, err
 		m[i].ClientIP = rawEvent.ClientIp.String()
 		m[i].Pstart = raw.StartTime()
 		m[i].UserAgent = rawEvent.UserAgent
+		m[i].EdgeType = rawEvent.EdgeType
 		if len(events) > 1 {
 			m[i].UUID = fmt.Sprintf("%s-%d", parsedEvent.UUID(), i)
 		} else {
