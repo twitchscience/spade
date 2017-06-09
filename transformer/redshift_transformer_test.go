@@ -11,6 +11,7 @@ import (
 
 	"github.com/cactus/go-statsd-client/statsd"
 
+	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/lookup"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
@@ -129,7 +130,8 @@ func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writ
 func TestBadParseEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
 	badParseEvent := &parser.MixpanelEvent{
-		Event: "login",
+		Event:    "login",
+		EdgeType: spade.INTERNAL_EDGE,
 		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
@@ -154,7 +156,8 @@ func TestBadParseEventConsume(t *testing.T) {
 func TestTransformBadColumnEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
 	transformErrorEvent := &parser.MixpanelEvent{
-		Event: "login",
+		Event:    "login",
+		EdgeType: spade.INTERNAL_EDGE,
 		Properties: []byte(`{
 			"times":    "sda",
 			"fraction": 0.1234,
@@ -182,7 +185,8 @@ func TestTransformBadColumnEventConsume(t *testing.T) {
 func TestEmptyEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
 	emptyEvent := &parser.MixpanelEvent{
-		Event: "",
+		Event:    "",
+		EdgeType: spade.INTERNAL_EDGE,
 		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
@@ -206,7 +210,8 @@ func TestEmptyEventConsume(t *testing.T) {
 func TestMissingPropertyEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
 	emptyEvent := &parser.MixpanelEvent{
-		Event: "login",
+		Event:    "login",
+		EdgeType: spade.INTERNAL_EDGE,
 		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
@@ -231,7 +236,8 @@ func TestMissingPropertyEventConsume(t *testing.T) {
 func TestNotTrackedEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
 	notTrackedEvent := &parser.MixpanelEvent{
-		Event: "NotTracked",
+		Event:    "NotTracked",
+		EdgeType: spade.INTERNAL_EDGE,
 		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
@@ -256,7 +262,8 @@ func TestNotTrackedEventConsume(t *testing.T) {
 func TestEventWithNoMappingConsume(t *testing.T) {
 	now := time.Now().In(PST)
 	noMappingEvent := &parser.MixpanelEvent{
-		Event: "login",
+		Event:    "login",
+		EdgeType: spade.INTERNAL_EDGE,
 		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
@@ -283,7 +290,8 @@ func TestEventWithNoMappingConsume(t *testing.T) {
 func TestNormalEventConsume(t *testing.T) {
 	now := time.Now().In(PST)
 	normalEvent := &parser.MixpanelEvent{
-		Event: "login",
+		Event:    "login",
+		EdgeType: spade.INTERNAL_EDGE,
 		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,
@@ -312,7 +320,8 @@ func TestNormalEventConsume(t *testing.T) {
 func TestNormalEventWithMappingConsume(t *testing.T) {
 	now := time.Now().In(PST)
 	normalEvent := &parser.MixpanelEvent{
-		Event: "login",
+		Event:    "login",
+		EdgeType: spade.INTERNAL_EDGE,
 		Properties: []byte(`{
 			"times":    42,
 			"fraction": 0.1234,

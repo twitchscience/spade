@@ -9,6 +9,10 @@ var (
 	ErrEmptyRequest = errors.New("Event field is not set")
 )
 
+var (
+	ErrInvalidEdgeType = errors.New("Edge type is invalid")
+)
+
 // ErrNotTracked indicates an event type is not tracked.
 type ErrNotTracked struct {
 	What string

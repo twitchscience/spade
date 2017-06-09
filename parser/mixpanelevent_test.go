@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/reporter"
 )
 
@@ -22,13 +23,15 @@ const (
 	ErrorEmptyUUID
 	ErrorEmptyTime
 	ErrorInvalidTime
+	ErrorInvalidEdgeType
 )
 
 var (
-	epoch    = time.Unix(0, 0)
-	uuid     = "123abc"
-	longUUID = randomString(68)
-	when     = fmt.Sprintf("%d", receivedAt.Unix()) // from parser_test.go
+	epoch           = time.Unix(0, 0)
+	uuid            = "123abc"
+	longUUID        = randomString(68)
+	when            = fmt.Sprintf("%d", receivedAt.Unix()) // from parser_test.go
+	unknownEdgeType = "Unknown"
 )
 
 func randomString(n int) string {
@@ -47,15 +50,17 @@ func makeEvent(t mixpanelEventType) *MixpanelEvent {
 	case Panic:
 		return MakePanickedEvent(&logLine{})
 	case Error:
-		return MakeErrorEvent(&logLine{}, uuid, when)
+		return MakeErrorEvent(&logLine{}, uuid, when, spade.INTERNAL_EDGE)
 	case ErrorLongUUID:
-		return MakeErrorEvent(&logLine{}, longUUID, when)
+		return MakeErrorEvent(&logLine{}, longUUID, when, spade.INTERNAL_EDGE)
 	case ErrorEmptyUUID:
-		return MakeErrorEvent(&logLine{}, "", when)
+		return MakeErrorEvent(&logLine{}, "", when, spade.INTERNAL_EDGE)
 	case ErrorEmptyTime:
-		return MakeErrorEvent(&logLine{}, uuid, "")
+		return MakeErrorEvent(&logLine{}, uuid, "", spade.INTERNAL_EDGE)
 	case ErrorInvalidTime:
-		return MakeErrorEvent(&logLine{}, uuid, "abc")
+		return MakeErrorEvent(&logLine{}, uuid, "abc", spade.INTERNAL_EDGE)
+	case ErrorInvalidEdgeType:
+		return MakeErrorEvent(&logLine{}, uuid, when, unknownEdgeType)
 	}
 	return nil
 }
@@ -68,6 +73,7 @@ func TestMixpanelEvent(t *testing.T) {
 		uuid      string
 		clientIP  string
 		eventName string
+		edgeType  string
 		rawProps  json.RawMessage
 		failMode  reporter.FailMode
 	}{
@@ -78,6 +84,7 @@ func TestMixpanelEvent(t *testing.T) {
 			uuid:      "error",
 			clientIP:  "",
 			eventName: "Unknown",
+			edgeType:  spade.EXTERNAL_EDGE,
 			rawProps:  json.RawMessage{},
 			failMode:  reporter.FailedTransport,
 		},
@@ -88,6 +95,7 @@ func TestMixpanelEvent(t *testing.T) {
 			uuid:      "error",
 			clientIP:  "",
 			eventName: "Unknown",
+			edgeType:  spade.INTERNAL_EDGE,
 			rawProps:  json.RawMessage([]byte{}),
 			failMode:  reporter.PanickedInProcessing,
 		},
@@ -98,6 +106,7 @@ func TestMixpanelEvent(t *testing.T) {
 			uuid:      uuid,
 			clientIP:  "",
 			eventName: "Unknown",
+			edgeType:  spade.INTERNAL_EDGE,
 			rawProps:  json.RawMessage{},
 			failMode:  reporter.UnableToParseData,
 		},
@@ -108,6 +117,7 @@ func TestMixpanelEvent(t *testing.T) {
 			uuid:      "error",
 			clientIP:  "",
 			eventName: "Unknown",
+			edgeType:  spade.INTERNAL_EDGE,
 			rawProps:  json.RawMessage{},
 			failMode:  reporter.UnableToParseData,
 		},
@@ -118,6 +128,7 @@ func TestMixpanelEvent(t *testing.T) {
 			uuid:      "error",
 			clientIP:  "",
 			eventName: "Unknown",
+			edgeType:  spade.INTERNAL_EDGE,
 			rawProps:  json.RawMessage{},
 			failMode:  reporter.UnableToParseData,
 		},
@@ -128,6 +139,7 @@ func TestMixpanelEvent(t *testing.T) {
 			uuid:      uuid,
 			clientIP:  "",
 			eventName: "Unknown",
+			edgeType:  spade.INTERNAL_EDGE,
 			rawProps:  json.RawMessage{},
 			failMode:  reporter.UnableToParseData,
 		},
@@ -138,6 +150,18 @@ func TestMixpanelEvent(t *testing.T) {
 			uuid:      uuid,
 			clientIP:  "",
 			eventName: "Unknown",
+			edgeType:  spade.INTERNAL_EDGE,
+			rawProps:  json.RawMessage{},
+			failMode:  reporter.UnableToParseData,
+		},
+		{
+			t:         ErrorInvalidEdgeType,
+			pstart:    receivedAt, // from parser_test.go
+			eventTime: json.Number(when),
+			uuid:      uuid,
+			clientIP:  "",
+			eventName: "Unknown",
+			edgeType:  unknownEdgeType,
 			rawProps:  json.RawMessage{},
 			failMode:  reporter.UnableToParseData,
 		},
@@ -160,6 +184,9 @@ func TestMixpanelEvent(t *testing.T) {
 		if tt.eventName != me.Event {
 			t.Fatalf("mixpanelevent: Expected Event of %s, got %s", tt.eventName, me.Event)
 		}
+		if tt.edgeType != me.EdgeType {
+			t.Fatalf("mixpanelevent: Expected EdgeType of %s, got %s", tt.edgeType, me.EdgeType)
+		}
 		if !reflect.DeepEqual(tt.rawProps, me.Properties) {
 			t.Fatalf("mixpanelevent: Expected Properties of %v, got %v", tt.rawProps, me.Properties)
 		}
@@ -176,6 +203,7 @@ func makeBadEncodedEvent() *MixpanelEvent {
 		UUID:       "error",
 		ClientIP:   "",
 		Event:      "Unknown",
+		EdgeType:   spade.EXTERNAL_EDGE,
 		Properties: json.RawMessage{},
 		Failure:    reporter.FailedTransport,
 	}
