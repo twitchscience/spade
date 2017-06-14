@@ -91,7 +91,6 @@ func TestTimeout(t *testing.T) {
 }
 
 func TestSizeLimit(t *testing.T) {
-	t.Skip("Race condition here, this should be fixed - SCIENG-1419")
 	config := scoop_protocol.BatcherConfig{
 		MaxSize:      10,
 		MaxEntries:   -1,
@@ -99,10 +98,10 @@ func TestSizeLimit(t *testing.T) {
 		BufferLength: 5,
 	}
 
-	var result [][]byte
+	result := make(chan [][]byte, 10)
 
 	b, err := New(config, func(batch [][]byte) {
-		result = batch
+		result <- batch
 	})
 
 	assert.NoError(t, err)
@@ -110,13 +109,11 @@ func TestSizeLimit(t *testing.T) {
 	for _, e := range expected {
 		b.Submit(e)
 	}
-	time.Sleep(1 * time.Second)
-	assert.True(t, len(result) > 0)
+	assert.True(t, len(<-result) > 0)
 	b.Close()
 }
 
 func TestMaxEntryLimit(t *testing.T) {
-	t.Skip("Race condition here, this should be fixed - SCIENG-1419")
 	config := scoop_protocol.BatcherConfig{
 		MaxSize:      1 * 1024 * 1024,
 		MaxEntries:   2,
@@ -124,10 +121,10 @@ func TestMaxEntryLimit(t *testing.T) {
 		BufferLength: 5,
 	}
 
-	var result [][]byte
+	result := make(chan [][]byte, 10)
 
 	b, err := New(config, func(batch [][]byte) {
-		result = batch
+		result <- batch
 	})
 
 	assert.NoError(t, err)
@@ -135,7 +132,6 @@ func TestMaxEntryLimit(t *testing.T) {
 	for _, e := range expected {
 		b.Submit(e)
 	}
-	time.Sleep(1 * time.Second)
-	assert.True(t, len(result) <= 2)
+	assert.True(t, len(<-result) <= 2)
 	b.Close()
 }
