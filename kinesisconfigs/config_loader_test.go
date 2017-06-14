@@ -234,7 +234,6 @@ var (
 )
 
 func TestRefresh(t *testing.T) {
-	t.Skip("Race condition here, this should be fixed - SCIENG-1419")
 	c, _ := statsd.NewNoop()
 
 	dl, err := NewDynamicLoader(
@@ -256,7 +255,7 @@ func TestRefresh(t *testing.T) {
 		1,
 		reporter.WrapCactusStatter(c, 0.1),
 		&testMultee{},
-		func(scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
+		func(c scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
 			return nil, nil
 		},
 		[]scoop_protocol.KinesisWriterConfig{},
@@ -271,7 +270,8 @@ func TestRefresh(t *testing.T) {
 
 	go dl.Crank()
 	time.Sleep(time.Second)
-	if len(dl.configs) != 1 {
+	dl.Close()
+	if len(dl.configs) != 1 { // read here
 		t.Fatal("expected to have 1 config right now")
 	}
 
@@ -279,7 +279,6 @@ func TestRefresh(t *testing.T) {
 		t.Fatal("expected to have a stream left after delete")
 	}
 
-	dl.closer <- true
 }
 
 func TestRetryPull(t *testing.T) {
