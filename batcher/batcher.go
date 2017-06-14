@@ -92,12 +92,8 @@ func (b *Batcher) complete() {
 }
 
 func (b *Batcher) worker() {
-	defer func() {
-		b.Done()
-	}()
-	defer func() {
-		b.complete()
-	}()
+	defer b.Done()
+	defer b.complete()
 	for {
 		select {
 		case <-b.timer.C:
