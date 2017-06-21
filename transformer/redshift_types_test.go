@@ -167,11 +167,6 @@ func TestIpConversion(t *testing.T) {
 	_typeRunner(t, "118.192.154.0", ipAsnIntConverterNoDescription, "59050", false)
 }
 
-func TestHashTransformer(t *testing.T) {
-	hashTransformerConverter := RedshiftType{hashTransformer, "_", "_", nil}
-	_typeRunner(t, "asd", hashTransformerConverter, "2014669166", false)
-}
-
 func TestInSyncWithScoopProtocol(t *testing.T) {
 	var processorNames []string
 	for k := range singleValueTransformMap {
