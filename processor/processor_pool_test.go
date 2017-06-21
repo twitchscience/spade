@@ -89,16 +89,6 @@ func (p *_panicTransformer) Consume(*parser.MixpanelEvent) *writer.WriteRequest 
 	panic("panicked!")
 }
 
-type DummyWriter struct {
-}
-
-func (d *DummyWriter) Write(w *writer.WriteRequest) {
-}
-
-func (d *DummyWriter) Close() error {
-	return nil
-}
-
 type testWriter struct {
 	m        *sync.Mutex
 	requests []*writer.WriteRequest
