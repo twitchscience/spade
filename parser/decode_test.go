@@ -4,8 +4,6 @@ import (
 	"io/ioutil"
 	"net/url"
 	"testing"
-
-	"github.com/twitchscience/spade/reporter"
 )
 
 func loadFile(file string) []byte {
@@ -73,15 +71,6 @@ func (s *StringQueryUnescaper) QueryUnescape(q []byte) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(out), nil
-}
-
-type dummyReporter struct{}
-
-func (d *dummyReporter) Record(c *reporter.Result) {}
-func (d *dummyReporter) IncrementExpected(n int)   {}
-func (d *dummyReporter) Reset()                    {}
-func (d *dummyReporter) Finalize() map[string]int {
-	return make(map[string]int)
 }
 
 func BenchmarkStringQueryUnescape(b *testing.B) {
