@@ -29,6 +29,15 @@ var FirehoseRedshiftStreamTestConfig = []byte(`
                     "device_id"
                 ]
             },
+            "remapped": {
+                "Fields": [
+		    "unremapped",
+		    "remap"
+                ],
+		"FieldRenames": {
+		    "remap": "remapped_name"
+		}
+            },
             "video-play": {
                 "Fields": [
                     "country",
@@ -142,6 +151,8 @@ func TestSubmitCompressed(t *testing.T) {
 	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
 	config.Compress = true
+	config.FirehoseRedshiftStream = false
+	require.NoError(t, config.Validate())
 	globber := forwarderMock{}
 	batcher := forwarderMock{}
 	k := KinesisWriter{
@@ -159,6 +170,7 @@ func TestSubmitCompressed(t *testing.T) {
 func TestSubmitUncompressed(t *testing.T) {
 	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
+	require.NoError(t, config.Validate())
 	globber := forwarderMock{}
 	batcher := forwarderMock{}
 	k := KinesisWriter{
@@ -176,6 +188,7 @@ func TestSubmitUncompressedEventName(t *testing.T) {
 	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
 	config.EventNameTargetField = "event"
+	require.NoError(t, config.Validate())
 	globber := forwarderMock{}
 	batcher := forwarderMock{}
 	k := KinesisWriter{
@@ -194,6 +207,7 @@ func TestSubmitUncompressedExcludeEmpty(t *testing.T) {
 	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
 	config.ExcludeEmptyFields = true
+	require.NoError(t, config.Validate())
 	globber := forwarderMock{}
 	batcher := forwarderMock{}
 	k := KinesisWriter{
@@ -205,6 +219,23 @@ func TestSubmitUncompressedExcludeEmpty(t *testing.T) {
 	assert.Len(t, globber.received, 0)
 	require.Len(t, batcher.received, 1)
 	assert.Equal(t, `{"country":"US"}`, string(batcher.received[0]))
+}
+
+func TestSubmitRename(t *testing.T) {
+	config := scoop_protocol.KinesisWriterConfig{}
+	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
+	require.NoError(t, config.Validate())
+	globber := forwarderMock{}
+	batcher := forwarderMock{}
+	k := KinesisWriter{
+		globber: &globber,
+		batcher: &batcher,
+		config:  config,
+	}
+	k.submit("remapped", map[string]string{"unremapped": "US", "remap": "xx"})
+	assert.Len(t, globber.received, 0)
+	require.Len(t, batcher.received, 1)
+	assert.Equal(t, `{"remapped_name":"xx","unremapped":"US"}`, string(batcher.received[0]))
 }
 
 func TestRedshiftStreamAndStreamValidation(t *testing.T) {

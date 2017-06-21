@@ -32,17 +32,14 @@ var (
 				BufferSize:             1024,
 				MaxAttemptsPerRecord:   10,
 				RetryDelay:             "1s",
-				Events: map[string]*struct {
-					Filter     string
-					FilterFunc func(map[string]string) bool `json:"-"`
-					Fields     []string
-				}{"event": {
-					Filter: "",
-					Fields: []string{
-						"time",
-						"time_utc",
+				Events: map[string]*scoop_protocol.KinesisWriterEventConfig{
+					"event": {
+						Filter: "",
+						Fields: []string{
+							"time",
+							"time_utc",
+						},
 					},
-				},
 				},
 
 				Globber: scoop_protocol.GlobberConfig{
@@ -77,16 +74,13 @@ var (
 				BufferSize:             1024,
 				MaxAttemptsPerRecord:   10,
 				RetryDelay:             "1s",
-				Events: map[string]*struct {
-					Filter     string
-					FilterFunc func(map[string]string) bool `json:"-"`
-					Fields     []string
-				}{"event": {
-					Filter: "",
-					Fields: []string{
-						"time",
+				Events: map[string]*scoop_protocol.KinesisWriterEventConfig{
+					"event": {
+						Filter: "",
+						Fields: []string{
+							"time",
+						},
 					},
-				},
 				},
 
 				Globber: scoop_protocol.GlobberConfig{
@@ -120,17 +114,14 @@ var (
 				BufferSize:           1024,
 				MaxAttemptsPerRecord: 10,
 				RetryDelay:           "1s",
-				Events: map[string]*struct {
-					Filter     string
-					FilterFunc func(map[string]string) bool `json:"-"`
-					Fields     []string
-				}{"event": {
-					Filter: "",
-					Fields: []string{
-						"time",
-						"time_utc",
+				Events: map[string]*scoop_protocol.KinesisWriterEventConfig{
+					"event": {
+						Filter: "",
+						Fields: []string{
+							"time",
+							"time_utc",
+						},
 					},
-				},
 				},
 
 				Globber: scoop_protocol.GlobberConfig{
@@ -162,16 +153,13 @@ var (
 				BufferSize:             1024,
 				MaxAttemptsPerRecord:   10,
 				RetryDelay:             "1s",
-				Events: map[string]*struct {
-					Filter     string
-					FilterFunc func(map[string]string) bool `json:"-"`
-					Fields     []string
-				}{"event": {
-					Filter: "",
-					Fields: []string{
-						"time",
+				Events: map[string]*scoop_protocol.KinesisWriterEventConfig{
+					"event": {
+						Filter: "",
+						Fields: []string{
+							"time",
+						},
 					},
-				},
 				},
 
 				Globber: scoop_protocol.GlobberConfig{
@@ -204,17 +192,14 @@ var (
 				BufferSize:           1024,
 				MaxAttemptsPerRecord: 10,
 				RetryDelay:           "1s",
-				Events: map[string]*struct {
-					Filter     string
-					FilterFunc func(map[string]string) bool `json:"-"`
-					Fields     []string
-				}{"event": {
-					Filter: "",
-					Fields: []string{
-						"time",
-						"time_utc",
+				Events: map[string]*scoop_protocol.KinesisWriterEventConfig{
+					"event": {
+						Filter: "",
+						Fields: []string{
+							"time",
+							"time_utc",
+						},
 					},
-				},
 				},
 
 				Globber: scoop_protocol.GlobberConfig{
