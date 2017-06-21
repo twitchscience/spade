@@ -1,8 +1,6 @@
 package transformer
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -104,17 +102,16 @@ func GetMappingTransform(tType string, config MappingTransformerConfig) ColumnTr
 // New types should register here
 var (
 	singleValueTransformMap = map[string]ColumnTransformer{
-		"int":                intFormat(32),
-		"bigint":             intFormat(64),
-		"float":              floatFormat,
-		"varchar":            varcharFormat,
-		"bool":               boolFormat,
-		"ipCity":             ipCityFormat,
-		"ipCountry":          ipCountryFormat,
-		"ipRegion":           ipRegionFormat,
-		"ipAsn":              ipAsnFormat,
-		"ipAsnInteger":       ipAsnIntFormat,
-		"stringToIntegerMD5": hashTransformer,
+		"int":          intFormat(32),
+		"bigint":       intFormat(64),
+		"float":        floatFormat,
+		"varchar":      varcharFormat,
+		"bool":         boolFormat,
+		"ipCity":       ipCityFormat,
+		"ipCountry":    ipCountryFormat,
+		"ipRegion":     ipRegionFormat,
+		"ipAsn":        ipAsnFormat,
+		"ipAsnInteger": ipAsnIntFormat,
 	}
 	singleValueTransformGeneratorMap = map[string]func(string) ColumnTransformer{
 		"timestamp": genTimeFormat,
@@ -355,19 +352,6 @@ func ipAsnIntFormat(args []interface{}) (string, error) {
 		return "", genError(args[0], "Ip Asn")
 	}
 	return strconv.Itoa(asnInt), nil
-}
-
-func hashTransformer(args []interface{}) (string, error) {
-	str, ok := args[0].(string)
-	if !ok {
-		return "", genError(args[0], "Hash transformer")
-	}
-	bytedString := md5.Sum([]byte(str))
-	hashedInt, err := strconv.ParseInt(hex.EncodeToString(bytedString[:])[:8], 16, 64)
-	if err != nil {
-		return "", genError(args[0], "Hash transformer")
-	}
-	return strconv.FormatInt(hashedInt, 10), nil
 }
 
 func recordCacheError(stats reporter.StatsLogger, err error, operation string) {
