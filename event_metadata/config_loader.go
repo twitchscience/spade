@@ -29,6 +29,7 @@ func NewDynamicLoader(
 	retryDelay time.Duration,
 	stats reporter.StatsLogger,
 ) (*DynamicLoader, error) {
+	logger.Debug("[Fred] config_loader.go NewDynamicLoader begin")
 	d := DynamicLoader{
 		fetcher:    fetcher,
 		reloadTime: reloadTime,
@@ -37,6 +38,7 @@ func NewDynamicLoader(
 		closer:     make(chan bool),
 		stats:      stats,
 	}
+	logger.Debug("[Fred] config_loader.go NewDynamicLoader after d := DynamicLoader")
 
 	config, err := d.retryPull(5, retryDelay)
 	if err != nil {
