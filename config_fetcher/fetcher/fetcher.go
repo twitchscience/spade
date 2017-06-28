@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
@@ -120,6 +121,8 @@ func (f *fetcher) FetchAndWrite(src io.ReadCloser, dst io.WriteCloser) error {
 // Fetch returns a reader for the config.
 func (f *fetcher) Fetch() (io.ReadCloser, error) {
 	resp, err := f.hc.Get(f.url)
+	logger.Info("[Fred] f.url")
+	logger.Info(f.url)
 	if err != nil {
 		return nil, err
 	}
