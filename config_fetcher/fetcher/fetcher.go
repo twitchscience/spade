@@ -66,6 +66,9 @@ func timeoutDialer(timeout time.Duration) func(net, addr string) (net.Conn, erro
 
 // New returns a ConfigFetcher that reads configs from the given URL.
 func New(url string, validator func(b []byte) error) ConfigFetcher {
+	if url == "" {
+		logger.Debug("URL IS EMPTY")
+	}
 	return &fetcher{
 		hc: &http.Client{
 			Transport: &http.Transport{

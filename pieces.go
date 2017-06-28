@@ -182,7 +182,6 @@ func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.Sta
 }
 
 func createEventMetadataLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger) *eventMetadataConfig.DynamicLoader {
-	// Code this
 	loader, err := eventMetadataConfig.NewDynamicLoader(fetcher, config.EventMetadataReloadFrequency.Duration,
 		config.EventMetadataRetryDelay.Duration, stats)
 	if err != nil {
