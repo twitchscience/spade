@@ -1,4 +1,4 @@
-package event_metadata
+package eventmetadata
 
 import (
 	"encoding/json"

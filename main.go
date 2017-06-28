@@ -82,7 +82,7 @@ type spadeProcessor struct {
 	blueprintUploaderPool *aws_uploader.UploaderPool
 	tCache                *elastimemcache.Client
 	kinesisConfigLoader   *kinesisconfigs.DynamicLoader
-	eventMetadataLoader   *event_metadata.DynamicLoader
+	eventMetadataLoader   *eventmetadata.DynamicLoader
 
 	rotation <-chan time.Time
 	sigc     chan os.Signal

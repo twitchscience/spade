@@ -46,10 +46,9 @@ func FetchConfig(cf ConfigFetcher, outputFileDst string) (err error) {
 }
 
 type fetcher struct {
-	hc             *http.Client
-	url            string
-	allMetadataUrl string
-	validator      func(b []byte) error
+	hc        *http.Client
+	url       string
+	validator func(b []byte) error
 }
 
 func timeoutDialer(timeout time.Duration) func(net, addr string) (net.Conn, error) {
