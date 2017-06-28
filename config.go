@@ -27,6 +27,8 @@ var config struct {
 	BlueprintSchemasURL string
 	// BlueprintKinesisConfigsURL is the url to blueprint kinesisconfigs
 	BlueprintKinesisConfigsURL string
+	// BlueprintAllMetadataURL is the url to blueprint metadata for all events
+	BlueprintAllMetadataURL string
 	// ProcessorErrorTopicARN is the arn of the SNS topic for processor errors
 	ProcessorErrorTopicARN string
 	// AceTopicARN is the arn of the SNS topic for events going to Ace
@@ -84,6 +86,10 @@ var config struct {
 	KinesisConfigReloadFrequency jsonutil.Duration
 	// How long to sleep if there's an error loading kinesis configs from Blueprint.
 	KinesisConfigRetryDelay jsonutil.Duration
+	// How often to load event metadata from Blueprint.
+	EventMetadataReloadFrequency jsonutil.Duration
+	// How long to sleep if there's an error loading event metadata from Blueprint.
+	EventMetadataRetryDelay jsonutil.Duration
 }
 
 func loadConfig() {

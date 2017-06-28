@@ -91,6 +91,7 @@ func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) (map[string][]t
 	var versions map[string]int
 	for i := 1; i < (n + 1); i++ {
 		config, versions, err = d.pullConfigIn()
+		// Add edge type here
 		if err == nil {
 			return config, versions, nil
 		}
@@ -110,7 +111,7 @@ func (d *DynamicLoader) pullConfigIn() (map[string][]transformer.RedshiftType, m
 		return nil, nil, err
 	}
 
-	newConfigs, newVersions, err := tables.CompileForParsing(d.tConfigs)
+	newConfigs, newVersions, err := tables.CompileForParsing(d.tConfigs) // Add edge type here
 	if err != nil {
 		return nil, nil, err
 	}

@@ -49,6 +49,16 @@ const (
 	EDGE_TYPE EventMetadataType = "edge_type"
 )
 
+type EventMetadataRow struct {
+	MetadataType  EventMetadataType
+	MetadataValue string
+}
+
+type EventMetadataConfig struct {
+	EventName string
+	Metadata  []EventMetadataRow
+}
+
 func NewAddOperation(outbound, inbound, type_, options, columns string) Operation {
 	return Operation{
 		Action: ADD,

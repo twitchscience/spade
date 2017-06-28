@@ -21,6 +21,7 @@ import (
 	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
+	eventMetadataConfig "github.com/twitchscience/spade/event_metadata"
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/kinesisconfigs"
 	"github.com/twitchscience/spade/lookup"
@@ -174,6 +175,18 @@ func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.Sta
 	)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create kinesis config dynamic loader")
+	}
+
+	logger.Go(loader.Crank)
+	return loader
+}
+
+func createEventMetadataLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger) *eventMetadataConfig.DynamicLoader {
+	// Code this
+	loader, err := eventMetadataConfig.NewDynamicLoader(fetcher, config.EventMetadataReloadFrequency.Duration,
+		config.EventMetadataRetryDelay.Duration, stats)
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to create event metadata dynamic loader")
 	}
 
 	logger.Go(loader.Crank)

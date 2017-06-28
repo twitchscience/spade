@@ -46,9 +46,10 @@ func FetchConfig(cf ConfigFetcher, outputFileDst string) (err error) {
 }
 
 type fetcher struct {
-	hc        *http.Client
-	url       string
-	validator func(b []byte) error
+	hc             *http.Client
+	url            string
+	allMetadataUrl string
+	validator      func(b []byte) error
 }
 
 func timeoutDialer(timeout time.Duration) func(net, addr string) (net.Conn, error) {
@@ -99,6 +100,20 @@ func ValidateFetchedKinesisConfig(b []byte) error {
 	err := json.Unmarshal(b, &cfgs)
 	if err != nil {
 		return fmt.Errorf("Result not a valid []writer.AnnotatedKinesisConfig: %s; error: %s", string(b), err)
+	}
+	return nil
+}
+
+// ValidateFetchedEventMetadataConfig validates a fetched event metadata
+func ValidateFetchedEventMetadataConfig(b []byte) error {
+	if len(b) == 0 {
+		return fmt.Errorf("There are no bytes to validate event metadata config")
+	}
+
+	var cfgs []scoop_protocol.EventMetadataConfig
+	err := json.Unmarshal(b, &cfgs)
+	if err != nil {
+		return fmt.Errorf("Result not a valid []EventMetadataConfig: %s; error: %s", string(b), err)
 	}
 	return nil
 }
