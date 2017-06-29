@@ -148,6 +148,14 @@ func newProcessor() *spadeProcessor {
 	multee.Add("static_multee", staticMultee)
 	multee.Add("dynamic_multee", dynamicMultee)
 
+	logger.Info("[Fred] main.go before fetcher setup")
+	logger.Info(config)
+	logger.Info(config.BlueprintSchemasURL)
+	logger.Info(config.BlueprintKinesisConfigsURL)
+	logger.Info(config.BlueprintAllMetadataURL)
+	logger.Info(config.EventMetadataReloadFrequency)
+	logger.Info(config.EventMetadataRetryDelay)
+
 	schemaFetcher := fetcher.New(config.BlueprintSchemasURL, fetcher.ValidateFetchedSchema)
 	kinesisConfigFetcher := fetcher.New(config.BlueprintKinesisConfigsURL, fetcher.ValidateFetchedKinesisConfig)
 	eventMetadataFetcher := fetcher.New(config.BlueprintAllMetadataURL, fetcher.ValidateFetchedEventMetadataConfig)
