@@ -111,8 +111,9 @@ func ValidateFetchedEventMetadataConfig(b []byte) error {
 	if len(b) == 0 {
 		return fmt.Errorf("There are no bytes to validate event metadata config")
 	}
-
-	var cfgs []scoop_protocol.EventMetadataConfig
+	// TEMP: change back to [] when /allschemas endpoint is done
+	// var cfgs []scoop_protocol.EventMetadataConfig
+	var cfgs scoop_protocol.EventMetadataConfig
 	err := json.Unmarshal(b, &cfgs)
 	if err != nil {
 		return fmt.Errorf("Result not a valid []EventMetadataConfig: %s; error: %s", string(b), err)

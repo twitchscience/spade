@@ -17,9 +17,12 @@ type DynamicLoader struct {
 	fetcher    fetcher.ConfigFetcher
 	reloadTime time.Duration
 	retryDelay time.Duration
-	configs    []scoop_protocol.EventMetadataConfig
-	closer     chan bool
-	stats      reporter.StatsLogger
+	// TEMP: change back to [] when /allmetadata endpoint is done
+	// configs    []scoop_protocol.EventMetadataConfig
+	configs scoop_protocol.EventMetadataConfig
+
+	closer chan bool
+	stats  reporter.StatsLogger
 }
 
 // NewDynamicLoader returns a new DynamicLoader, performing the first fetch.
@@ -34,9 +37,12 @@ func NewDynamicLoader(
 		fetcher:    fetcher,
 		reloadTime: reloadTime,
 		retryDelay: retryDelay,
-		configs:    []scoop_protocol.EventMetadataConfig{},
-		closer:     make(chan bool),
-		stats:      stats,
+
+		// TEMP: change back to [] when /allmetadata endpoint is done
+		// configs:    []scoop_protocol.EventMetadataConfig{},
+		configs: scoop_protocol.EventMetadataConfig{},
+		closer:  make(chan bool),
+		stats:   stats,
 	}
 	logger.Info("[Fred] config_loader.go NewDynamicLoader after d := DynamicLoader")
 
@@ -48,9 +54,13 @@ func NewDynamicLoader(
 	return &d, nil
 }
 
-func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) ([]scoop_protocol.EventMetadataConfig, error) {
+// TEMP: change back to [] when /allmetadata endpoint is done
+// func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) ([]scoop_protocol.EventMetadataConfig, error) {
+func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) (scoop_protocol.EventMetadataConfig, error) {
 	var err error
-	var config []scoop_protocol.EventMetadataConfig
+	// TEMP: change back to [] when /allmetadata endpoint is done
+	// var config    []scoop_protocol.EventMetadataConfig
+	var config scoop_protocol.EventMetadataConfig
 	for i := 1; i <= n; i++ {
 		config, err = d.pullConfigIn()
 		if err == nil {
@@ -58,26 +68,40 @@ func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) ([]scoop_protoc
 		}
 		time.Sleep(waitTime * time.Duration(i))
 	}
-	return nil, err
+	// TEMP: change back to nil, err when /allmetadata endpoint is done
+	// return nil, err
+	return config, err
 }
 
-func (d *DynamicLoader) pullConfigIn() ([]scoop_protocol.EventMetadataConfig, error) {
+// TEMP: change back to [] when /allmetadata endpoint is done
+// func (d *DynamicLoader) pullConfigIn() ([]scoop_protocol.EventMetadataConfig, error) {
+func (d *DynamicLoader) pullConfigIn() (scoop_protocol.EventMetadataConfig, error) {
 	logger.Info("[Fred] config_loader.go pullConfigIn begin")
 	configReader, err := d.fetcher.Fetch()
 	if err != nil {
-		return nil, err
+		// TEMP: Remove var config...when /allmetadata endpoint is done
+		var config scoop_protocol.EventMetadataConfig
+		// return nil, err
+		return config, err
 	}
 	logger.Info("[Fred] config_loader.go pullConfigIn no Fetch() error")
 
 	b, err := ioutil.ReadAll(configReader)
 	if err != nil {
-		return nil, err
+		// TEMP: Remove var config...when /allmetadata endpoint is done
+		var config scoop_protocol.EventMetadataConfig
+		// return nil, err
+		return config, err
 	}
 	logger.Info("[Fred] config_loader.go pullConfigIn no ReadAll() error")
-	var cfgs []scoop_protocol.EventMetadataConfig
+	// TEMP: change back to [] when /allmetadata endpoint is done
+	// var cfgs []scoop_protocol.EventMetadataConfig
+	var cfgs scoop_protocol.EventMetadataConfig
 	err = json.Unmarshal(b, &cfgs)
 	if err != nil {
-		return []scoop_protocol.EventMetadataConfig{}, err
+		// TEMP: change back to [] when /allmetadata endpoint is done
+		// return []scoop_protocol.EventMetadataConfig{}, err
+		return scoop_protocol.EventMetadataConfig{}, err
 	}
 
 	return cfgs, nil
