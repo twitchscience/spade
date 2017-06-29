@@ -29,7 +29,7 @@ func NewDynamicLoader(
 	retryDelay time.Duration,
 	stats reporter.StatsLogger,
 ) (*DynamicLoader, error) {
-	logger.Debug("[Fred] config_loader.go NewDynamicLoader begin")
+	logger.Info("[Fred] config_loader.go NewDynamicLoader begin")
 	d := DynamicLoader{
 		fetcher:    fetcher,
 		reloadTime: reloadTime,
@@ -38,7 +38,7 @@ func NewDynamicLoader(
 		closer:     make(chan bool),
 		stats:      stats,
 	}
-	logger.Debug("[Fred] config_loader.go NewDynamicLoader after d := DynamicLoader")
+	logger.Info("[Fred] config_loader.go NewDynamicLoader after d := DynamicLoader")
 
 	config, err := d.retryPull(5, retryDelay)
 	if err != nil {
@@ -62,18 +62,18 @@ func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) ([]scoop_protoc
 }
 
 func (d *DynamicLoader) pullConfigIn() ([]scoop_protocol.EventMetadataConfig, error) {
-	logger.Debug("[Fred] config_loader.go pullConfigIn begin")
+	logger.Info("[Fred] config_loader.go pullConfigIn begin")
 	configReader, err := d.fetcher.Fetch()
 	if err != nil {
 		return nil, err
 	}
-	logger.Debug("[Fred] config_loader.go pullConfigIn no Fetch() error")
+	logger.Info("[Fred] config_loader.go pullConfigIn no Fetch() error")
 
 	b, err := ioutil.ReadAll(configReader)
 	if err != nil {
 		return nil, err
 	}
-	logger.Debug("[Fred] config_loader.go pullConfigIn no ReadAll() error")
+	logger.Info("[Fred] config_loader.go pullConfigIn no ReadAll() error")
 	var cfgs []scoop_protocol.EventMetadataConfig
 	err = json.Unmarshal(b, &cfgs)
 	if err != nil {
