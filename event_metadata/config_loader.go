@@ -91,7 +91,7 @@ func (d *DynamicLoader) pullConfigIn() (scoop_protocol.EventMetadataConfig, erro
 
 	b, err := ioutil.ReadAll(configReader)
 	logger.Info("[Fred] config_loader.go pullConfigIn Read bytes")
-	logger.Info(b)
+	// logger.Info(b)
 	if err != nil {
 		// TEMP: Remove var config...when /allmetadata endpoint is done
 		var config scoop_protocol.EventMetadataConfig
@@ -110,7 +110,8 @@ func (d *DynamicLoader) pullConfigIn() (scoop_protocol.EventMetadataConfig, erro
 		// return []scoop_protocol.EventMetadataConfig{}, err
 		return scoop_protocol.EventMetadataConfig{}, err
 	}
-
+	logger.Info(cfgs.Metadata)
+	logger.Info(cfgs.Metadata["spade_testing_3"])
 	return cfgs, nil
 }
 
