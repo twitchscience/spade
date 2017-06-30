@@ -53,7 +53,7 @@ func NewDynamicLoader(
 	d.configs = config
 
 	logger.Info("[Fred]config_loader.go NewDyanmicLoader")
-	logger.Info(config["spade_testing_3"])
+	logger.Info(config.Metadata["spade_testing_3"])
 	return &d, nil
 }
 
@@ -99,8 +99,10 @@ func (d *DynamicLoader) pullConfigIn() (scoop_protocol.EventMetadataConfig, erro
 	logger.Info("[Fred] config_loader.go pullConfigIn no ReadAll() error")
 	// TEMP: change back to [] when /allmetadata endpoint is done
 	// var cfgs []scoop_protocol.EventMetadataConfig
-	var cfgs scoop_protocol.EventMetadataConfig
-	err = json.Unmarshal(b, &cfgs)
+	cfgs := scoop_protocol.EventMetadataConfig{
+		Metadata: make(map[string](map[string]string)),
+	}
+	err = json.Unmarshal(b, &cfgs.Metadata)
 	if err != nil {
 		// TEMP: change back to [] when /allmetadata endpoint is done
 		// return []scoop_protocol.EventMetadataConfig{}, err
