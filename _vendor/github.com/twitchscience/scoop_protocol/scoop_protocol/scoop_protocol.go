@@ -51,14 +51,16 @@ const (
 
 // Update scoop_protocol (the actual repo)!!!
 
-// type EventMetadataRow struct {
-// 	MetadataType  EventMetadataType
-// 	MetadataValue string
-// }
+type EventMetadataRow struct {
+	MetadataValue string
+	TS            time.Time
+	UserName      string
+	Version       int
+}
 
 type EventMetadataConfig struct {
-	// The first key is the event name, second key is metadata type, value is metadata value
-	Metadata map[string](map[string]string)
+	// The first key is the event name, second key is metadata type
+	Metadata map[string](map[string]EventMetadataRow)
 }
 
 func NewAddOperation(outbound, inbound, type_, options, columns string) Operation {

@@ -90,6 +90,8 @@ func (d *DynamicLoader) pullConfigIn() (scoop_protocol.EventMetadataConfig, erro
 	logger.Info("[Fred] config_loader.go pullConfigIn no Fetch() error")
 
 	b, err := ioutil.ReadAll(configReader)
+	logger.Info("[Fred] config_loader.go pullConfigIn Read bytes")
+	logger.Info(b)
 	if err != nil {
 		// TEMP: Remove var config...when /allmetadata endpoint is done
 		var config scoop_protocol.EventMetadataConfig
@@ -100,7 +102,7 @@ func (d *DynamicLoader) pullConfigIn() (scoop_protocol.EventMetadataConfig, erro
 	// TEMP: change back to [] when /allmetadata endpoint is done
 	// var cfgs []scoop_protocol.EventMetadataConfig
 	cfgs := scoop_protocol.EventMetadataConfig{
-		Metadata: make(map[string](map[string]string)),
+		Metadata: make(map[string](map[string]scoop_protocol.EventMetadataRow)),
 	}
 	err = json.Unmarshal(b, &cfgs.Metadata)
 	if err != nil {
