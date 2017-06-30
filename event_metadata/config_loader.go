@@ -51,6 +51,9 @@ func NewDynamicLoader(
 		return nil, err
 	}
 	d.configs = config
+
+	logger.Info("[Fred]config_loader.go NewDyanmicLoader")
+	logger.Info(config["spade_testing_3"])
 	return &d, nil
 }
 

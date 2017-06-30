@@ -49,14 +49,16 @@ const (
 	EDGE_TYPE EventMetadataType = "edge_type"
 )
 
-type EventMetadataRow struct {
-	MetadataType  EventMetadataType
-	MetadataValue string
-}
+// Update scoop_protocol (the actual repo)!!!
+
+// type EventMetadataRow struct {
+// 	MetadataType  EventMetadataType
+// 	MetadataValue string
+// }
 
 type EventMetadataConfig struct {
-	EventName string
-	Metadata  []EventMetadataRow
+	// The first key is the event name, second key is metadata type, value is metadata value
+	Metadata map[string](map[string]string)
 }
 
 func NewAddOperation(outbound, inbound, type_, options, columns string) Operation {
