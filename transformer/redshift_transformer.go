@@ -18,7 +18,8 @@ import (
 // RedshiftTransformer turns MixpanelEvents into WriteRequests using the given SchemaConfigLoader.
 type RedshiftTransformer struct {
 	Configs SchemaConfigLoader
-	stats   reporter.StatsLogger
+	// EventMetadataConfigs EventMetadataConfigLoader
+	stats reporter.StatsLogger
 }
 
 type nontrackedEvent struct {
@@ -26,11 +27,13 @@ type nontrackedEvent struct {
 	Properties json.RawMessage `json:"properties"`
 }
 
-// NewRedshiftTransformer creates a new RedshiftTransformer using the given SchemaConfigLoader.
+// NewRedshiftTransformer creates a new RedshiftTransformer using the given SchemaConfigLoader and EventMetadataConfigLoader
+// func NewRedshiftTransformer(configs SchemaConfigLoader, eventMetadataConfigs EventMetadataConfigLoader, stats reporter.StatsLogger) Transformer {
 func NewRedshiftTransformer(configs SchemaConfigLoader, stats reporter.StatsLogger) Transformer {
 	return &RedshiftTransformer{
 		Configs: configs,
-		stats:   stats,
+		// EventMetadataConfigs: eventMetadataConfigs,
+		stats: stats,
 	}
 }
 
@@ -131,6 +134,10 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 	if err := decoder.Decode(&temp); err != nil {
 		return "", nil, err
 	}
+
+	// CURRENT TASK: get expected edge type from Blueprint for event, then
+	// Actually check it here
+	// expectedEdgeType, err := t.Configs.GetMetadataValueByType(event.Event, scoop_protocol.EDGE_TYPE)
 
 	if event.EdgeType == spade.INTERNAL_EDGE || event.EdgeType == spade.EXTERNAL_EDGE {
 		t.stats.IncrBy(fmt.Sprintf("edge-type.%s.%s", event.Event, event.EdgeType), 1)

@@ -2,6 +2,8 @@ package eventmetadata
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"time"
@@ -10,6 +12,7 @@ import (
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/reporter"
+	"github.com/twitchscience/spade/transformer"
 )
 
 // DynamicLoader fetches configs on an interval, with stats on the fetching process.
@@ -55,6 +58,30 @@ func NewDynamicLoader(
 	logger.Info("[Fred]config_loader.go NewDyanmicLoader")
 	logger.Info(config.Metadata["spade_testing_3"])
 	return &d, nil
+}
+
+// GetMetadataValueByType returns the metadata value given an eventName and metadataType.
+func (d *DynamicLoader) GetMetadataValueByType(eventName string, metadataType string) (string, error) {
+	if metadataType != string(scoop_protocol.COMMENT) && metadataType != string(scoop_protocol.EDGE_TYPE) {
+		return "", transformer.ErrInvalidMetadataType{
+			What: fmt.Sprintf("%s is not being tracked", eventName),
+		}
+	}
+
+	if eventMetadata, found := d.configs.Metadata[eventName]; found {
+		if metadataRow, exists := eventMetadata[metadataType]; exists {
+			return metadataRow.MetadataValue, nil
+		}
+	}
+
+	// Update error later
+	return "", errors.New("Not found")
+	// if transformArray, exists := d.configs[eventName]; exists {
+	// 	return transformArray, nil
+	// }
+	// return nil, transformer.ErrNotTracked{
+	// 	What: fmt.Sprintf("%s is not being tracked", eventName),
+	// }
 }
 
 // TEMP: change back to [] when /allmetadata endpoint is done
