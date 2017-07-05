@@ -132,13 +132,16 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 	temp := make(map[string]interface{}, 15)
 	decoder := json.NewDecoder(bytes.NewReader(event.Properties))
 	decoder.UseNumber()
-	if err := decoder.Decode(&temp); err != nil {
+	if err = decoder.Decode(&temp); err != nil {
 		return "", nil, err
 	}
 
 	// CURRENT TASK: get expected edge type from Blueprint for event, then
 	// Actually check it here
 	expectedEdgeType, err := t.EventMetadataConfigs.GetMetadataValueByType(event.Event, string(scoop_protocol.EDGE_TYPE))
+	if err != nil {
+		return "", nil, err
+	}
 
 	if expectedEdgeType != event.EdgeType {
 		t.stats.IncrBy(fmt.Sprintf("edge-type-mismatch.%s.%s.%s", event.Event, event.EdgeType, expectedEdgeType), 1)
