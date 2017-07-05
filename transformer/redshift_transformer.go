@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/twitchscience/aws_utils/logger"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
@@ -17,9 +18,9 @@ import (
 
 // RedshiftTransformer turns MixpanelEvents into WriteRequests using the given SchemaConfigLoader.
 type RedshiftTransformer struct {
-	Configs SchemaConfigLoader
-	// EventMetadataConfigs EventMetadataConfigLoader
-	stats reporter.StatsLogger
+	Configs              SchemaConfigLoader
+	EventMetadataConfigs EventMetadataConfigLoader
+	stats                reporter.StatsLogger
 }
 
 type nontrackedEvent struct {
@@ -28,12 +29,12 @@ type nontrackedEvent struct {
 }
 
 // NewRedshiftTransformer creates a new RedshiftTransformer using the given SchemaConfigLoader and EventMetadataConfigLoader
-// func NewRedshiftTransformer(configs SchemaConfigLoader, eventMetadataConfigs EventMetadataConfigLoader, stats reporter.StatsLogger) Transformer {
-func NewRedshiftTransformer(configs SchemaConfigLoader, stats reporter.StatsLogger) Transformer {
+func NewRedshiftTransformer(configs SchemaConfigLoader, eventMetadataConfigs EventMetadataConfigLoader, stats reporter.StatsLogger) Transformer {
+	// func NewRedshiftTransformer(configs SchemaConfigLoader, stats reporter.StatsLogger) Transformer {
 	return &RedshiftTransformer{
-		Configs: configs,
-		// EventMetadataConfigs: eventMetadataConfigs,
-		stats: stats,
+		Configs:              configs,
+		EventMetadataConfigs: eventMetadataConfigs,
+		stats:                stats,
 	}
 }
 
@@ -137,7 +138,11 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 
 	// CURRENT TASK: get expected edge type from Blueprint for event, then
 	// Actually check it here
-	// expectedEdgeType, err := t.Configs.GetMetadataValueByType(event.Event, scoop_protocol.EDGE_TYPE)
+	expectedEdgeType, err := t.EventMetadataConfigs.GetMetadataValueByType(event.Event, string(scoop_protocol.EDGE_TYPE))
+
+	if expectedEdgeType != event.EdgeType {
+		t.stats.IncrBy(fmt.Sprintf("edge-type-mismatch.%s.%s.%s", event.Event, event.EdgeType, expectedEdgeType), 1)
+	}
 
 	if event.EdgeType == spade.INTERNAL_EDGE || event.EdgeType == spade.EXTERNAL_EDGE {
 		t.stats.IncrBy(fmt.Sprintf("edge-type.%s.%s", event.Event, event.EdgeType), 1)

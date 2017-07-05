@@ -2,7 +2,6 @@ package eventmetadata
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -14,6 +13,18 @@ import (
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/transformer"
 )
+
+// StaticLoader is a static set of transformers and versions.
+type StaticLoader struct {
+	configs scoop_protocol.EventMetadataConfig
+}
+
+// NewStaticLoader creates a StaticLoader from the given event metadata config
+func NewStaticLoader(config scoop_protocol.EventMetadataConfig) *StaticLoader {
+	return &StaticLoader{
+		configs: config,
+	}
+}
 
 // DynamicLoader fetches configs on an interval, with stats on the fetching process.
 type DynamicLoader struct {
@@ -56,15 +67,34 @@ func NewDynamicLoader(
 	d.configs = config
 
 	logger.Info("[Fred]config_loader.go NewDyanmicLoader")
-	logger.Info(config.Metadata["spade_testing_3"])
+	logger.Info(config.Metadata["minute-watched"])
 	return &d, nil
 }
 
-// GetMetadataValueByType returns the metadata value given an eventName and metadataType.
+// GetMetadataValueByType returns the metadata value given an eventName and metadataType
+func (s *StaticLoader) GetMetadataValueByType(eventName string, metadataType string) (string, error) {
+	if metadataType != string(scoop_protocol.COMMENT) && metadataType != string(scoop_protocol.EDGE_TYPE) {
+		return "", transformer.ErrInvalidMetadataType{
+			What: fmt.Sprintf("%s is not a valid metadata type", metadataType),
+		}
+	}
+
+	if eventMetadata, found := s.configs.Metadata[eventName]; found {
+		if metadataRow, exists := eventMetadata[metadataType]; exists {
+			return metadataRow.MetadataValue, nil
+		}
+	}
+
+	return "", transformer.ErrNotTracked{
+		What: fmt.Sprintf("%s is not being tracked", eventName),
+	}
+}
+
+// GetMetadataValueByType returns the metadata value given an eventName and metadataType
 func (d *DynamicLoader) GetMetadataValueByType(eventName string, metadataType string) (string, error) {
 	if metadataType != string(scoop_protocol.COMMENT) && metadataType != string(scoop_protocol.EDGE_TYPE) {
 		return "", transformer.ErrInvalidMetadataType{
-			What: fmt.Sprintf("%s is not being tracked", eventName),
+			What: fmt.Sprintf("%s is not a valid metadata type", metadataType),
 		}
 	}
 
@@ -74,8 +104,10 @@ func (d *DynamicLoader) GetMetadataValueByType(eventName string, metadataType st
 		}
 	}
 
-	// Update error later
-	return "", errors.New("Not found")
+	// return "", errors.New("Not found")
+	return "", transformer.ErrNotTracked{
+		What: fmt.Sprintf("%s is not being tracked", eventName),
+	}
 	// if transformArray, exists := d.configs[eventName]; exists {
 	// 	return transformArray, nil
 	// }

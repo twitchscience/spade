@@ -167,7 +167,7 @@ func newProcessor() *spadeProcessor {
 	kinesisConfigLoader := createKinesisConfigLoader(kinesisConfigFetcher, reporterStats, dynamicMultee, session)
 	eventMetadataLoader := createEventMetadataLoader(eventMetadataFetcher, reporterStats)
 
-	processorPool := processor.BuildProcessorPool(schemaLoader, spadeReporter, multee, reporterStats)
+	processorPool := processor.BuildProcessorPool(schemaLoader, eventMetadataLoader, spadeReporter, multee, reporterStats)
 	processorPool.StartListeners()
 
 	deglobberPool := deglobber.NewPool(deglobber.PoolConfig{
