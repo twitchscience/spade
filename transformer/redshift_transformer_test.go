@@ -103,16 +103,13 @@ func (s *testLoader) GetVersionForEvent(eventName string) int {
 	return 0
 }
 
-func (s *testEventMetadataLoader) GetMetadataValueByType(eventName string, metadataType string) (string, error) {
+func (s *testEventMetadataLoader) GetMetadataValueByType(eventName string, metadataType string) string {
 	if eventMetadata, found := s.configs[eventName]; found {
 		if metadata, exists := eventMetadata[metadataType]; exists {
-			return metadata, nil
+			return metadata
 		}
-		return "", nil
 	}
-	return "", ErrNotTracked{
-		What: fmt.Sprintf("%s is not being tracked", eventName),
-	}
+	return ""
 }
 
 func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writer.WriteRequest) {

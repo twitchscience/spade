@@ -18,5 +18,5 @@ type SchemaConfigLoader interface {
 
 // EventMetadataConfigLoader returns event metadata for a given event and metadata type
 type EventMetadataConfigLoader interface {
-	GetMetadataValueByType(string, string) (string, error)
+	GetMetadataValueByType(string, string) string
 }

@@ -135,18 +135,14 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 		return "", nil, err
 	}
 
-	expectedEdgeType, err := t.EventMetadataConfigs.GetMetadataValueByType(event.Event, string(scoop_protocol.EDGE_TYPE))
-	if err != nil {
-		return "", nil, err
-	}
-
 	if event.EdgeType == spade.INTERNAL_EDGE || event.EdgeType == spade.EXTERNAL_EDGE {
 		t.stats.IncrBy(fmt.Sprintf("edge-type.%s.%s", event.Event, event.EdgeType), 1)
 	} else {
 		logger.WithField("edgeType", event.EdgeType).Error("Invalid edge type")
 	}
 
-	if expectedEdgeType != event.EdgeType {
+	expectedEdgeType := t.EventMetadataConfigs.GetMetadataValueByType(event.Event, string(scoop_protocol.EDGE_TYPE))
+	if expectedEdgeType != "" && expectedEdgeType != event.EdgeType {
 		t.stats.IncrBy(fmt.Sprintf("edge-type-mismatch.%s.%s.%s", event.Event, event.EdgeType, expectedEdgeType), 1)
 	}
 	// Always replace the timestamp with server Time

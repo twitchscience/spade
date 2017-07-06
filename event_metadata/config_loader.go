@@ -2,7 +2,6 @@ package eventmetadata
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"time"
@@ -11,7 +10,6 @@ import (
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/reporter"
-	"github.com/twitchscience/spade/transformer"
 )
 
 // StaticLoader is a static set of transformers and versions.
@@ -62,29 +60,23 @@ func NewDynamicLoader(
 }
 
 // GetMetadataValueByType returns the metadata value given an eventName and metadataType
-func (s *StaticLoader) GetMetadataValueByType(eventName string, metadataType string) (string, error) {
+func (s *StaticLoader) GetMetadataValueByType(eventName string, metadataType string) string {
 	if eventMetadata, found := s.configs.Metadata[eventName]; found {
 		if metadataRow, exists := eventMetadata[metadataType]; exists {
-			return metadataRow.MetadataValue, nil
+			return metadataRow.MetadataValue
 		}
-		return "", nil
 	}
-	return "", transformer.ErrNotTracked{
-		What: fmt.Sprintf("%s is not being tracked", eventName),
-	}
+	return ""
 }
 
 // GetMetadataValueByType returns the metadata value given an eventName and metadataType
-func (d *DynamicLoader) GetMetadataValueByType(eventName string, metadataType string) (string, error) {
+func (d *DynamicLoader) GetMetadataValueByType(eventName string, metadataType string) string {
 	if eventMetadata, found := d.configs.Metadata[eventName]; found {
 		if metadataRow, exists := eventMetadata[metadataType]; exists {
-			return metadataRow.MetadataValue, nil
+			return metadataRow.MetadataValue
 		}
-		return "", nil
 	}
-	return "", transformer.ErrNotTracked{
-		What: fmt.Sprintf("%s is not being tracked", eventName),
-	}
+	return ""
 }
 
 func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) (scoop_protocol.EventMetadataConfig, error) {
