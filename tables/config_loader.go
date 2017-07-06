@@ -72,7 +72,6 @@ func (s *StaticLoader) GetColumnsForEvent(eventName string) ([]transformer.Redsh
 	if transformArray, exists := s.configs[eventName]; exists {
 		return transformArray, nil
 	}
-	logger.Error("Config Loader Static ErrNotTracked")
 	return nil, transformer.ErrNotTracked{
 		What: fmt.Sprintf("%s is not being tracked", eventName),
 	}
@@ -92,7 +91,6 @@ func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) (map[string][]t
 	var versions map[string]int
 	for i := 1; i < (n + 1); i++ {
 		config, versions, err = d.pullConfigIn()
-		// Add edge type here
 		if err == nil {
 			return config, versions, nil
 		}
@@ -112,7 +110,7 @@ func (d *DynamicLoader) pullConfigIn() (map[string][]transformer.RedshiftType, m
 		return nil, nil, err
 	}
 
-	newConfigs, newVersions, err := tables.CompileForParsing(d.tConfigs) // Add edge type here
+	newConfigs, newVersions, err := tables.CompileForParsing(d.tConfigs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -132,7 +130,6 @@ func (d *DynamicLoader) GetColumnsForEvent(eventName string) ([]transformer.Reds
 	if transformArray, exists := d.configs[eventName]; exists {
 		return transformArray, nil
 	}
-	logger.Error("Config Loader Dynamic ErrNotTracked")
 	return nil, transformer.ErrNotTracked{
 		What: fmt.Sprintf("%s is not being tracked", eventName),
 	}

@@ -110,7 +110,7 @@ func ValidateFetchedEventMetadataConfig(b []byte) error {
 	var cfgs scoop_protocol.EventMetadataConfig
 	err := json.Unmarshal(b, &cfgs)
 	if err != nil {
-		return fmt.Errorf("Result not a valid []EventMetadataConfig: %s; error: %s", string(b), err)
+		return fmt.Errorf("Result not a valid EventMetadataConfig: %s; error: %s", string(b), err)
 	}
 	return nil
 }
