@@ -10,7 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
@@ -66,9 +65,6 @@ func timeoutDialer(timeout time.Duration) func(net, addr string) (net.Conn, erro
 
 // New returns a ConfigFetcher that reads configs from the given URL.
 func New(url string, validator func(b []byte) error) ConfigFetcher {
-	if url == "" {
-		logger.Debug("URL IS EMPTY")
-	}
 	return &fetcher{
 		hc: &http.Client{
 			Transport: &http.Transport{
@@ -111,8 +107,6 @@ func ValidateFetchedEventMetadataConfig(b []byte) error {
 	if len(b) == 0 {
 		return fmt.Errorf("There are no bytes to validate event metadata config")
 	}
-	// TEMP: change back to [] when /allschemas endpoint is done
-	// var cfgs []scoop_protocol.EventMetadataConfig
 	var cfgs scoop_protocol.EventMetadataConfig
 	err := json.Unmarshal(b, &cfgs)
 	if err != nil {
@@ -139,8 +133,6 @@ func (f *fetcher) FetchAndWrite(src io.ReadCloser, dst io.WriteCloser) error {
 // Fetch returns a reader for the config.
 func (f *fetcher) Fetch() (io.ReadCloser, error) {
 	resp, err := f.hc.Get(f.url)
-	logger.Info("[Fred] f.url")
-	logger.Info(f.url)
 	if err != nil {
 		return nil, err
 	}

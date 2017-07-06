@@ -30,7 +30,6 @@ type nontrackedEvent struct {
 
 // NewRedshiftTransformer creates a new RedshiftTransformer using the given SchemaConfigLoader and EventMetadataConfigLoader
 func NewRedshiftTransformer(configs SchemaConfigLoader, eventMetadataConfigs EventMetadataConfigLoader, stats reporter.StatsLogger) Transformer {
-	// func NewRedshiftTransformer(configs SchemaConfigLoader, stats reporter.StatsLogger) Transformer {
 	return &RedshiftTransformer{
 		Configs:              configs,
 		EventMetadataConfigs: eventMetadataConfigs,
@@ -136,18 +135,9 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 		return "", nil, err
 	}
 
-	// CURRENT TASK: get expected edge type from Blueprint for event, then
-	// Actually check it here
 	expectedEdgeType, err := t.EventMetadataConfigs.GetMetadataValueByType(event.Event, string(scoop_protocol.EDGE_TYPE))
 	if err != nil {
 		return "", nil, err
-	}
-
-	logger.Error(fmt.Sprintf("Transform: event: %s, Actual Edge: %s, Expected Edge: %s", event.Event, event.EdgeType, expectedEdgeType))
-	if expectedEdgeType != event.EdgeType {
-		// logger.Error(sprintf("Edge Type Mismatch: "))
-		logger.Error(fmt.Sprintf("+1 on edge-type-mismatch.%s.%s.%s", event.Event, event.EdgeType, expectedEdgeType))
-		t.stats.IncrBy(fmt.Sprintf("edge-type-mismatch.%s.%s.%s", event.Event, event.EdgeType, expectedEdgeType), 1)
 	}
 
 	if event.EdgeType == spade.INTERNAL_EDGE || event.EdgeType == spade.EXTERNAL_EDGE {
@@ -156,6 +146,9 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 		logger.WithField("edgeType", event.EdgeType).Error("Invalid edge type")
 	}
 
+	if expectedEdgeType != event.EdgeType {
+		t.stats.IncrBy(fmt.Sprintf("edge-type-mismatch.%s.%s.%s", event.Event, event.EdgeType, expectedEdgeType), 1)
+	}
 	// Always replace the timestamp with server Time
 	if _, ok := temp["time"]; ok {
 		temp["client_time"] = temp["time"]

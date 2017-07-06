@@ -33,7 +33,6 @@ type SpadeProcessorPool struct {
 }
 
 // BuildProcessorPool builds a new SpadeProcessorPool.
-// TODO: !!! ADD EVENTMETADATCONFIG
 func BuildProcessorPool(schemaConfigs transformer.SchemaConfigLoader, eventMetadataConfigs transformer.EventMetadataConfigLoader,
 	rep reporter.Reporter, writer writer.SpadeWriter, stats reporter.StatsLogger) *SpadeProcessorPool {
 
@@ -55,7 +54,6 @@ func BuildProcessorPool(schemaConfigs transformer.SchemaConfigLoader, eventMetad
 
 	for i := 0; i < nTransformers; i++ {
 		transformers[i] = &RequestTransformer{
-			// HERE: TO DO: GOTTA ADD EVENTMETADATCONFIG
 			t:    transformer.NewRedshiftTransformer(schemaConfigs, eventMetadataConfigs, stats),
 			in:   transport,
 			done: make(chan bool),

@@ -49,8 +49,6 @@ const (
 	EDGE_TYPE EventMetadataType = "edge_type"
 )
 
-// Update scoop_protocol (the actual repo)!!!
-
 type EventMetadataRow struct {
 	MetadataValue string
 	TS            time.Time

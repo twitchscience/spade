@@ -33,5 +33,3 @@ func main() {
 		logger.WithError(err).Fatal("Failed to fetch config")
 	}
 }
-
-// Fiugure out what this file does later...

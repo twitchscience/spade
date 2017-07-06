@@ -182,11 +182,6 @@ func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.Sta
 }
 
 func createEventMetadataLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger) *eventMetadataConfig.DynamicLoader {
-	logger.Info("[Fred] pieces.go createEventMetadataLoader begin")
-	logger.Info(fetcher)
-	logger.Info(config.EventMetadataReloadFrequency.Duration)
-	logger.Info(config.EventMetadataRetryDelay.Duration)
-
 	loader, err := eventMetadataConfig.NewDynamicLoader(fetcher, config.EventMetadataReloadFrequency.Duration,
 		config.EventMetadataRetryDelay.Duration, stats)
 	if err != nil {

@@ -11,8 +11,6 @@ import (
 
 	"github.com/cactus/go-statsd-client/statsd"
 
-	"github.com/twitchscience/aws_utils/logger"
-	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/lookup"
 	"github.com/twitchscience/spade/parser"
@@ -106,19 +104,12 @@ func (s *testLoader) GetVersionForEvent(eventName string) int {
 }
 
 func (s *testEventMetadataLoader) GetMetadataValueByType(eventName string, metadataType string) (string, error) {
-	if metadataType != string(scoop_protocol.COMMENT) && metadataType != string(scoop_protocol.EDGE_TYPE) {
-		return "", ErrInvalidMetadataType{
-			What: fmt.Sprintf("%s is not a valid metadata type", metadataType),
-		}
-	}
 	if eventMetadata, found := s.configs[eventName]; found {
 		if metadata, exists := eventMetadata[metadataType]; exists {
 			return metadata, nil
 		}
 		return "", nil
 	}
-	logger.Error("|" + eventName + "|")
-	logger.Error(s.configs)
 	return "", ErrNotTracked{
 		What: fmt.Sprintf("%s is not being tracked", eventName),
 	}
@@ -153,7 +144,6 @@ func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writ
 		},
 	}
 	_stats, _ := statsd.NewNoop()
-	// Update _transformer = after to add eventMetadataConfig
 	_transformer := NewRedshiftTransformer(config, eventMetadataConfig, reporter.WrapCactusStatter(_stats, 0.1))
 	if !reflect.DeepEqual(_transformer.Consume(input), expected) {
 		t.Logf("Got \n%v \nexpected \n%v\n", *_transformer.Consume(input), expected)
