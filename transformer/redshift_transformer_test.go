@@ -11,6 +11,7 @@ import (
 
 	"github.com/cactus/go-statsd-client/statsd"
 
+	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/lookup"
@@ -114,7 +115,10 @@ func (s *testEventMetadataLoader) GetMetadataValueByType(eventName string, metad
 		if metadata, exists := eventMetadata[metadataType]; exists {
 			return metadata, nil
 		}
+		return "", nil
 	}
+	logger.Error("|" + eventName + "|")
+	logger.Error(s.configs)
 	return "", ErrNotTracked{
 		What: fmt.Sprintf("%s is not being tracked", eventName),
 	}
@@ -145,6 +149,7 @@ func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writ
 				"edge_type": "internal",
 				"comment":   "test comment",
 			},
+			"login": map[string]string{},
 		},
 	}
 	_stats, _ := statsd.NewNoop()

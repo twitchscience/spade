@@ -72,6 +72,7 @@ func (s *StaticLoader) GetColumnsForEvent(eventName string) ([]transformer.Redsh
 	if transformArray, exists := s.configs[eventName]; exists {
 		return transformArray, nil
 	}
+	logger.Error("Config Loader Static ErrNotTracked")
 	return nil, transformer.ErrNotTracked{
 		What: fmt.Sprintf("%s is not being tracked", eventName),
 	}
@@ -131,6 +132,7 @@ func (d *DynamicLoader) GetColumnsForEvent(eventName string) ([]transformer.Reds
 	if transformArray, exists := d.configs[eventName]; exists {
 		return transformArray, nil
 	}
+	logger.Error("Config Loader Dynamic ErrNotTracked")
 	return nil, transformer.ErrNotTracked{
 		What: fmt.Sprintf("%s is not being tracked", eventName),
 	}

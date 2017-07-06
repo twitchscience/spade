@@ -66,6 +66,7 @@ var (
 						MetadataValue: "test comment",
 					},
 				},
+				"login": {},
 			},
 		},
 	)

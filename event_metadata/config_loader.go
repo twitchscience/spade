@@ -73,18 +73,21 @@ func NewDynamicLoader(
 
 // GetMetadataValueByType returns the metadata value given an eventName and metadataType
 func (s *StaticLoader) GetMetadataValueByType(eventName string, metadataType string) (string, error) {
+	// logger.Info(eventName)
+	// logger.Info(metadataType)
 	if metadataType != string(scoop_protocol.COMMENT) && metadataType != string(scoop_protocol.EDGE_TYPE) {
 		return "", transformer.ErrInvalidMetadataType{
 			What: fmt.Sprintf("%s is not a valid metadata type", metadataType),
 		}
 	}
-
+	// logger.Info(s.configs.Metadata)
 	if eventMetadata, found := s.configs.Metadata[eventName]; found {
 		if metadataRow, exists := eventMetadata[metadataType]; exists {
 			return metadataRow.MetadataValue, nil
 		}
+		return "", nil
 	}
-
+	// logger.Error("Static: ErrNotTracked")
 	return "", transformer.ErrNotTracked{
 		What: fmt.Sprintf("%s is not being tracked", eventName),
 	}
@@ -103,6 +106,7 @@ func (d *DynamicLoader) GetMetadataValueByType(eventName string, metadataType st
 			return metadataRow.MetadataValue, nil
 		}
 	}
+	// logger.Error("Dynamic: ErrNotTracked")
 
 	// return "", errors.New("Not found")
 	return "", transformer.ErrNotTracked{
