@@ -2,7 +2,6 @@ package eventmetadata
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"time"
@@ -11,7 +10,6 @@ import (
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/reporter"
-	"github.com/twitchscience/spade/transformer"
 )
 
 // StaticLoader is a static set of transformers and versions.
@@ -69,9 +67,10 @@ func (s *StaticLoader) GetMetadataValueByType(eventName string, metadataType str
 		}
 		return "", nil
 	}
-	return "", transformer.ErrNotTracked{
-		What: fmt.Sprintf("%s is not being tracked", eventName),
-	}
+	return "", nil
+	// return "", transformer.ErrNotTracked{
+	// 	What: fmt.Sprintf("%s is not being tracked", eventName),
+	// }
 }
 
 // GetMetadataValueByType returns the metadata value given an eventName and metadataType
@@ -82,9 +81,10 @@ func (d *DynamicLoader) GetMetadataValueByType(eventName string, metadataType st
 		}
 		return "", nil
 	}
-	return "", transformer.ErrNotTracked{
-		What: fmt.Sprintf("%s is not being tracked", eventName),
-	}
+	return "", nil
+	// return "", transformer.ErrNotTracked{
+	// 	What: fmt.Sprintf("%s is not being tracked", eventName),
+	// }
 }
 
 func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) (scoop_protocol.EventMetadataConfig, error) {

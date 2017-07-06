@@ -110,9 +110,10 @@ func (s *testEventMetadataLoader) GetMetadataValueByType(eventName string, metad
 		}
 		return "", nil
 	}
-	return "", ErrNotTracked{
-		What: fmt.Sprintf("%s is not being tracked", eventName),
-	}
+	return "", nil
+	// return "", ErrNotTracked{
+	// 	What: fmt.Sprintf("%s is not being tracked", eventName),
+	// }
 }
 
 func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writer.WriteRequest) {
