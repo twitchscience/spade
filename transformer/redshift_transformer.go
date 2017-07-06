@@ -146,7 +146,7 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 	logger.Error(fmt.Sprintf("Transform: event: %s, Actual Edge: %s, Expected Edge: %s", event.Event, event.EdgeType, expectedEdgeType))
 	if expectedEdgeType != event.EdgeType {
 		// logger.Error(sprintf("Edge Type Mismatch: "))
-		Logger.Error(fmt.Sprintf("+1 on edge-type-mismatch.%s.%s.%s", event.Event, event.EdgeType, expectedEdgeType))
+		logger.Error(fmt.Sprintf("+1 on edge-type-mismatch.%s.%s.%s", event.Event, event.EdgeType, expectedEdgeType))
 		t.stats.IncrBy(fmt.Sprintf("edge-type-mismatch.%s.%s.%s", event.Event, event.EdgeType, expectedEdgeType), 1)
 	}
 
