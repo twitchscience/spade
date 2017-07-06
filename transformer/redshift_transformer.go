@@ -131,7 +131,7 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 	temp := make(map[string]interface{}, 15)
 	decoder := json.NewDecoder(bytes.NewReader(event.Properties))
 	decoder.UseNumber()
-	if err = decoder.Decode(&temp); err != nil {
+	if err := decoder.Decode(&temp); err != nil {
 		return "", nil, err
 	}
 
