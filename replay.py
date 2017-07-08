@@ -50,8 +50,8 @@ EDGE_BUCKET = os.environ['EDGE_BUCKET']
 # COPY_OPTS copied from ingester code
 # might be worth verifying it when this script is used
 COPY_OPTS = ('''removequotes delimiter '\t' gzip escape truncatecolumns ''' +
-             '''roundec fillrecord compupdate on emptyasnull ''' +
-             '''acceptinvchars '?' trimblanks''')
+             '''roundec fillrecord compupdate off statupdate off '''
+             '''emptyasnull acceptinvchars '?' trimblanks''')
 
 
 def set_up_logging(args):
@@ -83,7 +83,8 @@ def s3_object_keys(start, end):
     return [s.key
             for prefix in get_days(start, end)
             for s in edge_objects.filter(Prefix=prefix)
-            if s.last_modified >= start]
+            if s.last_modified >= start and
+            s.last_modified - datetime.timedelta(hours=1) < end]
 
 
 def contents(key):
