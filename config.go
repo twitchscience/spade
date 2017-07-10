@@ -98,6 +98,8 @@ func loadConfig() {
 	config.SchemaRetryDelay = jsonutil.FromDuration(2 * time.Second)
 	config.KinesisConfigReloadFrequency = jsonutil.FromDuration(10 * time.Minute)
 	config.KinesisConfigRetryDelay = jsonutil.FromDuration(2 * time.Second)
+	config.EventMetadataReloadFrequency = jsonutil.FromDuration(5 * time.Minute)
+	config.EventMetadataRetryDelay = jsonutil.FromDuration(2 * time.Second)
 
 	entry := logger.WithField("config_file", *configFilename)
 	f, err := os.Open(*configFilename)
@@ -135,6 +137,7 @@ func validateConfig() error {
 	for _, str := range []string{
 		config.BlueprintSchemasURL,
 		config.BlueprintKinesisConfigsURL,
+		config.BlueprintAllMetadataURL,
 		config.AceBucketName,
 		config.NonTrackedBucketName,
 		config.Geoip.ConfigBucket,
