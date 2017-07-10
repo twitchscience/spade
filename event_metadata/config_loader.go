@@ -95,14 +95,12 @@ func (d *DynamicLoader) retryPull(n int, waitTime time.Duration) (scoop_protocol
 func (d *DynamicLoader) pullConfigIn() (scoop_protocol.EventMetadataConfig, error) {
 	configReader, err := d.fetcher.Fetch()
 	if err != nil {
-		var config scoop_protocol.EventMetadataConfig
-		return config, err
+		return scoop_protocol.EventMetadataConfig{}, err
 	}
 
 	b, err := ioutil.ReadAll(configReader)
 	if err != nil {
-		var config scoop_protocol.EventMetadataConfig
-		return config, err
+		return scoop_protocol.EventMetadataConfig{}, err
 	}
 	cfgs := scoop_protocol.EventMetadataConfig{
 		Metadata: make(map[string](map[string]scoop_protocol.EventMetadataRow)),
