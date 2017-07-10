@@ -158,7 +158,10 @@ func NewKinesisWriter(
 			func(provider *stscreds.AssumeRoleProvider) {
 				provider.ExpiryWindow = time.Minute
 			})
-		session = session.Copy(&aws.Config{Credentials: credentials})
+		session = session.Copy(&aws.Config{
+			Credentials: credentials, Region: aws.String(config.StreamRegion)})
+	} else if config.StreamRegion != aws.StringValue(session.Config.Region) {
+		session = session.Copy(&aws.Config{Region: aws.String(config.StreamRegion)})
 	}
 	wStatter := NewStatter(statter, config.StreamName)
 	limiter := newTaskRateLimiter(errorsBeforeThrottling, secondsPerError)
