@@ -35,6 +35,7 @@ import (
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/deglobber"
+	"github.com/twitchscience/spade/event_metadata"
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/kinesisconfigs"
 	jsonLog "github.com/twitchscience/spade/parser/json"
@@ -81,6 +82,7 @@ type spadeProcessor struct {
 	blueprintUploaderPool *aws_uploader.UploaderPool
 	tCache                *elastimemcache.Client
 	kinesisConfigLoader   *kinesisconfigs.DynamicLoader
+	eventMetadataLoader   *eventmetadata.DynamicLoader
 
 	rotation <-chan time.Time
 	sigc     chan os.Signal
@@ -148,14 +150,16 @@ func newProcessor() *spadeProcessor {
 
 	schemaFetcher := fetcher.New(config.BlueprintSchemasURL, fetcher.ValidateFetchedSchema)
 	kinesisConfigFetcher := fetcher.New(config.BlueprintKinesisConfigsURL, fetcher.ValidateFetchedKinesisConfig)
+	eventMetadataFetcher := fetcher.New(config.BlueprintAllMetadataURL, fetcher.ValidateFetchedEventMetadataConfig)
 	localCache := lru.New(1000, time.Duration(config.LRULifetimeSeconds)*time.Second)
 	remoteCache := createTransformerCache(session, config.TransformerCacheCluster)
 	tConfigs := createMappingTransformerConfigs(
 		valueFetchers, localCache, remoteCache, config.TransformerFetchers, reporterStats)
 	schemaLoader := createSchemaLoader(schemaFetcher, reporterStats, tConfigs)
 	kinesisConfigLoader := createKinesisConfigLoader(kinesisConfigFetcher, reporterStats, dynamicMultee, session)
+	eventMetadataLoader := createEventMetadataLoader(eventMetadataFetcher, reporterStats)
 
-	processorPool := processor.BuildProcessorPool(schemaLoader, spadeReporter, multee, reporterStats)
+	processorPool := processor.BuildProcessorPool(schemaLoader, eventMetadataLoader, spadeReporter, multee, reporterStats)
 	processorPool.StartListeners()
 
 	deglobberPool := deglobber.NewPool(deglobber.PoolConfig{
@@ -183,6 +187,7 @@ func newProcessor() *spadeProcessor {
 		sigc:                  sigc,
 		tCache:                remoteCache,
 		kinesisConfigLoader:   kinesisConfigLoader,
+		eventMetadataLoader:   eventMetadataLoader,
 	}
 }
 

@@ -102,6 +102,19 @@ func ValidateFetchedKinesisConfig(b []byte) error {
 	return nil
 }
 
+// ValidateFetchedEventMetadataConfig validates a fetched event metadata
+func ValidateFetchedEventMetadataConfig(b []byte) error {
+	if len(b) == 0 {
+		return fmt.Errorf("There are no bytes to validate event metadata config")
+	}
+	var cfgs scoop_protocol.EventMetadataConfig
+	err := json.Unmarshal(b, &cfgs)
+	if err != nil {
+		return fmt.Errorf("Result not a valid EventMetadataConfig: %s; error: %s", string(b), err)
+	}
+	return nil
+}
+
 // FetchAndWrite reads a config, validates it with the provided validator and writes it out.
 func (f *fetcher) FetchAndWrite(src io.ReadCloser, dst io.WriteCloser) error {
 	b, err := ioutil.ReadAll(src)

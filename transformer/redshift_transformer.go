@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/twitchscience/aws_utils/logger"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
@@ -17,8 +18,9 @@ import (
 
 // RedshiftTransformer turns MixpanelEvents into WriteRequests using the given SchemaConfigLoader.
 type RedshiftTransformer struct {
-	Configs SchemaConfigLoader
-	stats   reporter.StatsLogger
+	Configs              SchemaConfigLoader
+	EventMetadataConfigs EventMetadataConfigLoader
+	stats                reporter.StatsLogger
 }
 
 type nontrackedEvent struct {
@@ -26,11 +28,12 @@ type nontrackedEvent struct {
 	Properties json.RawMessage `json:"properties"`
 }
 
-// NewRedshiftTransformer creates a new RedshiftTransformer using the given SchemaConfigLoader.
-func NewRedshiftTransformer(configs SchemaConfigLoader, stats reporter.StatsLogger) Transformer {
+// NewRedshiftTransformer creates a new RedshiftTransformer using the given SchemaConfigLoader and EventMetadataConfigLoader
+func NewRedshiftTransformer(configs SchemaConfigLoader, eventMetadataConfigs EventMetadataConfigLoader, stats reporter.StatsLogger) Transformer {
 	return &RedshiftTransformer{
-		Configs: configs,
-		stats:   stats,
+		Configs:              configs,
+		EventMetadataConfigs: eventMetadataConfigs,
+		stats:                stats,
 	}
 }
 
@@ -128,7 +131,7 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 	temp := make(map[string]interface{}, 15)
 	decoder := json.NewDecoder(bytes.NewReader(event.Properties))
 	decoder.UseNumber()
-	if err := decoder.Decode(&temp); err != nil {
+	if err = decoder.Decode(&temp); err != nil {
 		return "", nil, err
 	}
 
@@ -138,6 +141,10 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 		logger.WithField("edgeType", event.EdgeType).Error("Invalid edge type")
 	}
 
+	expectedEdgeType := t.EventMetadataConfigs.GetMetadataValueByType(event.Event, string(scoop_protocol.EDGE_TYPE))
+	if expectedEdgeType != "" && expectedEdgeType != event.EdgeType {
+		t.stats.IncrBy(fmt.Sprintf("edge-type-mismatch.%s.%s.%s", event.Event, event.EdgeType, expectedEdgeType), 1)
+	}
 	// Always replace the timestamp with server Time
 	if _, ok := temp["time"]; ok {
 		temp["client_time"] = temp["time"]

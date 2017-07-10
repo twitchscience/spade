@@ -11,6 +11,8 @@ import (
 
 	"github.com/cactus/go-statsd-client/statsd"
 
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
+	eventMetadatConfig "github.com/twitchscience/spade/event_metadata"
 	"github.com/twitchscience/spade/parser"
 	jsonLog "github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/reporter"
@@ -53,7 +55,22 @@ var (
 			"login": 42,
 		},
 	)
-	_transformer = transformer.NewRedshiftTransformer(_config, _cactus)
+	_eventMetadataconfig = eventMetadatConfig.NewStaticLoader(
+		scoop_protocol.EventMetadataConfig{
+			Metadata: map[string](map[string]scoop_protocol.EventMetadataRow){
+				"test-event": {
+					"edge_type": scoop_protocol.EventMetadataRow{
+						MetadataValue: "internal",
+					},
+					"comment": scoop_protocol.EventMetadataRow{
+						MetadataValue: "test comment",
+					},
+				},
+				"login": {},
+			},
+		},
+	)
+	_transformer = transformer.NewRedshiftTransformer(_config, _eventMetadataconfig, _cactus)
 	_parser      = parser.BuildSpadeParser()
 )
 
