@@ -82,6 +82,10 @@ type testLoader struct {
 	Versions map[string]int
 }
 
+type testEventMetadataLoader struct {
+	configs map[string](map[string]string)
+}
+
 func (s *testLoader) Refresh() error {
 	return nil
 }
@@ -97,6 +101,15 @@ func (s *testLoader) GetVersionForEvent(eventName string) int {
 		return version
 	}
 	return 0
+}
+
+func (s *testEventMetadataLoader) GetMetadataValueByType(eventName string, metadataType string) string {
+	if eventMetadata, found := s.configs[eventName]; found {
+		if metadata, exists := eventMetadata[metadataType]; exists {
+			return metadata
+		}
+	}
+	return ""
 }
 
 func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writer.WriteRequest) {
@@ -118,8 +131,17 @@ func transformerRunner(t *testing.T, input *parser.MixpanelEvent, expected *writ
 			"login": 42,
 		},
 	}
+	eventMetadataConfig := &testEventMetadataLoader{
+		configs: map[string](map[string]string){
+			"test-event": map[string]string{
+				"edge_type": "internal",
+				"comment":   "test comment",
+			},
+			"login": map[string]string{},
+		},
+	}
 	_stats, _ := statsd.NewNoop()
-	_transformer := NewRedshiftTransformer(config, reporter.WrapCactusStatter(_stats, 0.1))
+	_transformer := NewRedshiftTransformer(config, eventMetadataConfig, reporter.WrapCactusStatter(_stats, 0.1))
 	if !reflect.DeepEqual(_transformer.Consume(input), expected) {
 		t.Logf("Got \n%v \nexpected \n%v\n", *_transformer.Consume(input), expected)
 		t.Logf("Transformer output: %#v", _transformer.Consume(input).Record)

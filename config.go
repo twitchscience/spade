@@ -27,6 +27,8 @@ var config struct {
 	BlueprintSchemasURL string
 	// BlueprintKinesisConfigsURL is the url to blueprint kinesisconfigs
 	BlueprintKinesisConfigsURL string
+	// BlueprintAllMetadataURL is the url to blueprint metadata for all events
+	BlueprintAllMetadataURL string
 	// ProcessorErrorTopicARN is the arn of the SNS topic for processor errors
 	ProcessorErrorTopicARN string
 	// AceTopicARN is the arn of the SNS topic for events going to Ace
@@ -84,6 +86,10 @@ var config struct {
 	KinesisConfigReloadFrequency jsonutil.Duration
 	// How long to sleep if there's an error loading kinesis configs from Blueprint.
 	KinesisConfigRetryDelay jsonutil.Duration
+	// How often to load event metadata from Blueprint.
+	EventMetadataReloadFrequency jsonutil.Duration
+	// How long to sleep if there's an error loading event metadata from Blueprint.
+	EventMetadataRetryDelay jsonutil.Duration
 }
 
 func loadConfig() {
@@ -92,6 +98,8 @@ func loadConfig() {
 	config.SchemaRetryDelay = jsonutil.FromDuration(2 * time.Second)
 	config.KinesisConfigReloadFrequency = jsonutil.FromDuration(10 * time.Minute)
 	config.KinesisConfigRetryDelay = jsonutil.FromDuration(2 * time.Second)
+	config.EventMetadataReloadFrequency = jsonutil.FromDuration(5 * time.Minute)
+	config.EventMetadataRetryDelay = jsonutil.FromDuration(2 * time.Second)
 
 	entry := logger.WithField("config_file", *configFilename)
 	f, err := os.Open(*configFilename)
@@ -129,6 +137,7 @@ func validateConfig() error {
 	for _, str := range []string{
 		config.BlueprintSchemasURL,
 		config.BlueprintKinesisConfigsURL,
+		config.BlueprintAllMetadataURL,
 		config.AceBucketName,
 		config.NonTrackedBucketName,
 		config.Geoip.ConfigBucket,

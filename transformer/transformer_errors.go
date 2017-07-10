@@ -7,8 +7,6 @@ import (
 var (
 	// ErrEmptyRequest indicates the Event field is not set.
 	ErrEmptyRequest = errors.New("Event field is not set")
-	// ErrInvalidEdgeType indicates the event has an unknown edge type.
-	ErrInvalidEdgeType = errors.New("Edge type is invalid")
 )
 
 // ErrNotTracked indicates an event type is not tracked.
