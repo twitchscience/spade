@@ -1,5 +1,0 @@
-* Spade
-** Processor
-*** TODO investigate if we can get all column data form event w/o decoding the properties json
-** Reporter
-*** TODO investigate restructuring so that all events are 
