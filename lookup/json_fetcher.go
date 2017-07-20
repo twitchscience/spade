@@ -55,12 +55,12 @@ func validateJQ(exp string) error {
 	return nil
 }
 
-// NewJSONValueFetcher returns a *JSONValueFetcher that uses a BasicHTTPRequestHandler wrapping a
+// NewJSONValueFetcher returns a ValueFetcher that uses a BasicHTTPRequestHandler wrapping a
 // http.Client instance with the given timeout in ms to service GET requests
 func NewJSONValueFetcher(
 	config JSONValueFetcherConfig,
 	stats reporter.StatsLogger,
-) (*JSONValueFetcher, error) {
+) (ValueFetcher, error) {
 	if config.TimeoutMS < 1 {
 		return nil, errors.New("TimeoutMS needs to be a positive integer")
 	}

@@ -8,7 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
+	"github.com/aws/aws-sdk-go/service/kinesis/kinesisiface"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/kinsumer"
@@ -147,7 +148,7 @@ func configToKinsumerConfig(config Config) (kinsumer.Config, error) {
 }
 
 // NewKinesisPipe returns a newly created KinesisPipe.
-func NewKinesisPipe(session *session.Session, stats statsd.Statter, config Config) (*KinesisPipe, error) {
+func NewKinesisPipe(kinesis kinesisiface.KinesisAPI, dynamodb dynamodbiface.DynamoDBAPI, stats statsd.Statter, config Config) (*KinesisPipe, error) {
 	kinsumerConfig, err := configToKinsumerConfig(config)
 	if err != nil {
 		return nil, err
@@ -159,8 +160,9 @@ func NewKinesisPipe(session *session.Session, stats statsd.Statter, config Confi
 		return nil, err
 	}
 
-	kinsumer, err := kinsumer.NewWithSession(
-		session,
+	kinsumer, err := kinsumer.NewWithInterfaces(
+		kinesis,
+		dynamodb,
 		config.StreamName,
 		config.ApplicationName,
 		hostname,

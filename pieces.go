@@ -9,10 +9,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
+	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
+	"github.com/aws/aws-sdk-go/service/kinesis/kinesisiface"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/aws_utils/uploader"
@@ -62,27 +63,6 @@ func startELBHealthCheckListener() {
 	})
 }
 
-func createValueFetchers(
-	jsonFetchers map[string]lookup.JSONValueFetcherConfig,
-	stats reporter.StatsLogger,
-) map[string]lookup.ValueFetcher {
-
-	allFetchers := map[string]lookup.ValueFetcher{}
-	for id, config := range jsonFetchers {
-		fetcher, err := lookup.NewJSONValueFetcher(config, stats)
-		if err != nil {
-			logger.WithError(err).Fatalf("Failed to create a value fetcher with id %s", id)
-		}
-		allFetchers[id] = fetcher
-	}
-	return allFetchers
-}
-
-func createSpadeReporter(stats reporter.StatsLogger) reporter.Reporter {
-	return reporter.BuildSpadeReporter(
-		[]reporter.Tracker{&reporter.SpadeStatsdTracker{Stats: stats}})
-}
-
 func createSpadeWriter(
 	outputDir string,
 	reporter reporter.Reporter,
@@ -107,8 +87,8 @@ func createSpadeWriter(
 	return w
 }
 
-func createTransformerCache(s *session.Session, cfg elastimemcache.Config) *elastimemcache.Client {
-	tCache, err := elastimemcache.NewClientWithSession(s, cfg)
+func createTransformerCache(ec elasticacheiface.ElastiCacheAPI, cfg elastimemcache.Config) *elastimemcache.Client {
+	tCache, err := elastimemcache.NewClientWithInterface(ec, cfg)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create transformer cache")
 	}
@@ -156,7 +136,7 @@ func createSchemaLoader(
 	return loader
 }
 
-func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger, multee writer.SpadeWriterManager, session *session.Session) *kinesisconfigs.DynamicLoader {
+func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.StatsLogger, multee writer.SpadeWriterManager, kinesisFactory writer.KinesisFactory, firehoseFactory writer.FirehoseFactory) *kinesisconfigs.DynamicLoader {
 	loader, err := kinesisconfigs.NewDynamicLoader(
 		fetcher,
 		config.KinesisConfigReloadFrequency.Duration,
@@ -165,7 +145,8 @@ func createKinesisConfigLoader(fetcher fetcher.ConfigFetcher, stats reporter.Sta
 		multee,
 		func(cfg scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
 			return writer.NewKinesisWriter(
-				session,
+				kinesisFactory,
+				firehoseFactory,
 				stats.GetStatter(),
 				cfg,
 				config.KinesisWriterErrorsBeforeThrottling,
@@ -192,33 +173,30 @@ func createEventMetadataLoader(fetcher fetcher.ConfigFetcher, stats reporter.Sta
 	return loader
 }
 
-func createPipe(session *session.Session, stats statsd.Statter, replay bool) consumer.ResultPipe {
+func createPipe(kinesis kinesisiface.KinesisAPI, dynamodb dynamodbiface.DynamoDBAPI, stats statsd.Statter, replay bool) consumer.ResultPipe {
 	if replay {
 		return consumer.NewStandardInputPipe()
 	}
 
-	consumer, err := consumer.NewKinesisPipe(session, stats, config.Consumer)
+	consumer, err := consumer.NewKinesisPipe(kinesis, dynamodb, stats, config.Consumer)
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create consumer")
 	}
 	return consumer
 }
 
-func createGeoipUpdater(config *geoip.Config) *geoip.Updater {
-	session, err := session.NewSession(&aws.Config{})
-	if err != nil {
-		logger.WithError(err).Fatal("failed to create geoipupdater")
-	}
-	u := geoip.NewUpdater(time.Now(), transformer.GeoIPDB, *config, s3.New(session))
+func createGeoipUpdater(s3 s3iface.S3API, config *geoip.Config) *geoip.Updater {
+	u := geoip.NewUpdater(time.Now(), transformer.GeoIPDB, *config, s3)
 	logger.Go(u.UpdateLoop)
 	return u
 }
 
 // createStaticKinesisWriters creates the writers from JSON configs, which are static
-func createStaticKinesisWriters(multee *writer.Multee, session *session.Session, stats statsd.Statter) {
+func createStaticKinesisWriters(multee *writer.Multee, kinesisFactory writer.KinesisFactory, firehoseFactory writer.FirehoseFactory, stats statsd.Statter) {
 	for _, c := range config.KinesisOutputs {
 		w, err := writer.NewKinesisWriter(
-			session,
+			kinesisFactory,
+			firehoseFactory,
 			stats,
 			c,
 			config.KinesisWriterErrorsBeforeThrottling,

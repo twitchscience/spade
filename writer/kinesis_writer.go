@@ -113,6 +113,52 @@ type KinesisWriter struct {
 	sync.WaitGroup
 }
 
+// KinesisFactory returns a kinesis interface from a given session.
+type KinesisFactory interface {
+	New(region, role string) kinesisiface.KinesisAPI
+}
+
+// FirehoseFactory returns a firehose interface from a given session.
+type FirehoseFactory interface {
+	New(region, role string) firehoseiface.FirehoseAPI
+}
+
+// DefaultKinesisFactory returns a normal Kinesis client.
+type DefaultKinesisFactory struct {
+	Session *session.Session
+}
+
+// DefaultFirehoseFactory returns a normal Firehose client.
+type DefaultFirehoseFactory struct {
+	Session *session.Session
+}
+
+func getConfiguredSession(session *session.Session, region, role string) *session.Session {
+	if role != "" {
+		credentials := stscreds.NewCredentials(
+			session,
+			role,
+			func(provider *stscreds.AssumeRoleProvider) {
+				provider.ExpiryWindow = time.Minute
+			})
+		return session.Copy(&aws.Config{
+			Credentials: credentials, Region: aws.String(region)})
+	} else if region != "" && region != aws.StringValue(session.Config.Region) {
+		return session.Copy(&aws.Config{Region: aws.String(region)})
+	}
+	return session
+}
+
+// New returns a kinesis client configured to use the given region/role.
+func (f *DefaultKinesisFactory) New(region, role string) kinesisiface.KinesisAPI {
+	return kinesis.New(getConfiguredSession(f.Session, region, role))
+}
+
+// New returns a firehose client configured to use the given region/role.
+func (f *DefaultFirehoseFactory) New(region, role string) firehoseiface.FirehoseAPI {
+	return firehose.New(getConfiguredSession(f.Session, region, role))
+}
+
 const (
 	statPutRecordsAttempted = iota
 	statPutRecordsLength
@@ -141,7 +187,8 @@ func generateStatNames(streamName string) map[int]string {
 // NewKinesisWriter returns an instance of SpadeWriter that writes
 // events to kinesis
 func NewKinesisWriter(
-	session *session.Session,
+	kinesisFactory KinesisFactory,
+	firehoseFactory FirehoseFactory,
 	statter statsd.Statter,
 	config scoop_protocol.KinesisWriterConfig,
 	errorsBeforeThrottling int,
@@ -151,25 +198,13 @@ func NewKinesisWriter(
 		return nil, err
 	}
 	var batchWriter BatchWriter
-	if config.StreamRole != "" {
-		credentials := stscreds.NewCredentials(
-			session,
-			config.StreamRole,
-			func(provider *stscreds.AssumeRoleProvider) {
-				provider.ExpiryWindow = time.Minute
-			})
-		session = session.Copy(&aws.Config{
-			Credentials: credentials, Region: aws.String(config.StreamRegion)})
-	} else if config.StreamRegion != aws.StringValue(session.Config.Region) {
-		session = session.Copy(&aws.Config{Region: aws.String(config.StreamRegion)})
-	}
 	wStatter := NewStatter(statter, config.StreamName)
 	limiter := newTaskRateLimiter(errorsBeforeThrottling, secondsPerError)
 	switch config.StreamType {
 	case "stream":
-		batchWriter = &StreamBatchWriter{kinesis.New(session), &config, wStatter, limiter}
+		batchWriter = &StreamBatchWriter{kinesisFactory.New(config.StreamRegion, config.StreamRole), &config, wStatter, limiter}
 	case "firehose":
-		batchWriter = &FirehoseBatchWriter{firehose.New(session), &config, wStatter, limiter}
+		batchWriter = &FirehoseBatchWriter{firehoseFactory.New(config.StreamRegion, config.StreamRole), &config, wStatter, limiter}
 	default:
 		return nil, fmt.Errorf("unknown stream type: %s", config.StreamType)
 	}

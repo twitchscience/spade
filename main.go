@@ -25,8 +25,16 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
+	"github.com/aws/aws-sdk-go/service/elasticache"
+	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/aws/aws-sdk-go/service/sns"
+	"github.com/aws/aws-sdk-go/service/sns/snsiface"
+	"github.com/cactus/go-statsd-client/statsd"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/twitchscience/aws_utils/logger"
 	aws_uploader "github.com/twitchscience/aws_utils/uploader"
@@ -38,6 +46,7 @@ import (
 	"github.com/twitchscience/spade/event_metadata"
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/kinesisconfigs"
+	"github.com/twitchscience/spade/lookup"
 	jsonLog "github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"
@@ -88,7 +97,20 @@ type spadeProcessor struct {
 	sigc     chan os.Signal
 }
 
-func newProcessor() *spadeProcessor {
+type spadeProcessorDeps struct {
+	s3              s3iface.S3API
+	sns             snsiface.SNSAPI
+	elasticache     elasticacheiface.ElastiCacheAPI
+	dynamodb        dynamodbiface.DynamoDBAPI
+	kinesisFactory  writer.KinesisFactory
+	firehoseFactory writer.FirehoseFactory
+
+	fetcherFactory      func(url string, validator func([]byte) error) fetcher.ConfigFetcher
+	valueFetcherFactory func(lookup.JSONValueFetcherConfig, reporter.StatsLogger) (lookup.ValueFetcher, error)
+	stats               statsd.Statter
+}
+
+func buildDeps() *spadeProcessorDeps {
 	// aws resources
 	session, err := session.NewSession(&aws.Config{
 		HTTPClient: &http.Client{
@@ -106,21 +128,42 @@ func newProcessor() *spadeProcessor {
 	if err != nil {
 		logger.WithError(err).Fatal("Failed to create aws session")
 	}
+	return &spadeProcessorDeps{
+		s3:                  s3.New(session),
+		sns:                 sns.New(session),
+		elasticache:         elasticache.New(session),
+		dynamodb:            dynamodb.New(session),
+		kinesisFactory:      &writer.DefaultKinesisFactory{Session: session},
+		firehoseFactory:     &writer.DefaultFirehoseFactory{Session: session},
+		fetcherFactory:      fetcher.New,
+		valueFetcherFactory: lookup.NewJSONValueFetcher,
+		stats:               createStatsdStatter(),
+	}
+}
 
-	sns := sns.New(session)
-	s3Uploader := s3manager.NewUploader(session)
+func newProcessor(deps *spadeProcessorDeps) *spadeProcessor {
+	s3Uploader := s3manager.NewUploaderWithClient(deps.s3)
 
-	stats := createStatsdStatter()
 	startELBHealthCheckListener()
 
-	reporterStats := reporter.WrapCactusStatter(stats, 0.01)
-	spadeReporter := createSpadeReporter(reporterStats)
-	valueFetchers := createValueFetchers(config.JSONValueFetchers, reporterStats)
+	reporterStats := reporter.WrapCactusStatter(deps.stats, 0.01)
+	spadeReporter := reporter.BuildSpadeReporter(
+		[]reporter.Tracker{&reporter.SpadeStatsdTracker{Stats: reporterStats}})
+
+	valueFetchers := map[string]lookup.ValueFetcher{}
+	for id, config := range config.JSONValueFetchers {
+		fetcher, err := deps.valueFetcherFactory(config, reporterStats)
+		if err != nil {
+			logger.WithError(err).Fatalf("Failed to create a value fetcher with id %s", id)
+		}
+		valueFetchers[id] = fetcher
+	}
+
 	spadeUploaderPool := uploader.BuildUploaderForRedshift(
-		redshiftUploaderNumWorkers, sns, s3Uploader, config.AceBucketName,
+		redshiftUploaderNumWorkers, deps.sns, s3Uploader, config.AceBucketName,
 		config.AceTopicARN, config.AceErrorTopicARN, *runTag, *replay)
 	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(
-		blueprintUploaderNumWorkers, sns, s3Uploader, config.NonTrackedBucketName,
+		blueprintUploaderNumWorkers, deps.sns, s3Uploader, config.NonTrackedBucketName,
 		config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN, *replay)
 
 	// If the processor exited hard, clean up the files that were left.
@@ -137,7 +180,7 @@ func newProcessor() *spadeProcessor {
 	staticMultee.Add(spadeWriterKey, createSpadeWriter(
 		*_dir, spadeReporter, spadeUploaderPool, blueprintUploaderPool,
 		config.MaxLogBytes, config.MaxLogAgeSecs))
-	createStaticKinesisWriters(staticMultee, session, stats)
+	createStaticKinesisWriters(staticMultee, deps.kinesisFactory, deps.firehoseFactory, deps.stats)
 
 	// dynamicMultee manages the dynamic kinesis writers that updates based on Blueprint
 	dynamicMultee := writer.NewMultee()
@@ -148,15 +191,15 @@ func newProcessor() *spadeProcessor {
 	multee.Add("static_multee", staticMultee)
 	multee.Add("dynamic_multee", dynamicMultee)
 
-	schemaFetcher := fetcher.New(config.BlueprintSchemasURL, fetcher.ValidateFetchedSchema)
-	kinesisConfigFetcher := fetcher.New(config.BlueprintKinesisConfigsURL, fetcher.ValidateFetchedKinesisConfig)
-	eventMetadataFetcher := fetcher.New(config.BlueprintAllMetadataURL, fetcher.ValidateFetchedEventMetadataConfig)
+	schemaFetcher := deps.fetcherFactory(config.BlueprintSchemasURL, fetcher.ValidateFetchedSchema)
+	kinesisConfigFetcher := deps.fetcherFactory(config.BlueprintKinesisConfigsURL, fetcher.ValidateFetchedKinesisConfig)
+	eventMetadataFetcher := deps.fetcherFactory(config.BlueprintAllMetadataURL, fetcher.ValidateFetchedEventMetadataConfig)
 	localCache := lru.New(1000, time.Duration(config.LRULifetimeSeconds)*time.Second)
-	remoteCache := createTransformerCache(session, config.TransformerCacheCluster)
+	remoteCache := createTransformerCache(deps.elasticache, config.TransformerCacheCluster)
 	tConfigs := createMappingTransformerConfigs(
 		valueFetchers, localCache, remoteCache, config.TransformerFetchers, reporterStats)
 	schemaLoader := createSchemaLoader(schemaFetcher, reporterStats, tConfigs)
-	kinesisConfigLoader := createKinesisConfigLoader(kinesisConfigFetcher, reporterStats, dynamicMultee, session)
+	kinesisConfigLoader := createKinesisConfigLoader(kinesisConfigFetcher, reporterStats, dynamicMultee, deps.kinesisFactory, deps.firehoseFactory)
 	eventMetadataLoader := createEventMetadataLoader(eventMetadataFetcher, reporterStats)
 
 	processorPool := processor.BuildProcessorPool(schemaLoader, eventMetadataLoader, spadeReporter, multee, reporterStats)
@@ -164,7 +207,7 @@ func newProcessor() *spadeProcessor {
 
 	deglobberPool := deglobber.NewPool(deglobber.PoolConfig{
 		ProcessorPool:      processorPool,
-		Stats:              stats,
+		Stats:              deps.stats,
 		DuplicateCache:     cache.New(duplicateCacheExpiry, duplicateCacheCleanupFrequency),
 		PoolSize:           runtime.NumCPU(),
 		CompressionVersion: compressionVersion,
@@ -175,9 +218,9 @@ func newProcessor() *spadeProcessor {
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT)
 	return &spadeProcessor{
-		geoIPUpdater:          createGeoipUpdater(config.Geoip),
+		geoIPUpdater:          createGeoipUpdater(deps.s3, config.Geoip),
 		spadeReporter:         spadeReporter,
-		resultPipe:            createPipe(session, stats, *replay),
+		resultPipe:            createPipe(deps.kinesisFactory.New("", ""), deps.dynamodb, deps.stats, *replay),
 		deglobberPool:         deglobberPool,
 		processorPool:         processorPool,
 		multee:                multee,
@@ -252,7 +295,8 @@ func main() {
 			Error("Serving pprof failed")
 	})
 
-	s := newProcessor()
+	deps := buildDeps()
+	s := newProcessor(deps)
 	s.run()
 
 	logger.Info("Main loop exited, shutting down")
