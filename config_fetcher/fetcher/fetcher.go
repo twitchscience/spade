@@ -136,6 +136,10 @@ func (f *fetcher) Fetch() (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
+	// http Client does not error on not getting 2XX response
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, fmt.Errorf("Fetching %s did not get a 2XX response, instead got %v", f.url, resp.StatusCode)
+	}
 	return resp.Body, nil
 }
 
