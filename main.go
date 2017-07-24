@@ -105,7 +105,7 @@ type spadeProcessorDeps struct {
 	kinesisFactory  writer.KinesisFactory
 	firehoseFactory writer.FirehoseFactory
 
-	fetcherFactory      func(url string, validator func([]byte) error) fetcher.ConfigFetcher
+	fetcherFactory      func(bucket, key string, s3 s3iface.S3API, validator func([]byte) error) fetcher.ConfigFetcher
 	valueFetcherFactory func(lookup.JSONValueFetcherConfig, reporter.StatsLogger) (lookup.ValueFetcher, error)
 	stats               statsd.Statter
 }
@@ -191,9 +191,9 @@ func newProcessor(deps *spadeProcessorDeps) *spadeProcessor {
 	multee.Add("static_multee", staticMultee)
 	multee.Add("dynamic_multee", dynamicMultee)
 
-	schemaFetcher := deps.fetcherFactory(config.BlueprintSchemasURL, fetcher.ValidateFetchedSchema)
-	kinesisConfigFetcher := deps.fetcherFactory(config.BlueprintKinesisConfigsURL, fetcher.ValidateFetchedKinesisConfig)
-	eventMetadataFetcher := deps.fetcherFactory(config.BlueprintAllMetadataURL, fetcher.ValidateFetchedEventMetadataConfig)
+	schemaFetcher := deps.fetcherFactory(config.ConfigBucket, config.SchemasKey, deps.s3, fetcher.ValidateFetchedSchema)
+	kinesisConfigFetcher := deps.fetcherFactory(config.ConfigBucket, config.KinesisConfigKey, deps.s3, fetcher.ValidateFetchedKinesisConfig)
+	eventMetadataFetcher := deps.fetcherFactory(config.ConfigBucket, config.MetadataConfigKey, deps.s3, fetcher.ValidateFetchedEventMetadataConfig)
 	localCache := lru.New(1000, time.Duration(config.LRULifetimeSeconds)*time.Second)
 	remoteCache := createTransformerCache(deps.elasticache, config.TransformerCacheCluster)
 	tConfigs := createMappingTransformerConfigs(

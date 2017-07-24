@@ -1,15 +1,15 @@
 package fetcher
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
-	"net/http"
 	"os"
-	"time"
 
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 )
 
@@ -45,33 +45,18 @@ func FetchConfig(cf ConfigFetcher, outputFileDst string) (err error) {
 }
 
 type fetcher struct {
-	hc        *http.Client
-	url       string
+	s3        s3iface.S3API
+	bucket    string
+	key       string
 	validator func(b []byte) error
 }
 
-func timeoutDialer(timeout time.Duration) func(net, addr string) (net.Conn, error) {
-	return func(network, addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout(network, addr, timeout)
-		if err != nil {
-			return nil, err
-		}
-		if err = conn.SetDeadline(time.Now().Add(timeout)); err != nil {
-			return nil, err
-		}
-		return conn, nil
-	}
-}
-
 // New returns a ConfigFetcher that reads configs from the given URL.
-func New(url string, validator func(b []byte) error) ConfigFetcher {
+func New(bucket, key string, s3 s3iface.S3API, validator func(b []byte) error) ConfigFetcher {
 	return &fetcher{
-		hc: &http.Client{
-			Transport: &http.Transport{
-				Dial: timeoutDialer(time.Duration(5) * time.Second),
-			},
-		},
-		url:       url,
+		s3:        s3,
+		bucket:    bucket,
+		key:       key,
 		validator: validator,
 	}
 }
@@ -132,14 +117,35 @@ func (f *fetcher) FetchAndWrite(src io.ReadCloser, dst io.WriteCloser) error {
 
 // Fetch returns a reader for the config.
 func (f *fetcher) Fetch() (io.ReadCloser, error) {
-	resp, err := f.hc.Get(f.url)
+	resp, err := f.s3.GetObject(&s3.GetObjectInput{
+		Bucket: &f.bucket,
+		Key:    &f.key,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Body, nil
+	gzreader, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("creating gzip reader: %v", err)
+	}
+	return gzreader, nil
 }
 
 // ConfigDestination returns a writer to the given path.
 func (f *fetcher) ConfigDestination(outputFileName string) (io.WriteCloser, error) {
 	return os.Create(outputFileName)
+}
+
+type s3Fetcher struct {
+	fetcher
+}
+
+// Fetch returns a reader for the config.
+func (f *fetcher) Fetch() (io.ReadCloser, error) {
+	// TODO insert the s3 get here
+	resp, err := f.hc.Get(f.url)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
 }
