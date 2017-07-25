@@ -135,17 +135,3 @@ func (f *fetcher) Fetch() (io.ReadCloser, error) {
 func (f *fetcher) ConfigDestination(outputFileName string) (io.WriteCloser, error) {
 	return os.Create(outputFileName)
 }
-
-type s3Fetcher struct {
-	fetcher
-}
-
-// Fetch returns a reader for the config.
-func (f *fetcher) Fetch() (io.ReadCloser, error) {
-	// TODO insert the s3 get here
-	resp, err := f.hc.Get(f.url)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Body, nil
-}
