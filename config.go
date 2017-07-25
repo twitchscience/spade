@@ -23,12 +23,14 @@ var (
 )
 
 var config struct {
-	// BlueprintSchemasURL is the url to blueprint schemas
-	BlueprintSchemasURL string
-	// BlueprintKinesisConfigsURL is the url to blueprint kinesisconfigs
-	BlueprintKinesisConfigsURL string
-	// BlueprintAllMetadataURL is the url to blueprint metadata for all events
-	BlueprintAllMetadataURL string
+	// ConfigBucket is the bucket that the blueprint published config lives in
+	ConfigBucket string
+	// SchemasKey is the s3 key to the blueprint published schemas config
+	SchemasKey string
+	// KinesisConfigKey is the s3 key to the blueprint published schemas config
+	KinesisConfigKey string
+	// MetadataConfigKey is the s3 key to the blueprint published metadata config
+	MetadataConfigKey string
 	// ProcessorErrorTopicARN is the arn of the SNS topic for processor errors
 	ProcessorErrorTopicARN string
 	// AceTopicARN is the arn of the SNS topic for events going to Ace
@@ -135,9 +137,10 @@ func checkNonempty(str string) error {
 
 func validateConfig() error {
 	for _, str := range []string{
-		config.BlueprintSchemasURL,
-		config.BlueprintKinesisConfigsURL,
-		config.BlueprintAllMetadataURL,
+		config.ConfigBucket,
+		config.SchemasKey,
+		config.KinesisConfigKey,
+		config.MetadataConfigKey,
 		config.AceBucketName,
 		config.NonTrackedBucketName,
 		config.Geoip.ConfigBucket,

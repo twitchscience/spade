@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"reflect"
 	"testing"
 
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
@@ -66,25 +64,6 @@ var knownScoopProtocolKinesisConfigs = []scoop_protocol.AnnotatedKinesisConfig{
 			},
 		},
 	},
-}
-
-func TestNew(t *testing.T) {
-	f := New("foo", func(b []byte) error { return nil })
-
-	v := f.(*fetcher)
-	if v == nil {
-		t.Error("Expected New() to return fetcher struct")
-	}
-
-	expected := "foo"
-	if v.url != expected {
-		t.Errorf("Expected url == %s, got: %s", expected, v.url)
-	}
-
-	typeExpectation := reflect.TypeOf(&http.Client{})
-	if reflect.TypeOf(v.hc) != reflect.TypeOf(&http.Client{}) {
-		t.Errorf("Expected hc to be a %v, got: %v", typeExpectation, reflect.TypeOf(v.hc))
-	}
 }
 
 func TestValidateSchema(t *testing.T) {
@@ -163,7 +142,7 @@ func (trwc *testReadWriteCloser) Close() error {
 }
 
 func (tf *testFetcher) FetchAndWrite(src io.ReadCloser, dest io.WriteCloser) error {
-	f := New("foo", ValidateFetchedSchema)
+	f := New("foo", "bar", nil, ValidateFetchedSchema)
 	return f.FetchAndWrite(src, dest)
 }
 
