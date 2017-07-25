@@ -51,7 +51,7 @@ type fetcher struct {
 	validator func(b []byte) error
 }
 
-// New returns a ConfigFetcher that reads configs from the given URL.
+// New returns a ConfigFetcher that reads configs from the given s3 bucket+key.
 func New(bucket, key string, s3 s3iface.S3API, validator func(b []byte) error) ConfigFetcher {
 	return &fetcher{
 		s3:        s3,
@@ -122,7 +122,7 @@ func (f *fetcher) Fetch() (io.ReadCloser, error) {
 		Key:    &f.key,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("retrieving config object from s3: %v", err)
 	}
 	gzreader, err := gzip.NewReader(resp.Body)
 	if err != nil {
