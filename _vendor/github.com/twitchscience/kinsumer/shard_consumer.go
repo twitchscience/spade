@@ -3,6 +3,7 @@
 package kinsumer
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/aws/aws-sdk-go/service/kinesis/kinesisiface"
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 const (
@@ -55,8 +57,11 @@ func getRecords(k kinesisiface.KinesisAPI, iterator string) (records []*kinesis.
 	}
 
 	output, err := k.GetRecords(params)
-
 	if err != nil {
+		logger.Info("*** Begin additional logging for Kinesis.GetRecords() ***")
+		logger.Info(fmt.Sprintf("| Limit | %d", getRecordsLimit))
+		logger.Info(fmt.Sprintf("| ShardIterator | %s", iterator))
+		logger.Info("*** End additional logging for Kinesis.GetRecords() ***")
 		return nil, "", 0, err
 	}
 

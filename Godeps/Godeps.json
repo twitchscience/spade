@@ -322,7 +322,7 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/kinsumer/statsd",
-			"Rev": "323ca9a97d0ffa999b47fbf37c715a823c431f0d"
+			"Rev": "f26b4530a818a64678ddf55602912d1556f19a67"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
