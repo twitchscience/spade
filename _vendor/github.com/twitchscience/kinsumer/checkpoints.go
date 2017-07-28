@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 // Note: Not thread safe!
@@ -224,12 +225,12 @@ func (cp *checkpointer) release() error {
 		ExpressionAttributeValues: attrVals,
 	}); err != nil {
 		logger.Info("*** Begin additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
-		logger.Info(fmt.Sprintf("| TableName | %s"), cp.tableName))
+		logger.Info(fmt.Sprintf("| TableName | %s", cp.tableName))
 		logger.Info(fmt.Sprintf("| Key | {\"Shard\": {\"S\": \"%s\"}}", cp.shardID))
 		logger.Info(fmt.Sprintf(
 			"| UpdateExpression | REMOVE OwnerID, OwnerName SET LastUpdate = %d LastUpdateRFC = %s SequenceNumber = %s"),
 			now.UnixNano(),
-			now.UTC().Format(time.RFC1123Z)
+			now.UTC().Format(time.RFC1123Z),
 		)
 		logger.Info(fmt.Sprintf("| ConditionalExpression | OwnerID = %s", cp.ownerID))
 		logger.Info("*** End additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
@@ -277,7 +278,7 @@ func loadCheckpoints(db dynamodbiface.DynamoDBAPI, tableName string) (map[string
 			innerError = dynamodbattribute.UnmarshalMap(item, &record)
 			if innerError != nil {
 				logger.Info("*** Begin additional logging for error on dynamodbattribute.UnmarshalMap() ***")
-				logger.Info(fmt.Sprintf("| TableName | %s"), tableName))
+				logger.Info(fmt.Sprintf("| TableName | %s", tableName))
 				logger.Info(fmt.Sprintf("| ConsistentRead | true"))
 				logger.Info("Map of dynamodb.ScanOutput.Items: {")
 				for k, v := range p.Items {
@@ -299,7 +300,7 @@ func loadCheckpoints(db dynamodbiface.DynamoDBAPI, tableName string) (map[string
 
 	if err != nil {
 		logger.Info("*** Begin additional logging for error on dynamoDB.ScanPages() ***")
-		logger.Info(fmt.Sprintf("| TableName | %s"), tableName))
+		logger.Info(fmt.Sprintf("| TableName | %s", tableName))
 		logger.Info(fmt.Sprintf("| ConsistentRead | true"))
 		logger.Info("*** End additional logging for error on dynamoDB.ScanPages() ***")
 		return nil, err
