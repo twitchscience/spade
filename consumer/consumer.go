@@ -148,7 +148,7 @@ func configToKinsumerConfig(config Config) (kinsumer.Config, error) {
 }
 
 // NewKinesisPipe returns a newly created KinesisPipe.
-func NewKinesisPipe(kinesis kinesisiface.KinesisAPI, dynamodb dynamodbiface.DynamoDBAPI, stats statsd.Statter, config Config) (*KinesisPipe, error) {
+func NewKinesisPipe(kinesis kinesisiface.KinesisAPI, dynamodb dynamodbiface.DynamoDBAPI, stats statsd.StatSender, config Config) (*KinesisPipe, error) {
 	kinsumerConfig, err := configToKinsumerConfig(config)
 	if err != nil {
 		return nil, err
