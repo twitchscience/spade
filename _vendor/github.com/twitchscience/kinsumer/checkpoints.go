@@ -4,6 +4,7 @@ package kinsumer
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -224,16 +225,11 @@ func (cp *checkpointer) release() error {
 		ConditionExpression:       aws.String("OwnerID = :ownerID"),
 		ExpressionAttributeValues: attrVals,
 	}); err != nil {
-		logger.Info("*** Begin additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
-		logger.Info(fmt.Sprintf("| TableName | %s", cp.tableName))
-		logger.Info(fmt.Sprintf("| Key | {\"Shard\": {\"S\": \"%s\"}}", cp.shardID))
-		logger.Info(fmt.Sprintf(
-			"| UpdateExpression | REMOVE OwnerID, OwnerName SET LastUpdate = %d LastUpdateRFC = %s SequenceNumber = %s"),
-			now.UnixNano(),
-			now.UTC().Format(time.RFC1123Z),
-		)
-		logger.Info(fmt.Sprintf("| ConditionalExpression | OwnerID = %s", cp.ownerID))
-		logger.Info("*** End additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
+		logger.WithFields(map[string]interface{}{
+			"TableName": cp.tableName,
+			"Key":       fmt.Sprintf("{\"Shard\": {\"S\": \"%s\"}", cp.shardID),
+			"ConditionalExpression": fmt.Sprintf("OwnerID = %s", cp.ownerID),
+		}).Info("*** Additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
 		return fmt.Errorf("error releasing checkpoint: %s", err)
 	}
 
@@ -278,14 +274,17 @@ func loadCheckpoints(db dynamodbiface.DynamoDBAPI, tableName string) (map[string
 			innerError = dynamodbattribute.UnmarshalMap(item, &record)
 			if innerError != nil {
 				logger.Info("*** Begin additional logging for error on dynamodbattribute.UnmarshalMap() ***")
-				logger.Info(fmt.Sprintf("| TableName | %s", tableName))
-				logger.Info(fmt.Sprintf("| ConsistentRead | true"))
-				logger.Info("Map of dynamodb.ScanOutput.Items: {")
+
+				logger.WithFields(map[string]interface{}{
+					"TableName":      tableName,
+					"ConsistentRead": "true",
+				}).Info("*** Additional logging for error on dynamodbattribute.UnmarshalMap() ***")
+
+				logItems := map[string]interface{}{}
 				for k, v := range p.Items {
-					logger.Info(fmt.Sprintf("{%s: %s}", k, v))
+					logItems[strconv.Itoa(k)] = v
 				}
-				logger.Info("}")
-				logger.Info("*** End additional logging for error on dynamodbattribute.UnmarshalMap() ***")
+				logger.WithFields(logItems).Info("*** Additional logging for error on dynamodbattribute.UnmarshalMap(): Map of dynamodb.ScanOutput.Items ***")
 				return false
 			}
 			records = append(records, &record)
@@ -299,10 +298,10 @@ func loadCheckpoints(db dynamodbiface.DynamoDBAPI, tableName string) (map[string
 	}
 
 	if err != nil {
-		logger.Info("*** Begin additional logging for error on dynamoDB.ScanPages() ***")
-		logger.Info(fmt.Sprintf("| TableName | %s", tableName))
-		logger.Info(fmt.Sprintf("| ConsistentRead | true"))
-		logger.Info("*** End additional logging for error on dynamoDB.ScanPages() ***")
+		logger.WithFields(map[string]interface{}{
+			"TableName":      tableName,
+			"ConsistentRead": "true",
+		}).Info("*** Additional logging for error on dynamoDB.ScanPages() ***")
 		return nil, err
 	}
 
