@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/aws/aws-sdk-go/service/kinesis/kinesisiface"
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 const (
@@ -55,8 +56,11 @@ func getRecords(k kinesisiface.KinesisAPI, iterator string) (records []*kinesis.
 	}
 
 	output, err := k.GetRecords(params)
-
 	if err != nil {
+		logger.WithFields(map[string]interface{}{
+			"Limit":         getRecordsLimit,
+			"ShardIterator": iterator,
+		}).Info("*** Additional logging for Kinesis.GetRecords() ***")
 		return nil, "", 0, err
 	}
 
