@@ -4,6 +4,7 @@ package kinsumer
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 // Note: Not thread safe!
@@ -223,6 +225,11 @@ func (cp *checkpointer) release() error {
 		ConditionExpression:       aws.String("OwnerID = :ownerID"),
 		ExpressionAttributeValues: attrVals,
 	}); err != nil {
+		logger.WithFields(map[string]interface{}{
+			"TableName": cp.tableName,
+			"Key":       fmt.Sprintf("{\"Shard\": {\"S\": \"%s\"}", cp.shardID),
+			"ConditionalExpression": fmt.Sprintf("OwnerID = %s", cp.ownerID),
+		}).Info("*** Additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
 		return fmt.Errorf("error releasing checkpoint: %s", err)
 	}
 
@@ -266,6 +273,15 @@ func loadCheckpoints(db dynamodbiface.DynamoDBAPI, tableName string) (map[string
 			var record checkpointRecord
 			innerError = dynamodbattribute.UnmarshalMap(item, &record)
 			if innerError != nil {
+				logger.WithFields(map[string]interface{}{
+					"TableName":      tableName,
+					"ConsistentRead": "true",
+				}).Info("*** Additional logging for error on dynamodbattribute.UnmarshalMap() ***")
+				logItems := map[string]interface{}{}
+				for k, v := range p.Items {
+					logItems[strconv.Itoa(k)] = v
+				}
+				logger.WithFields(logItems).Info("*** Additional logging for error on dynamodbattribute.UnmarshalMap(): Map of dynamodb.ScanOutput.Items ***")
 				return false
 			}
 			records = append(records, &record)
@@ -279,6 +295,10 @@ func loadCheckpoints(db dynamodbiface.DynamoDBAPI, tableName string) (map[string
 	}
 
 	if err != nil {
+		logger.WithFields(map[string]interface{}{
+			"TableName":      tableName,
+			"ConsistentRead": "true",
+		}).Info("*** Additional logging for error on dynamoDB.ScanPages() ***")
 		return nil, err
 	}
 
