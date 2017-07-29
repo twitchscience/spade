@@ -273,7 +273,6 @@ func loadCheckpoints(db dynamodbiface.DynamoDBAPI, tableName string) (map[string
 			var record checkpointRecord
 			innerError = dynamodbattribute.UnmarshalMap(item, &record)
 			if innerError != nil {
-				logger.Info("*** Begin additional logging for error on dynamodbattribute.UnmarshalMap() ***")
 				logger.WithFields(map[string]interface{}{
 					"TableName":      tableName,
 					"ConsistentRead": "true",
