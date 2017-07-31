@@ -56,11 +56,11 @@ func getRecords(k kinesisiface.KinesisAPI, iterator string) (records []*kinesis.
 	}
 
 	output, err := k.GetRecords(params)
+	logger.WithFields(map[string]interface{}{
+		"Limit":         getRecordsLimit,
+		"ShardIterator": iterator,
+	}).Info("*** Additional logging for Kinesis.GetRecords() ***")
 	if err != nil {
-		logger.WithFields(map[string]interface{}{
-			"Limit":         getRecordsLimit,
-			"ShardIterator": iterator,
-		}).Info("*** Additional logging for Kinesis.GetRecords() ***")
 		return nil, "", 0, err
 	}
 

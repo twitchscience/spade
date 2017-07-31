@@ -214,6 +214,11 @@ func (cp *checkpointer) release() error {
 	if err != nil {
 		return err
 	}
+	logger.WithFields(map[string]interface{}{
+		"TableName": cp.tableName,
+		"Key":       fmt.Sprintf("{\"Shard\": {\"S\": \"%s\"}", cp.shardID),
+		"ConditionalExpression": fmt.Sprintf("OwnerID = %s", cp.ownerID),
+	}).Info("*** Additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
 	if _, err = cp.dynamodb.UpdateItem(&dynamodb.UpdateItemInput{
 		TableName: aws.String(cp.tableName),
 		Key: map[string]*dynamodb.AttributeValue{
@@ -225,11 +230,6 @@ func (cp *checkpointer) release() error {
 		ConditionExpression:       aws.String("OwnerID = :ownerID"),
 		ExpressionAttributeValues: attrVals,
 	}); err != nil {
-		logger.WithFields(map[string]interface{}{
-			"TableName": cp.tableName,
-			"Key":       fmt.Sprintf("{\"Shard\": {\"S\": \"%s\"}", cp.shardID),
-			"ConditionalExpression": fmt.Sprintf("OwnerID = %s", cp.ownerID),
-		}).Info("*** Additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
 		return fmt.Errorf("error releasing checkpoint: %s", err)
 	}
 
@@ -272,11 +272,11 @@ func loadCheckpoints(db dynamodbiface.DynamoDBAPI, tableName string) (map[string
 		for _, item := range p.Items {
 			var record checkpointRecord
 			innerError = dynamodbattribute.UnmarshalMap(item, &record)
+			logger.WithFields(map[string]interface{}{
+				"TableName":      tableName,
+				"ConsistentRead": "true",
+			}).Info("*** Additional logging for error on dynamodbattribute.UnmarshalMap() ***")
 			if innerError != nil {
-				logger.WithFields(map[string]interface{}{
-					"TableName":      tableName,
-					"ConsistentRead": "true",
-				}).Info("*** Additional logging for error on dynamodbattribute.UnmarshalMap() ***")
 				logItems := map[string]interface{}{}
 				for k, v := range p.Items {
 					logItems[strconv.Itoa(k)] = v
