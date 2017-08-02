@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
-	"os"
 	"strings"
 
 	"github.com/twitchscience/aws_utils/logger"
@@ -48,21 +47,6 @@ func getTypes(
 		types[i] = _type
 	}
 	return types, nil
-}
-
-// LoadConfigFromFile loads a Tables from the given filename.
-func LoadConfigFromFile(filename string) (Tables, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return Tables{nil}, err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			logger.WithError(err).WithField("filename", filename).Error(
-				"Failed to close table config")
-		}
-	}()
-	return LoadConfig(file)
 }
 
 // LoadConfig loads a Tables from the given io.Reader.
