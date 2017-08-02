@@ -279,7 +279,6 @@ func (cp *checkpointer) release() error {
 			"LastUpdateRFC":         record.LastUpdateRFC,
 			"FinishedRFC":           finishedRFC,
 		}).Info("*** Additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
-
 		return fmt.Errorf("error releasing checkpoint: %s", err)
 	}
 
