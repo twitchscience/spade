@@ -1,7 +1,6 @@
 package geoip
 
 import (
-	"fmt"
 	"sync"
 
 	geo "github.com/abh/geoip"
@@ -56,10 +55,8 @@ func (g *GeoMMIP) Reload() error {
 
 func (g *GeoMMIP) getGeosRecord(ip string) *geo.GeoIPRecord {
 	g.RLock()
-	loc := g.geos.GetRecord(ip)
-	g.RUnlock()
-	return loc
-
+	defer g.RUnlock()
+	return g.geos.GetRecord(ip)
 }
 
 // GetRegion returns the region associated with the ip.
@@ -68,7 +65,7 @@ func (g *GeoMMIP) GetRegion(ip string) string {
 	if loc == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s", loc.Region)
+	return loc.Region
 }
 
 // GetCountry returns the country associated with the ip.
@@ -77,7 +74,7 @@ func (g *GeoMMIP) GetCountry(ip string) string {
 	if loc == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s", loc.CountryCode)
+	return loc.CountryCode
 }
 
 // GetCity returns the city associated with the ip.
@@ -86,15 +83,15 @@ func (g *GeoMMIP) GetCity(ip string) string {
 	if loc == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s", loc.City)
+	return loc.City
 }
 
 // GetAsn returns the ASN associated with the ip.
 func (g *GeoMMIP) GetAsn(ip string) string {
 	g.RLock()
+	defer g.RUnlock()
 	loc, _ := g.asn.GetName(ip)
-	g.RUnlock()
-	return fmt.Sprintf("%s", loc)
+	return loc
 }
 
 // NoopGeoIP is a GeoLookup that always returns empty strings.
