@@ -13,7 +13,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -47,7 +46,6 @@ import (
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/kinesisconfigs"
 	"github.com/twitchscience/spade/lookup"
-	jsonLog "github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/uploader"
@@ -71,13 +69,6 @@ var (
 	replay      = flag.Bool("replay", false, "take plaintext events (as in spade-edge-prod) from standard input")
 	runTag      = flag.String("run_tag", "", "override YYYYMMDD tag with new prefix (usually for replay)")
 )
-
-func init() {
-	if err := jsonLog.Register(os.Getenv("REJECT_ON_BAD_FIRST_IP") != ""); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to setup jsonLog parser: %v\n", err)
-		os.Exit(1)
-	}
-}
 
 type spadeProcessor struct {
 	geoIPUpdater  *geoip.Updater

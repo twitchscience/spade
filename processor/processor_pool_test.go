@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +13,7 @@ import (
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	eventMetadatConfig "github.com/twitchscience/spade/event_metadata"
 	"github.com/twitchscience/spade/parser"
-	jsonLog "github.com/twitchscience/spade/parser/json"
+	"github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/reporter"
 	tableConfig "github.com/twitchscience/spade/tables"
 	"github.com/twitchscience/spade/transformer"
@@ -71,7 +70,7 @@ var (
 		},
 	)
 	_transformer = transformer.NewRedshiftTransformer(_config, _eventMetadataconfig, _cactus)
-	_parser      = parser.BuildSpadeParser()
+	_parser      = &json.LogParser{}
 )
 
 func getPST() *time.Location {
@@ -207,13 +206,6 @@ func requestEqual(r1, r2 *writer.WriteRequest) bool {
 //
 //  Tests
 //
-func init() {
-	if err := jsonLog.Register(false); err != nil {
-		fmt.Fprintf(os.Stderr, "Could not register jsonLog: %v\n", err)
-		os.Exit(1)
-	}
-}
-
 func TestPanicRecoveryProcessing(t *testing.T) {
 	now := time.Now().In(PST)
 	rawLine := `{"clientIp": "10.1.40.26", "data": "eyJldmVudCIgOiJsb2dpbiJ9", "uuid": "uuid1"}`
