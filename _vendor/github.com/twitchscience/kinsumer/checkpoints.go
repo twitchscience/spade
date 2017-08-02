@@ -226,7 +226,7 @@ func (cp *checkpointer) release() error {
 		ExpressionAttributeValues: attrVals,
 	}); err != nil {
 		// Grab the entry from dynamo assuming there is one
-		resp, err := cp.dynamodb.GetItem(&dynamodb.GetItemInput{
+		resp, getItemErr := cp.dynamodb.GetItem(&dynamodb.GetItemInput{
 			TableName:      aws.String(cp.tableName),
 			ConsistentRead: aws.Bool(true),
 			Key: map[string]*dynamodb.AttributeValue{
@@ -234,14 +234,22 @@ func (cp *checkpointer) release() error {
 			},
 		})
 
-		if err != nil {
-			return fmt.Errorf("error calling GetItem on shard checkpoint: %v", err)
+		if getItemErr != nil {
+			logger.WithFields(map[string]interface{}{
+				"tableName": cp.tableName,
+				"shardID":   cp.shardID,
+			}).Info("Error calling DynamoDB.GetItem() in error handling for DynamoDB.UpdateItem()")
+			return fmt.Errorf("error releasing checkpoint: %s", err)
 		}
 
 		// Convert to struct so we can work with the values
 		var record checkpointRecord
-		if err = dynamodbattribute.ConvertFromMap(resp.Item, &record); err != nil {
-			return err
+		if getItemErr = dynamodbattribute.ConvertFromMap(resp.Item, &record); err != nil {
+			logger.WithFields(map[string]interface{}{
+				"tableName": cp.tableName,
+				"shardID":   cp.shardID,
+			}).Info("Error converting item into a checkpointRecord in error handling for DynamoDB.UpdateItem()")
+			return fmt.Errorf("error releasing checkpoint: %s", err)
 		}
 
 		var sequenceNumber string
