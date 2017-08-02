@@ -254,9 +254,9 @@ func newProcessor(deps *spadeProcessorDeps) (*spadeProcessor, error) {
 
 func startProcessorPool(deps *spadeProcessorDeps, multee *writer.Multee,
 	spadeReporter reporter.Reporter, reporterStats reporter.StatsLogger) (processor.Pool, []closer, error) {
-	schemaFetcher := fetcher.New(deps.cfg.ConfigBucket, deps.cfg.SchemasKey, deps.s3, fetcher.ValidateFetchedSchema)
-	kinesisConfigFetcher := fetcher.New(deps.cfg.ConfigBucket, deps.cfg.KinesisConfigKey, deps.s3, fetcher.ValidateFetchedKinesisConfig)
-	eventMetadataFetcher := fetcher.New(deps.cfg.ConfigBucket, deps.cfg.MetadataConfigKey, deps.s3, fetcher.ValidateFetchedEventMetadataConfig)
+	schemaFetcher := fetcher.New(deps.cfg.ConfigBucket, deps.cfg.SchemasKey, deps.s3)
+	kinesisConfigFetcher := fetcher.New(deps.cfg.ConfigBucket, deps.cfg.KinesisConfigKey, deps.s3)
+	eventMetadataFetcher := fetcher.New(deps.cfg.ConfigBucket, deps.cfg.MetadataConfigKey, deps.s3)
 	localCache := lru.New(1000, time.Duration(deps.cfg.LRULifetimeSeconds)*time.Second)
 	remoteCache, err := elastimemcache.NewClientWithInterface(
 		deps.elasticache, deps.memcacheClient, deps.memcacheSelector, deps.cfg.TransformerCacheCluster)
