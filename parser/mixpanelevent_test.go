@@ -27,12 +27,23 @@ const (
 )
 
 var (
+	receivedAt      = time.Now()
 	epoch           = time.Unix(0, 0)
 	uuid            = "123abc"
 	longUUID        = randomString(68)
-	when            = fmt.Sprintf("%d", receivedAt.Unix()) // from parser_test.go
+	when            = fmt.Sprintf("%d", receivedAt.Unix())
 	unknownEdgeType = "Unknown"
 )
+
+type logLine struct{}
+
+func (l *logLine) Data() []byte {
+	return []byte{}
+}
+
+func (l *logLine) StartTime() time.Time {
+	return receivedAt
+}
 
 func randomString(n int) string {
 	b := make([]byte, n)
@@ -90,7 +101,7 @@ func TestMixpanelEvent(t *testing.T) {
 		},
 		{
 			t:         Panic,
-			pstart:    receivedAt, // from parser_test.go
+			pstart:    receivedAt,
 			eventTime: json.Number("0"),
 			uuid:      "error",
 			clientIP:  "",
@@ -101,7 +112,7 @@ func TestMixpanelEvent(t *testing.T) {
 		},
 		{
 			t:         Error,
-			pstart:    receivedAt, // from parser_test.go
+			pstart:    receivedAt,
 			eventTime: json.Number(when),
 			uuid:      uuid,
 			clientIP:  "",
@@ -112,7 +123,7 @@ func TestMixpanelEvent(t *testing.T) {
 		},
 		{
 			t:         ErrorLongUUID,
-			pstart:    receivedAt, // from parser_test.go
+			pstart:    receivedAt,
 			eventTime: json.Number(when),
 			uuid:      "error",
 			clientIP:  "",
@@ -123,7 +134,7 @@ func TestMixpanelEvent(t *testing.T) {
 		},
 		{
 			t:         ErrorEmptyUUID,
-			pstart:    receivedAt, // from parser_test.go
+			pstart:    receivedAt,
 			eventTime: json.Number(when),
 			uuid:      "error",
 			clientIP:  "",
@@ -134,7 +145,7 @@ func TestMixpanelEvent(t *testing.T) {
 		},
 		{
 			t:         ErrorEmptyTime,
-			pstart:    receivedAt, // from parser_test.go
+			pstart:    receivedAt,
 			eventTime: json.Number("0"),
 			uuid:      uuid,
 			clientIP:  "",
@@ -145,7 +156,7 @@ func TestMixpanelEvent(t *testing.T) {
 		},
 		{
 			t:         ErrorInvalidTime,
-			pstart:    receivedAt, // from parser_test.go
+			pstart:    receivedAt,
 			eventTime: json.Number("0"),
 			uuid:      uuid,
 			clientIP:  "",
@@ -156,7 +167,7 @@ func TestMixpanelEvent(t *testing.T) {
 		},
 		{
 			t:         ErrorInvalidEdgeType,
-			pstart:    receivedAt, // from parser_test.go
+			pstart:    receivedAt,
 			eventTime: json.Number(when),
 			uuid:      uuid,
 			clientIP:  "",

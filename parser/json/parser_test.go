@@ -56,7 +56,7 @@ func multipleEventUUIDChecker(mes []parser.MixpanelEvent, t *testing.T, uuidStub
 	}
 }
 
-func TestSuccessfulJsonLogParser(t *testing.T) {
+func TestSuccessfulJSONLogParser(t *testing.T) {
 	tests := []struct {
 		logLine        string
 		rawProps       json.RawMessage
@@ -77,7 +77,7 @@ func TestSuccessfulJsonLogParser(t *testing.T) {
 		},
 	}
 
-	jsonParser := &jsonLogParser{}
+	jsonParser := &LogParser{}
 	uuid := "123abc"
 	userAgent := "TestBrowser"
 	for _, tt := range tests {
@@ -149,59 +149,10 @@ func TestFailurePaths(t *testing.T) {
 		},
 	}
 
-	jsonParser := &jsonLogParser{}
+	jsonParser := &LogParser{}
 	for _, tt := range tests {
 		mes, err := jsonParser.Parse(&line{tt.logLine})
 		if err == nil {
-			t.Fatalf("parsing: expected failure. Failing test name: %s", tt.errorName)
-		}
-		if len(mes) == 0 {
-			t.Fatalf("parsing: expected mixpanel events. Failing test name: %s", tt.errorName)
-		}
-		if mes[0].Failure != tt.expectedFailure {
-			t.Fatalf("mixpanel event: incorrect failure mode. Expected %s got %s. Failing test name: %s", tt.expectedFailure, mes[0].Failure, tt.errorName)
-		}
-		if mes[0].UUID != tt.expectedUUID {
-			t.Fatalf("mixpanel event: incorrect uuid. Expected %s got %s. Failing test name: %s", tt.expectedUUID, mes[0].UUID, tt.errorName)
-		}
-		if mes[0].EventTime != tt.expectedTime {
-			t.Fatalf("mixpanel event: incorrect time. Expected %s got %s. Failing test name: %s", tt.expectedTime, mes[0].EventTime, tt.errorName)
-		}
-	}
-}
-
-func TestIPFailures(t *testing.T) {
-	tests := []struct {
-		errorName          string
-		logLine            []byte
-		expectedUUID       string
-		expectedTime       json.Number
-		expectedFailure    reporter.FailMode
-		rejectIfBadFirstIP bool
-		noFail             bool
-	}{
-		{
-			errorName:          "Reject row for bad IP under previous definition",
-			logLine:            loadFile("test_resources/broken_ip_data.json", t),
-			expectedUUID:       "123abc",
-			expectedTime:       json.Number("1418172623"),
-			expectedFailure:    reporter.UnableToParseData,
-			rejectIfBadFirstIP: true,
-		},
-		{
-			errorName:       "Don't reject a row for a bad IP when the bug is disabled",
-			logLine:         loadFile("test_resources/broken_ip_data.json", t),
-			expectedUUID:    "123abc",
-			expectedTime:    json.Number("1418172623"),
-			expectedFailure: reporter.None,
-			noFail:          true,
-		},
-	}
-
-	for _, tt := range tests {
-		jsonParser := &jsonLogParser{tt.rejectIfBadFirstIP}
-		mes, err := jsonParser.Parse(&line{tt.logLine})
-		if err == nil && !tt.noFail {
 			t.Fatalf("parsing: expected failure. Failing test name: %s", tt.errorName)
 		}
 		if len(mes) == 0 {

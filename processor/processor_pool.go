@@ -3,6 +3,7 @@ package processor
 import (
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/parser"
+	"github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/writer"
@@ -45,7 +46,7 @@ func BuildProcessorPool(schemaConfigs transformer.SchemaConfigLoader, eventMetad
 	for i := 0; i < nConverters; i++ {
 		converters[i] = &RequestConverter{
 			r:      rep,
-			parser: parser.BuildSpadeParser(),
+			parser: &json.LogParser{},
 			in:     requestChannel,
 			out:    transport,
 			done:   make(chan bool),
