@@ -194,6 +194,7 @@ func (k *Kinsumer) consume(shardID string) {
 				"FinishedRFC":           finishedRFC,
 				"captureTime":           captureTime.Format(time.RFC1123Z),
 				"releaseTime":           now.Format(time.RFC1123Z),
+				"duration":              d.Seconds(),
 				"maxAgeForClientRecord": k.maxAgeForClientRecord,
 			}).Info("*** kinsumer.consume(): Time between capturing a shard and releasing it greater than maxAgeForClientRecord threshold  ***")
 		}
