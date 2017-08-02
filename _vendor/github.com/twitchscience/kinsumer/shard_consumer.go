@@ -3,14 +3,11 @@
 package kinsumer
 
 import (
-	"fmt"
 	"log"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/aws/aws-sdk-go/service/kinesis/kinesisiface"
 	"github.com/twitchscience/aws_utils/logger"
@@ -137,65 +134,16 @@ func (k *Kinsumer) consume(shardID string) {
 	// Make sure we release the shard when we are done.
 	defer func() {
 		now := time.Now()
-		d := now.Sub(captureTime)
-		if d > k.maxAgeForClientRecord {
-			// Grab the entry from dynamo assuming there is one
-			resp, err := checkpointer.dynamodb.GetItem(&dynamodb.GetItemInput{
-				TableName:      aws.String(checkpointer.tableName),
-				ConsistentRead: aws.Bool(true),
-				Key: map[string]*dynamodb.AttributeValue{
-					"Shard": {S: aws.String(checkpointer.shardID)},
-				},
-			})
-
-			if err != nil {
-				logger.Info(fmt.Sprintf("Error calling GetItem on shard checkpoint: %v", err))
-				return
-			}
-
-			// Convert to struct so we can work with the values
-			var record checkpointRecord
-			if err = dynamodbattribute.ConvertFromMap(resp.Item, &record); err != nil {
-				logger.Info(fmt.Sprintf("Error converting DynamoDB item: %v", err))
-				return
-			}
-
-			var sequenceNumber string
-			var ownerName string
-			var finished int64
-			var ownerID string
-			var finishedRFC string
-
-			if record.SequenceNumber != nil {
-				sequenceNumber = *record.SequenceNumber
-			}
-			if record.OwnerName != nil {
-				ownerName = *record.OwnerName
-			}
-			if record.Finished != nil {
-				finished = *record.Finished
-			}
-			if record.OwnerID != nil {
-				ownerID = *record.OwnerID
-			}
-			if record.FinishedRFC != nil {
-				finishedRFC = *record.FinishedRFC
-			}
-
+		captureToReleaseDuration := now.Sub(captureTime)
+		if captureToReleaseDuration > k.maxAgeForClientRecord {
 			logger.WithFields(map[string]interface{}{
-				"TableName":             checkpointer.tableName,
-				"Shard":                 record.Shard,
-				"SequenceNumber":        sequenceNumber,
-				"LastUpdate":            record.LastUpdate,
-				"OwnerName":             ownerName,
-				"Finished":              finished,
-				"OwnerID":               ownerID,
-				"LastUpdateRFC":         record.LastUpdateRFC,
-				"FinishedRFC":           finishedRFC,
-				"captureTime":           captureTime.Format(time.RFC1123Z),
-				"releaseTime":           now.Format(time.RFC1123Z),
-				"duration":              d.Seconds(),
-				"maxAgeForClientRecord": k.maxAgeForClientRecord,
+				"tableName":                checkpointer.tableName,
+				"shardID":                  shardID,
+				"sequenceNumber":           sequenceNumber,
+				"captureTime":              captureTime.Format(time.RFC1123Z),
+				"releaseTime":              now.Format(time.RFC1123Z),
+				"captureToReleaseDuration": captureToReleaseDuration.Seconds(),
+				"maxAgeForClientRecord":    k.maxAgeForClientRecord,
 			}).Info("*** kinsumer.consume(): Time between capturing a shard and releasing it greater than maxAgeForClientRecord threshold  ***")
 		}
 		innerErr := checkpointer.release()
@@ -235,14 +183,14 @@ mainloop:
 			return
 		case <-commitTicker.C:
 			now := time.Now()
-			d := now.Sub(lastNow)
-			if d > k.config.shardCheckFrequency {
+			commitTickerDuration := now.Sub(lastNow)
+			if commitTickerDuration > k.config.shardCheckFrequency {
 				logger.WithFields(map[string]interface{}{
-					"shardID":             shardID,
-					"lastNow":             lastNow.Format(time.RFC1123Z),
-					"now":                 now.Format(time.RFC1123Z),
-					"duration":            d.Seconds(),
-					"shardCheckFrequency": k.config.shardCheckFrequency,
+					"shardID": shardID,
+					"lastNow": lastNow.Format(time.RFC1123Z),
+					"now":     now.Format(time.RFC1123Z),
+					"commitTickerDuration": commitTickerDuration.Seconds(),
+					"shardCheckFrequency":  k.config.shardCheckFrequency,
 				}).Info("Time between commitTicker.C greater than the shardCheckFrequency threshold")
 			}
 			lastNow = now
