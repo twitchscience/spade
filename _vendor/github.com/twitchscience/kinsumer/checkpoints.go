@@ -225,11 +225,61 @@ func (cp *checkpointer) release() error {
 		ConditionExpression:       aws.String("OwnerID = :ownerID"),
 		ExpressionAttributeValues: attrVals,
 	}); err != nil {
+		// Grab the entry from dynamo assuming there is one
+		resp, err := cp.dynamodb.GetItem(&dynamodb.GetItemInput{
+			TableName:      aws.String(cp.tableName),
+			ConsistentRead: aws.Bool(true),
+			Key: map[string]*dynamodb.AttributeValue{
+				"Shard": {S: aws.String(cp.shardID)},
+			},
+		})
+
+		if err != nil {
+			return fmt.Errorf("error calling GetItem on shard checkpoint: %v", err)
+		}
+
+		// Convert to struct so we can work with the values
+		var record checkpointRecord
+		if err = dynamodbattribute.ConvertFromMap(resp.Item, &record); err != nil {
+			return err
+		}
+
+		var sequenceNumber string
+		var ownerName string
+		var finished int64
+		var ownerID string
+		var finishedRFC string
+
+		if record.SequenceNumber != nil {
+			sequenceNumber = *record.SequenceNumber
+		}
+		if record.OwnerName != nil {
+			ownerName = *record.OwnerName
+		}
+		if record.Finished != nil {
+			finished = *record.Finished
+		}
+		if record.OwnerID != nil {
+			ownerID = *record.OwnerID
+		}
+		if record.FinishedRFC != nil {
+			finishedRFC = *record.FinishedRFC
+		}
+
 		logger.WithFields(map[string]interface{}{
 			"TableName": cp.tableName,
 			"Key":       fmt.Sprintf("{\"Shard\": {\"S\": \"%s\"}", cp.shardID),
 			"ConditionalExpression": fmt.Sprintf("OwnerID = %s", cp.ownerID),
+			"Shard":                 record.Shard,
+			"SequenceNumber":        sequenceNumber,
+			"LastUpdate":            record.LastUpdate,
+			"OwnerName":             ownerName,
+			"Finished":              finished,
+			"OwnerID":               ownerID,
+			"LastUpdateRFC":         record.LastUpdateRFC,
+			"FinishedRFC":           finishedRFC,
 		}).Info("*** Additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
+
 		return fmt.Errorf("error releasing checkpoint: %s", err)
 	}
 

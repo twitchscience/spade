@@ -3,11 +3,14 @@
 package kinsumer
 
 import (
+	"fmt"
 	"log"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/aws/aws-sdk-go/service/kinesis/kinesisiface"
 	"github.com/twitchscience/aws_utils/logger"
@@ -115,6 +118,7 @@ func (k *Kinsumer) consume(shardID string) {
 
 	// capture the checkpointer
 	checkpointer, err := k.captureShard(shardID)
+	captureTime := time.Now()
 	if err != nil {
 		k.shardErrors <- shardConsumerError{shardID: shardID, action: "captureShard", err: err}
 		return
@@ -132,6 +136,67 @@ func (k *Kinsumer) consume(shardID string) {
 	finished := false
 	// Make sure we release the shard when we are done.
 	defer func() {
+		now := time.Now()
+		d := now.Sub(captureTime)
+		if d > k.maxAgeForClientRecord {
+			// Grab the entry from dynamo assuming there is one
+			resp, err := checkpointer.dynamodb.GetItem(&dynamodb.GetItemInput{
+				TableName:      aws.String(checkpointer.tableName),
+				ConsistentRead: aws.Bool(true),
+				Key: map[string]*dynamodb.AttributeValue{
+					"Shard": {S: aws.String(checkpointer.shardID)},
+				},
+			})
+
+			if err != nil {
+				logger.Info(fmt.Sprintf("Error calling GetItem on shard checkpoint: %v", err))
+				return
+			}
+
+			// Convert to struct so we can work with the values
+			var record checkpointRecord
+			if err = dynamodbattribute.ConvertFromMap(resp.Item, &record); err != nil {
+				logger.Info(fmt.Sprintf("Error converting DynamoDB item: %v", err))
+				return
+			}
+
+			var sequenceNumber string
+			var ownerName string
+			var finished int64
+			var ownerID string
+			var finishedRFC string
+
+			if record.SequenceNumber != nil {
+				sequenceNumber = *record.SequenceNumber
+			}
+			if record.OwnerName != nil {
+				ownerName = *record.OwnerName
+			}
+			if record.Finished != nil {
+				finished = *record.Finished
+			}
+			if record.OwnerID != nil {
+				ownerID = *record.OwnerID
+			}
+			if record.FinishedRFC != nil {
+				finishedRFC = *record.FinishedRFC
+			}
+
+			logger.WithFields(map[string]interface{}{
+				"TableName":             checkpointer.tableName,
+				"Shard":                 record.Shard,
+				"SequenceNumber":        sequenceNumber,
+				"LastUpdate":            record.LastUpdate,
+				"OwnerName":             ownerName,
+				"Finished":              finished,
+				"OwnerID":               ownerID,
+				"LastUpdateRFC":         record.LastUpdateRFC,
+				"FinishedRFC":           finishedRFC,
+				"captureTime":           captureTime.Format(time.RFC1123Z),
+				"releaseTime":           now.Format(time.RFC1123Z),
+				"maxAgeForClientRecord": k.maxAgeForClientRecord,
+			}).Info("*** kinsumer.consume(): Time between capturing a shard and releasing it greater than maxAgeForClientRecord threshold  ***")
+		}
 		innerErr := checkpointer.release()
 		if innerErr != nil {
 			k.shardErrors <- shardConsumerError{shardID: shardID, action: "checkpointer.release", err: innerErr}
@@ -151,7 +216,10 @@ func (k *Kinsumer) consume(shardID string) {
 
 	retryCount := 0
 
+	lastNow := time.Now()
+
 	var lastSeqNum string
+
 mainloop:
 	for {
 		// We have reached the end of the shard's data. Set Finished in dynamo and stop processing.
@@ -165,6 +233,19 @@ mainloop:
 		case <-k.stop:
 			return
 		case <-commitTicker.C:
+			now := time.Now()
+			d := now.Sub(lastNow)
+			if d > k.config.shardCheckFrequency {
+				logger.WithFields(map[string]interface{}{
+					"shardID":             shardID,
+					"lastNow":             lastNow.Format(time.RFC1123Z),
+					"now":                 now.Format(time.RFC1123Z),
+					"duration":            d.Seconds(),
+					"shardCheckFrequency": k.config.shardCheckFrequency,
+				}).Info("Time between commitTicker.C greater than the shardCheckFrequency threshold")
+			}
+			lastNow = now
+
 			finishCommitted, err := checkpointer.commit()
 			if err != nil {
 				k.shardErrors <- shardConsumerError{shardID: shardID, action: "checkpointer.commit", err: err}
