@@ -17,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/aws/aws-sdk-go/service/kinesis/kinesisiface"
 	"github.com/cactus/go-statsd-client/statsd"
-	"github.com/twinj/uuid"
+	"github.com/myesui/uuid"
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/batcher"
