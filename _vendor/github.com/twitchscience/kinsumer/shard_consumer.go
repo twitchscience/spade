@@ -115,6 +115,7 @@ func (k *Kinsumer) consume(shardID string) {
 
 	// capture the checkpointer
 	checkpointer, err := k.captureShard(shardID)
+	captureTime := time.Now()
 	if err != nil {
 		k.shardErrors <- shardConsumerError{shardID: shardID, action: "captureShard", err: err}
 		return
@@ -132,6 +133,19 @@ func (k *Kinsumer) consume(shardID string) {
 	finished := false
 	// Make sure we release the shard when we are done.
 	defer func() {
+		now := time.Now()
+		captureToReleaseDuration := now.Sub(captureTime)
+		if captureToReleaseDuration > k.maxAgeForClientRecord {
+			logger.WithFields(map[string]interface{}{
+				"tableName":                checkpointer.tableName,
+				"shardID":                  shardID,
+				"sequenceNumber":           sequenceNumber,
+				"captureTime":              captureTime.Format(time.RFC1123Z),
+				"releaseTime":              now.Format(time.RFC1123Z),
+				"captureToReleaseDuration": captureToReleaseDuration.Seconds(),
+				"maxAgeForClientRecord":    k.maxAgeForClientRecord.Seconds(),
+			}).Info("*** kinsumer.consume(): Time between capturing a shard and releasing it greater than maxAgeForClientRecord threshold  ***")
+		}
 		innerErr := checkpointer.release()
 		if innerErr != nil {
 			k.shardErrors <- shardConsumerError{shardID: shardID, action: "checkpointer.release", err: innerErr}
@@ -151,7 +165,10 @@ func (k *Kinsumer) consume(shardID string) {
 
 	retryCount := 0
 
+	lastNow := time.Now()
+
 	var lastSeqNum string
+
 mainloop:
 	for {
 		// We have reached the end of the shard's data. Set Finished in dynamo and stop processing.
@@ -165,6 +182,19 @@ mainloop:
 		case <-k.stop:
 			return
 		case <-commitTicker.C:
+			now := time.Now()
+			commitTickerDuration := now.Sub(lastNow)
+			if commitTickerDuration > k.config.shardCheckFrequency {
+				logger.WithFields(map[string]interface{}{
+					"shardID": shardID,
+					"lastNow": lastNow.Format(time.RFC1123Z),
+					"now":     now.Format(time.RFC1123Z),
+					"commitTickerDuration": commitTickerDuration.Seconds(),
+					"shardCheckFrequency":  k.config.shardCheckFrequency.Seconds(),
+				}).Info("Time between commitTicker.C greater than the shardCheckFrequency threshold")
+			}
+			lastNow = now
+
 			finishCommitted, err := checkpointer.commit()
 			if err != nil {
 				k.shardErrors <- shardConsumerError{shardID: shardID, action: "checkpointer.commit", err: err}
