@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	tickTime   = time.Duration(1) * time.Minute
+	tickTime   = time.Duration(5) * time.Minute
 	retryDelay = time.Duration(30) * time.Second
 )
 
