@@ -244,7 +244,7 @@ func (cp *checkpointer) release() error {
 
 		// Convert to struct so we can work with the values
 		var record checkpointRecord
-		if getItemErr = dynamodbattribute.ConvertFromMap(resp.Item, &record); err != nil {
+		if getItemErr = dynamodbattribute.ConvertFromMap(resp.Item, &record); getItemErr != nil {
 			logger.WithFields(map[string]interface{}{
 				"tableName": cp.tableName,
 				"shardID":   cp.shardID,
