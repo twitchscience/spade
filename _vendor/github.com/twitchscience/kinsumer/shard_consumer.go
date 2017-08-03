@@ -143,7 +143,7 @@ func (k *Kinsumer) consume(shardID string) {
 				"captureTime":              captureTime.Format(time.RFC1123Z),
 				"releaseTime":              now.Format(time.RFC1123Z),
 				"captureToReleaseDuration": captureToReleaseDuration.Seconds(),
-				"maxAgeForClientRecord":    k.maxAgeForClientRecord,
+				"maxAgeForClientRecord":    k.maxAgeForClientRecord.Seconds(),
 			}).Info("*** kinsumer.consume(): Time between capturing a shard and releasing it greater than maxAgeForClientRecord threshold  ***")
 		}
 		innerErr := checkpointer.release()
@@ -190,7 +190,7 @@ mainloop:
 					"lastNow": lastNow.Format(time.RFC1123Z),
 					"now":     now.Format(time.RFC1123Z),
 					"commitTickerDuration": commitTickerDuration.Seconds(),
-					"shardCheckFrequency":  k.config.shardCheckFrequency,
+					"shardCheckFrequency":  k.config.shardCheckFrequency.Seconds(),
 				}).Info("Time between commitTicker.C greater than the shardCheckFrequency threshold")
 			}
 			lastNow = now

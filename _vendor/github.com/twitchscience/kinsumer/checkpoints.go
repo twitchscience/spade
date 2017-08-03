@@ -238,7 +238,7 @@ func (cp *checkpointer) release() error {
 			logger.WithFields(map[string]interface{}{
 				"tableName": cp.tableName,
 				"shardID":   cp.shardID,
-			}).Info("Error calling DynamoDB.GetItem() in error handling for DynamoDB.UpdateItem()")
+			}).WithError(getItemErr).Info("Error calling DynamoDB.GetItem() in error handling for DynamoDB.UpdateItem()")
 			return fmt.Errorf("error releasing checkpoint: %s", err)
 		}
 
@@ -248,7 +248,7 @@ func (cp *checkpointer) release() error {
 			logger.WithFields(map[string]interface{}{
 				"tableName": cp.tableName,
 				"shardID":   cp.shardID,
-			}).Info("Error converting item into a checkpointRecord in error handling for DynamoDB.UpdateItem()")
+			}).WithError(getItemErr).Info("Error converting item into a checkpointRecord in error handling for DynamoDB.UpdateItem()")
 			return fmt.Errorf("error releasing checkpoint: %s", err)
 		}
 
