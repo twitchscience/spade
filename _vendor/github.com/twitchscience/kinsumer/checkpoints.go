@@ -225,10 +225,45 @@ func (cp *checkpointer) release() error {
 		ConditionExpression:       aws.String("OwnerID = :ownerID"),
 		ExpressionAttributeValues: attrVals,
 	}); err != nil {
+		// Grab the entry from dynamo assuming there is one
+		resp, getItemErr := cp.dynamodb.GetItem(&dynamodb.GetItemInput{
+			TableName:      aws.String(cp.tableName),
+			ConsistentRead: aws.Bool(true),
+			Key: map[string]*dynamodb.AttributeValue{
+				"Shard": {S: aws.String(cp.shardID)},
+			},
+		})
+
+		if getItemErr != nil {
+			logger.WithFields(map[string]interface{}{
+				"tableName": cp.tableName,
+				"shardID":   cp.shardID,
+			}).WithError(getItemErr).Info("Error calling DynamoDB.GetItem() in error handling for DynamoDB.UpdateItem()")
+			return fmt.Errorf("error releasing checkpoint: %s", err)
+		}
+
+		// Convert to struct so we can work with the values
+		var record checkpointRecord
+		if getItemErr = dynamodbattribute.ConvertFromMap(resp.Item, &record); getItemErr != nil {
+			logger.WithFields(map[string]interface{}{
+				"tableName": cp.tableName,
+				"shardID":   cp.shardID,
+			}).WithError(getItemErr).Info("Error converting item into a checkpointRecord in error handling for DynamoDB.UpdateItem()")
+			return fmt.Errorf("error releasing checkpoint: %s", err)
+		}
+
 		logger.WithFields(map[string]interface{}{
 			"TableName": cp.tableName,
 			"Key":       fmt.Sprintf("{\"Shard\": {\"S\": \"%s\"}", cp.shardID),
 			"ConditionalExpression": fmt.Sprintf("OwnerID = %s", cp.ownerID),
+			"Shard":                 record.Shard,
+			"SequenceNumber":        record.SequenceNumber,
+			"LastUpdate":            record.LastUpdate,
+			"OwnerName":             record.OwnerName,
+			"Finished":              record.Finished,
+			"OwnerID":               record.OwnerID,
+			"LastUpdateRFC":         record.LastUpdateRFC,
+			"FinishedRFC":           record.FinishedRFC,
 		}).Info("*** Additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
 		return fmt.Errorf("error releasing checkpoint: %s", err)
 	}
