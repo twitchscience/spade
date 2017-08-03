@@ -252,40 +252,18 @@ func (cp *checkpointer) release() error {
 			return fmt.Errorf("error releasing checkpoint: %s", err)
 		}
 
-		var sequenceNumber string
-		var ownerName string
-		var finished int64
-		var ownerID string
-		var finishedRFC string
-
-		if record.SequenceNumber != nil {
-			sequenceNumber = *record.SequenceNumber
-		}
-		if record.OwnerName != nil {
-			ownerName = *record.OwnerName
-		}
-		if record.Finished != nil {
-			finished = *record.Finished
-		}
-		if record.OwnerID != nil {
-			ownerID = *record.OwnerID
-		}
-		if record.FinishedRFC != nil {
-			finishedRFC = *record.FinishedRFC
-		}
-
 		logger.WithFields(map[string]interface{}{
 			"TableName": cp.tableName,
 			"Key":       fmt.Sprintf("{\"Shard\": {\"S\": \"%s\"}", cp.shardID),
 			"ConditionalExpression": fmt.Sprintf("OwnerID = %s", cp.ownerID),
 			"Shard":                 record.Shard,
-			"SequenceNumber":        sequenceNumber,
+			"SequenceNumber":        record.SequenceNumber,
 			"LastUpdate":            record.LastUpdate,
-			"OwnerName":             ownerName,
-			"Finished":              finished,
-			"OwnerID":               ownerID,
+			"OwnerName":             record.OwnerName,
+			"Finished":              record.Finished,
+			"OwnerID":               record.OwnerID,
 			"LastUpdateRFC":         record.LastUpdateRFC,
-			"FinishedRFC":           finishedRFC,
+			"FinishedRFC":           record.FinishedRFC,
 		}).Info("*** Additional logging for error releasing checkpoint on DynamoDB.UpdateItem() ***")
 		return fmt.Errorf("error releasing checkpoint: %s", err)
 	}
