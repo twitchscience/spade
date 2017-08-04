@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	tickTime   = time.Duration(5) * time.Minute
-	retryDelay = time.Duration(30) * time.Second
+	tickTime      = 10 * time.Minute
+	retryDelay    = 2 * time.Second
+	maxRetryDelay = 20 * time.Second
 )
 
 // A Config contains the parameters required by a Client to interact with a memcache cluster.
@@ -74,16 +75,19 @@ func NewClientWithInterface(
 		rand:           rand.New(rand.NewSource(time.Now().UnixNano() ^ int64(os.Getpid()))),
 	}
 	err := client.updateNodesWithRetry(5)
-	return client, err
+	if err != nil {
+		return nil, fmt.Errorf("initial node update: %v", err)
+	}
+	return client, nil
 }
 
 func (c *Client) createCacheKey(key string) string {
 	return fmt.Sprintf("%s:%s", c.config.Namespace, key)
 }
 
-// randomJitter returns a uniformly random duration between 0 and t.
+// randomJitter returns a uniformly random duration between t/2 and t.
 func (c *Client) randomJitter(t time.Duration) time.Duration {
-	return time.Duration(c.rand.Int63n(int64(t)))
+	return time.Duration(c.rand.Int63n(int64(t)/2) + int64(t)/2)
 }
 
 // updateNodes queries AWS to obtain a description of the cache cluster to extract and update
@@ -127,44 +131,38 @@ func (c *Client) updateNodesWithRetry(numRetries int) error {
 	}
 
 	retryWithBackoff := retryDelay
-	for i := 1; ; i++ {
-		window := time.After(retryWithBackoff)
-		time.Sleep(c.randomJitter(retryWithBackoff))
+	var err error
+	for i := 0; ; i++ {
 
-		err := c.updateNodes()
-
+		err = c.updateNodes()
 		if err == nil {
 			return nil
 		}
-
 		if i == numRetries {
-			return fmt.Errorf("updating nodes with retry: %v", err)
+			return fmt.Errorf("updating elasticache nodes: %v", err)
 		}
 
 		logger.WithError(err).WithField("window", retryWithBackoff).WithField("attempt", i).Warn("Failed to update nodes; retrying")
+		time.Sleep(c.randomJitter(retryWithBackoff))
 		retryWithBackoff *= 2
-		<-window
+		if retryWithBackoff > maxRetryDelay {
+			retryWithBackoff = maxRetryDelay
+		}
 	}
 }
 
 // StartAutoDiscovery is a blocking function that refreshes nodes on an interval.
 func (c *Client) StartAutoDiscovery() {
-	tick := time.NewTicker(tickTime)
+	tick := time.After(c.randomJitter(tickTime))
 	for {
 		select {
 		case <-c.closer:
-			tick.Stop()
 			return
-		case <-tick.C:
-			select {
-			case <-c.closer:
-				tick.Stop()
-				return
-			case <-time.After(c.randomJitter(tickTime)):
-				if err := c.updateNodes(); err != nil {
-					logger.WithError(err).Error("Failed to update nodes")
-					continue
-				}
+		case <-tick:
+			tick = time.After(c.randomJitter(tickTime))
+			if err := c.updateNodesWithRetry(2); err != nil {
+				logger.WithError(err).Error("Failed to update nodes")
+				continue
 			}
 		}
 	}
