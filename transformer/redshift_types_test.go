@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/twitchscience/scoop_protocol/transformer"
 	"github.com/twitchscience/spade/cache/lru"
+	"github.com/twitchscience/spade/geoip"
 )
 
 var (
@@ -20,15 +22,11 @@ func _typeRunner(t *testing.T, input interface{}, _type RedshiftType,
 	expected string, shouldFail bool) {
 	args := []interface{}{input}
 	actual, err := _type.Transformer(args)
-	if err != nil && !shouldFail {
-		t.Log(err)
-		t.Fail()
-	} else if err != nil {
-		return
-	}
-	if expected != actual {
-		t.Logf("Expected %#v, got %#v\n", expected, actual)
-		t.Fail()
+	if shouldFail {
+		assert.Error(t, err)
+	} else {
+		assert.NoError(t, err)
+		assert.Equal(t, expected, actual)
 	}
 }
 
@@ -142,34 +140,34 @@ func TestBooleanConversion(t *testing.T) {
 }
 
 func TestIpConversion(t *testing.T) {
-	err := SetGeoDB("../geoip/TestOldGeoIPCity.dat", "../geoip/TestOldGeoIPASNum.dat")
-	if err != nil {
-		t.Log(err)
-		t.Fail()
-	}
-	ipCityConverter := RedshiftType{ipCityFormat, "_", "_", nil}
+	g, err := geoip.NewGeoMMIp("../geoip/TestOldGeoIPCity.dat", "../geoip/TestOldGeoIPASNum.dat")
+	require.NoError(t, err)
+	ipCityConverter := RedshiftType{ipCityFormat(g), "_", "_", nil}
 	_typeRunner(t, "222.22.24.22", ipCityConverter, "Zhengzhou", false)
 
-	ipCountryConverter := RedshiftType{ipCountryFormat, "_", "_", nil}
+	ipCountryConverter := RedshiftType{ipCountryFormat(g), "_", "_", nil}
 	_typeRunner(t, "222.22.24.22", ipCountryConverter, "CN", false)
 
-	ipRegionConverter := RedshiftType{ipRegionFormat, "_", "_", nil}
+	ipRegionConverter := RedshiftType{ipRegionFormat(g), "_", "_", nil}
 	_typeRunner(t, "222.22.24.22", ipRegionConverter, "09", false)
 
-	ipAsnConverter := RedshiftType{ipAsnFormat, "_", "_", nil}
+	ipAsnConverter := RedshiftType{ipAsnFormat(g), "_", "_", nil}
 	_typeRunner(t, "222.22.24.22", ipAsnConverter, "AS4538 China Education and Research Network Center", false)
 
-	ipAsnIntConverter := RedshiftType{ipAsnIntFormat, "_", "_", nil}
+	ipAsnIntConverter := RedshiftType{ipAsnIntFormat(g), "_", "_", nil}
 	_typeRunner(t, "222.22.24.22", ipAsnIntConverter, "4538", false)
 
 	// test an IP where the ASN has no description
-	ipAsnIntConverterNoDescription := RedshiftType{ipAsnIntFormat, "_", "_", nil}
+	ipAsnIntConverterNoDescription := RedshiftType{ipAsnIntFormat(g), "_", "_", nil}
 	_typeRunner(t, "118.192.154.0", ipAsnIntConverterNoDescription, "59050", false)
 }
 
 func TestInSyncWithScoopProtocol(t *testing.T) {
 	var processorNames []string
 	for k := range singleValueTransformMap {
+		processorNames = append(processorNames, k)
+	}
+	for k := range geoipTransformGeneratorMap {
 		processorNames = append(processorNames, k)
 	}
 	for k := range mappingTransformMap {

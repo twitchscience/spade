@@ -7,6 +7,7 @@ import (
 
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 
+	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/transformer"
 )
 
@@ -46,7 +47,7 @@ func buildConfig() []byte {
 
 func buildMappingConfig() map[string]transformer.MappingTransformerConfig {
 	return map[string]transformer.MappingTransformerConfig{
-		"userIDWithMapping": transformer.MappingTransformerConfig{},
+		"userIDWithMapping": {},
 	}
 }
 
@@ -56,7 +57,7 @@ func TestConfigLoading(t *testing.T) {
 		t.Error(err)
 		t.Fail()
 	}
-	maintenanceStrings, maintananceVersions, _ := tables.CompileForParsing(buildMappingConfig())
+	maintenanceStrings, maintananceVersions, _ := tables.CompileForParsing(buildMappingConfig(), geoip.Noop())
 	loader := NewStaticLoader(maintenanceStrings, maintananceVersions)
 	_, err = loader.GetColumnsForEvent("test1")
 	if err != nil {
@@ -81,7 +82,7 @@ func TestVersionLoading(t *testing.T) {
 		t.Error(err)
 		t.Fail()
 	}
-	maintenanceStrings, maintananceVersions, _ := tables.CompileForParsing(buildMappingConfig())
+	maintenanceStrings, maintananceVersions, _ := tables.CompileForParsing(buildMappingConfig(), geoip.Noop())
 	loader := NewStaticLoader(maintenanceStrings, maintananceVersions)
 	version := loader.GetVersionForEvent("test1")
 	if version != 22 {

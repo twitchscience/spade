@@ -9,6 +9,7 @@ import (
 
 	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
+	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/reporter"
 )
 
@@ -59,6 +60,7 @@ func TestRefresh(t *testing.T) {
 		1,
 		reporter.WrapCactusStatter(c, 0.1),
 		nil,
+		geoip.Noop(),
 	)
 	if err != nil {
 		t.Fatalf("was expecting no error but got %v\n", err)
@@ -102,6 +104,7 @@ func TestRetryPull(t *testing.T) {
 		1*time.Microsecond,
 		reporter.WrapCactusStatter(c, 0.1),
 		nil,
+		geoip.Noop(),
 	)
 	if err == nil {
 		t.Fatalf("expected loader to timeout\n")

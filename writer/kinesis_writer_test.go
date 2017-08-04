@@ -115,7 +115,7 @@ type kinesisMock struct {
 
 func (k *kinesisMock) PutRecords(i *kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error) {
 	for _, v := range i.Records {
-		var unpacked jsonRecord
+		var unpacked JSONRecord
 		_ = json.Unmarshal(v.Data, &unpacked)
 		k.received = append(k.received, unpacked.Data)
 	}

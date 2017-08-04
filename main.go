@@ -13,41 +13,48 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
+	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
 	"github.com/aws/aws-sdk-go/service/sns"
 	"github.com/aws/aws-sdk-go/service/sns/snsiface"
+	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/cactus/go-statsd-client/statsd"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/twitchscience/aws_utils/logger"
 	aws_uploader "github.com/twitchscience/aws_utils/uploader"
+	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/cache/lru"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/deglobber"
-	"github.com/twitchscience/spade/event_metadata"
+	eventMetadataConfig "github.com/twitchscience/spade/event_metadata"
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/kinesisconfigs"
 	"github.com/twitchscience/spade/lookup"
 	"github.com/twitchscience/spade/processor"
 	"github.com/twitchscience/spade/reporter"
+	tableConfig "github.com/twitchscience/spade/tables"
+	"github.com/twitchscience/spade/transformer"
 	"github.com/twitchscience/spade/uploader"
 	"github.com/twitchscience/spade/writer"
 )
@@ -64,11 +71,14 @@ const (
 )
 
 var (
-	_dir        = flag.String("spade_dir", ".", "where does spade_log live?")
-	statsPrefix = flag.String("stat_prefix", "processor", "statsd prefix")
-	replay      = flag.Bool("replay", false, "take plaintext events (as in spade-edge-prod) from standard input")
-	runTag      = flag.String("run_tag", "", "override YYYYMMDD tag with new prefix (usually for replay)")
+	_replay         = flag.Bool("replay", false, "take plaintext events (as in spade-edge-prod) from standard input")
+	_runTag         = flag.String("run_tag", "", "override YYYYMMDD tag with new prefix (usually for replay)")
+	_configFilename = flag.String("config", "conf.json", "name of config file")
 )
+
+type closer interface {
+	Close()
+}
 
 type spadeProcessor struct {
 	geoIPUpdater  *geoip.Updater
@@ -80,9 +90,7 @@ type spadeProcessor struct {
 	multee                *writer.Multee
 	spadeUploaderPool     *aws_uploader.UploaderPool
 	blueprintUploaderPool *aws_uploader.UploaderPool
-	tCache                *elastimemcache.Client
-	kinesisConfigLoader   *kinesisconfigs.DynamicLoader
-	eventMetadataLoader   *eventmetadata.DynamicLoader
+	closers               []closer
 
 	rotation <-chan time.Time
 	sigc     chan os.Signal
@@ -90,18 +98,24 @@ type spadeProcessor struct {
 
 type spadeProcessorDeps struct {
 	s3              s3iface.S3API
+	s3Uploader      s3manageriface.UploaderAPI
 	sns             snsiface.SNSAPI
 	elasticache     elasticacheiface.ElastiCacheAPI
-	dynamodb        dynamodbiface.DynamoDBAPI
 	kinesisFactory  writer.KinesisFactory
 	firehoseFactory writer.FirehoseFactory
 
-	fetcherFactory      func(bucket, key string, s3 s3iface.S3API, validator func([]byte) error) fetcher.ConfigFetcher
 	valueFetcherFactory func(lookup.JSONValueFetcherConfig, reporter.StatsLogger) (lookup.ValueFetcher, error)
+	resultPipe          consumer.ResultPipe
+	memcacheClient      elastimemcache.MemcacheClient
+	memcacheSelector    elastimemcache.ServerList
+	geoip               geoip.GeoLookup
 	stats               statsd.Statter
+	cfg                 *config
+	runTag              string
+	replay              bool
 }
 
-func buildDeps() *spadeProcessorDeps {
+func buildDeps(cfg *config, runTag string, replay bool) (*spadeProcessorDeps, error) {
 	// aws resources
 	session, err := session.NewSession(&aws.Config{
 		HTTPClient: &http.Client{
@@ -117,84 +131,96 @@ func buildDeps() *spadeProcessorDeps {
 		},
 	})
 	if err != nil {
-		logger.WithError(err).Fatal("Failed to create aws session")
+		return nil, fmt.Errorf("creating aws session: %v", err)
 	}
+
+	geoip, err := geoip.NewGeoMMIp(cfg.Geoip.IPCity.Path, cfg.Geoip.IPASN.Path)
+	if err != nil {
+		return nil, fmt.Errorf("creating geoip db: %v", err)
+	}
+	statsd, err := createStatsdStatter(cfg.StatsdHostport, cfg.StatsdPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("creating statsd statter: %v", err)
+	}
+	ss := &memcache.ServerList{}
+
+	var resultPipe consumer.ResultPipe
+	if replay {
+		resultPipe = consumer.NewStandardInputPipe()
+	} else {
+		resultPipe, err = consumer.NewKinesisPipe(
+			kinesis.New(session), dynamodb.New(session), statsd, cfg.Consumer)
+		if err != nil {
+			return nil, fmt.Errorf("creating consumer: %v", err)
+		}
+	}
+
+	s3 := s3.New(session)
 	return &spadeProcessorDeps{
-		s3:                  s3.New(session),
+		s3:                  s3,
+		s3Uploader:          s3manager.NewUploaderWithClient(s3),
 		sns:                 sns.New(session),
 		elasticache:         elasticache.New(session),
-		dynamodb:            dynamodb.New(session),
 		kinesisFactory:      &writer.DefaultKinesisFactory{Session: session},
 		firehoseFactory:     &writer.DefaultFirehoseFactory{Session: session},
-		fetcherFactory:      fetcher.New,
 		valueFetcherFactory: lookup.NewJSONValueFetcher,
-		stats:               createStatsdStatter(),
-	}
+		resultPipe:          resultPipe,
+		geoip:               geoip,
+		memcacheClient:      memcache.NewFromSelector(ss),
+		memcacheSelector:    ss,
+		stats:               statsd,
+		cfg:                 cfg,
+		runTag:              runTag,
+		replay:              replay,
+	}, nil
 }
 
-func newProcessor(deps *spadeProcessorDeps) *spadeProcessor {
-	s3Uploader := s3manager.NewUploaderWithClient(deps.s3)
-
-	startELBHealthCheckListener()
+func newProcessor(deps *spadeProcessorDeps) (*spadeProcessor, error) {
 
 	reporterStats := reporter.WrapCactusStatter(deps.stats, 0.01)
 	spadeReporter := reporter.BuildSpadeReporter(
 		[]reporter.Tracker{&reporter.SpadeStatsdTracker{Stats: reporterStats}})
 
-	valueFetchers := map[string]lookup.ValueFetcher{}
-	for id, config := range config.JSONValueFetchers {
-		fetcher, err := deps.valueFetcherFactory(config, reporterStats)
-		if err != nil {
-			logger.WithError(err).Fatalf("Failed to create a value fetcher with id %s", id)
-		}
-		valueFetchers[id] = fetcher
-	}
-
 	spadeUploaderPool := uploader.BuildUploaderForRedshift(
-		redshiftUploaderNumWorkers, deps.sns, s3Uploader, config.AceBucketName,
-		config.AceTopicARN, config.AceErrorTopicARN, *runTag, *replay)
+		redshiftUploaderNumWorkers, deps.sns, deps.s3Uploader, deps.cfg.AceBucketName,
+		deps.cfg.AceTopicARN, deps.cfg.AceErrorTopicARN, deps.runTag, deps.replay)
 	blueprintUploaderPool := uploader.BuildUploaderForBlueprint(
-		blueprintUploaderNumWorkers, deps.sns, s3Uploader, config.NonTrackedBucketName,
-		config.NonTrackedTopicARN, config.NonTrackedErrorTopicARN, *replay)
+		blueprintUploaderNumWorkers, deps.sns, deps.s3Uploader, deps.cfg.NonTrackedBucketName,
+		deps.cfg.NonTrackedTopicARN, deps.cfg.NonTrackedErrorTopicARN, deps.replay)
 
-	// If the processor exited hard, clean up the files that were left.
-	eDir := *_dir + "/" + writer.EventsDir + "/"
-	if err := uploader.SalvageCorruptedEvents(eDir); err != nil {
-		logger.WithError(err).Error("Failed to salvage corrupted events")
-	}
-	if err := uploader.ClearEventsFolder(spadeUploaderPool, eDir); err != nil {
-		logger.WithError(err).Error("Failed to clear events folder")
+	err := initializeDirectories(deps.cfg.SpadeDir+"/"+writer.EventsDir+"/",
+		deps.cfg.SpadeDir+"/"+writer.NonTrackedDir+"/", spadeUploaderPool)
+	if err != nil {
+		return nil, fmt.Errorf("initializing directories: %v", err)
 	}
 
-	// staticMultee manages the static spade writer and kinesis writers from static JSON
-	staticMultee := writer.NewMultee()
-	staticMultee.Add(spadeWriterKey, createSpadeWriter(
-		*_dir, spadeReporter, spadeUploaderPool, blueprintUploaderPool,
-		config.MaxLogBytes, config.MaxLogAgeSecs))
-	createStaticKinesisWriters(staticMultee, deps.kinesisFactory, deps.firehoseFactory, deps.stats)
-
-	// dynamicMultee manages the dynamic kinesis writers that updates based on Blueprint
-	dynamicMultee := writer.NewMultee()
-
-	// One Multee to rule them all, One Multee to find them,
-	// One Multee to bring them all and in the darkness bind them.
 	multee := writer.NewMultee()
-	multee.Add("static_multee", staticMultee)
-	multee.Add("dynamic_multee", dynamicMultee)
+	spadeWriter, err := writer.NewWriterController(deps.cfg.SpadeDir, spadeReporter,
+		spadeUploaderPool, blueprintUploaderPool,
+		deps.cfg.MaxLogBytes, deps.cfg.MaxLogAgeSecs, deps.cfg.NontrackedMaxLogAgeSecs)
+	if err != nil {
+		return nil, fmt.Errorf("creating spade writer: %v", err)
+	}
+	multee.Add(spadeWriterKey, spadeWriter)
 
-	schemaFetcher := deps.fetcherFactory(config.ConfigBucket, config.SchemasKey, deps.s3, fetcher.ValidateFetchedSchema)
-	kinesisConfigFetcher := deps.fetcherFactory(config.ConfigBucket, config.KinesisConfigKey, deps.s3, fetcher.ValidateFetchedKinesisConfig)
-	eventMetadataFetcher := deps.fetcherFactory(config.ConfigBucket, config.MetadataConfigKey, deps.s3, fetcher.ValidateFetchedEventMetadataConfig)
-	localCache := lru.New(1000, time.Duration(config.LRULifetimeSeconds)*time.Second)
-	remoteCache := createTransformerCache(deps.elasticache, config.TransformerCacheCluster)
-	tConfigs := createMappingTransformerConfigs(
-		valueFetchers, localCache, remoteCache, config.TransformerFetchers, reporterStats)
-	schemaLoader := createSchemaLoader(schemaFetcher, reporterStats, tConfigs)
-	kinesisConfigLoader := createKinesisConfigLoader(kinesisConfigFetcher, reporterStats, dynamicMultee, deps.kinesisFactory, deps.firehoseFactory)
-	eventMetadataLoader := createEventMetadataLoader(eventMetadataFetcher, reporterStats)
+	for _, c := range deps.cfg.KinesisOutputs {
+		w, werr := writer.NewKinesisWriter(
+			deps.kinesisFactory,
+			deps.firehoseFactory,
+			deps.stats,
+			c,
+			deps.cfg.KinesisWriterErrorsBeforeThrottling,
+			deps.cfg.KinesisWriterErrorThrottlePeriodSeconds)
+		if werr != nil {
+			return nil, fmt.Errorf("creating static kinesis writer %s: %v", c.StreamName, werr)
+		}
+		multee.Add(fmt.Sprintf("static_%s_%s_%s", c.StreamRole, c.StreamType, c.StreamName), w)
+	}
 
-	processorPool := processor.BuildProcessorPool(schemaLoader, eventMetadataLoader, spadeReporter, multee, reporterStats)
-	processorPool.StartListeners()
+	processorPool, closers, err := startProcessorPool(deps, multee, spadeReporter, reporterStats)
+	if err != nil {
+		return nil, fmt.Errorf("starting processor pool: %v", err)
+	}
 
 	deglobberPool := deglobber.NewPool(deglobber.PoolConfig{
 		ProcessorPool:      processorPool,
@@ -202,16 +228,19 @@ func newProcessor(deps *spadeProcessorDeps) *spadeProcessor {
 		DuplicateCache:     cache.New(duplicateCacheExpiry, duplicateCacheCleanupFrequency),
 		PoolSize:           runtime.NumCPU(),
 		CompressionVersion: compressionVersion,
-		ReplayMode:         *replay,
+		ReplayMode:         deps.replay,
 	})
 	deglobberPool.Start()
+
+	gip := geoip.NewUpdater(time.Now(), deps.geoip, *deps.cfg.Geoip, deps.s3)
+	logger.Go(gip.UpdateLoop)
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGINT)
 	return &spadeProcessor{
-		geoIPUpdater:          createGeoipUpdater(deps.s3, config.Geoip),
+		geoIPUpdater:          gip,
 		spadeReporter:         spadeReporter,
-		resultPipe:            createPipe(deps.kinesisFactory.New("", ""), deps.dynamodb, deps.stats, *replay),
+		resultPipe:            deps.resultPipe,
 		deglobberPool:         deglobberPool,
 		processorPool:         processorPool,
 		multee:                multee,
@@ -219,12 +248,143 @@ func newProcessor(deps *spadeProcessorDeps) *spadeProcessor {
 		blueprintUploaderPool: blueprintUploaderPool,
 		rotation:              time.Tick(rotationCheckFrequency),
 		sigc:                  sigc,
-		tCache:                remoteCache,
-		kinesisConfigLoader:   kinesisConfigLoader,
-		eventMetadataLoader:   eventMetadataLoader,
-	}
+		closers:               closers,
+	}, nil
 }
 
+func startProcessorPool(deps *spadeProcessorDeps, multee *writer.Multee,
+	spadeReporter reporter.Reporter, reporterStats reporter.StatsLogger) (processor.Pool, []closer, error) {
+	schemaFetcher := fetcher.New(deps.cfg.ConfigBucket, deps.cfg.SchemasKey, deps.s3, fetcher.ValidateFetchedSchema)
+	kinesisConfigFetcher := fetcher.New(deps.cfg.ConfigBucket, deps.cfg.KinesisConfigKey, deps.s3, fetcher.ValidateFetchedKinesisConfig)
+	eventMetadataFetcher := fetcher.New(deps.cfg.ConfigBucket, deps.cfg.MetadataConfigKey, deps.s3, fetcher.ValidateFetchedEventMetadataConfig)
+	localCache := lru.New(1000, time.Duration(deps.cfg.LRULifetimeSeconds)*time.Second)
+	remoteCache, err := elastimemcache.NewClientWithInterface(
+		deps.elasticache, deps.memcacheClient, deps.memcacheSelector, deps.cfg.TransformerCacheCluster)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating transformer cache: %v", err)
+	}
+	logger.Go(remoteCache.StartAutoDiscovery)
+
+	valueFetchers := map[string]lookup.ValueFetcher{}
+	for id, cfg := range deps.cfg.JSONValueFetchers {
+		fetcher, fErr := deps.valueFetcherFactory(cfg, reporterStats)
+		if fErr != nil {
+			return nil, nil, fmt.Errorf("creating value fetcher with id %s: %v", id, fErr)
+		}
+		valueFetchers[id] = fetcher
+	}
+
+	tConfigs := map[string]transformer.MappingTransformerConfig{}
+	for tID, fID := range deps.cfg.TransformerFetchers {
+		fetcher, ok := valueFetchers[fID]
+		if !ok {
+			return nil, nil, fmt.Errorf("finding value fetcher with id %s", fID)
+		}
+		tConfigs[tID] = transformer.MappingTransformerConfig{
+			Fetcher:     fetcher,
+			LocalCache:  localCache,
+			RemoteCache: remoteCache,
+			Stats:       reporterStats,
+		}
+	}
+
+	schemaLoader, err := tableConfig.NewDynamicLoader(
+		schemaFetcher, deps.cfg.SchemaReloadFrequency.Duration,
+		deps.cfg.SchemaReloadFrequency.Duration, reporterStats, tConfigs, deps.geoip)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating dynamic schema loader: %v", err)
+	}
+	logger.Go(schemaLoader.Crank)
+
+	kinesisConfigLoader, err := kinesisconfigs.NewDynamicLoader(
+		kinesisConfigFetcher,
+		deps.cfg.KinesisConfigReloadFrequency.Duration,
+		deps.cfg.KinesisConfigRetryDelay.Duration,
+		reporterStats,
+		multee,
+		func(cfg scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error) {
+			return writer.NewKinesisWriter(
+				deps.kinesisFactory,
+				deps.firehoseFactory,
+				reporterStats.GetStatter(),
+				cfg,
+				deps.cfg.KinesisWriterErrorsBeforeThrottling,
+				deps.cfg.KinesisWriterErrorThrottlePeriodSeconds)
+		},
+		deps.cfg.KinesisOutputs,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating dynamic kinesis config loader: %v", err)
+	}
+	logger.Go(kinesisConfigLoader.Crank)
+
+	eventMetadataLoader, err := eventMetadataConfig.NewDynamicLoader(
+		eventMetadataFetcher, deps.cfg.EventMetadataReloadFrequency.Duration,
+		deps.cfg.EventMetadataRetryDelay.Duration, reporterStats)
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating dynamic event metadata loader: %v", err)
+	}
+	logger.Go(eventMetadataLoader.Crank)
+
+	processorPool := processor.BuildProcessorPool(schemaLoader, eventMetadataLoader, spadeReporter, multee, reporterStats)
+	processorPool.StartListeners()
+	return processorPool, []closer{
+		schemaLoader, kinesisConfigLoader, eventMetadataLoader, remoteCache}, nil
+}
+
+func initializeDirectories(events, nontracked string, uploaderPool *aws_uploader.UploaderPool) error {
+	// Create event and nontracked directories if they don't exist.
+	if _, err := os.Stat(events); err != nil && os.IsNotExist(err) {
+		err = os.MkdirAll(events, 0755)
+		if err != nil {
+			return fmt.Errorf("creating event dir: %v", err)
+		}
+	}
+	if _, err := os.Stat(nontracked); err != nil && os.IsNotExist(err) {
+		err = os.MkdirAll(nontracked, 0755)
+		if err != nil {
+			return fmt.Errorf("creating nontracked dir: %v", err)
+		}
+	}
+	// If the processor exited hard, clean up the files that were left.
+	if err := uploader.SalvageCorruptedEvents(events); err != nil {
+		return fmt.Errorf("salvaging corrupted events: %v", err)
+	}
+	if err := uploader.ClearEventsFolder(uploaderPool, events); err != nil {
+		return fmt.Errorf("clearing events folder: %v", err)
+	}
+	return nil
+}
+
+func createStatsdStatter(hostport, prefix string) (statsd.Statter, error) {
+	// - If the env is not set up we wil use a noop connection
+	if hostport == "" {
+		logger.Warning("statsd hostport is empty, using noop statsd connection")
+		stats, err := statsd.NewNoop()
+		if err != nil {
+			return nil, fmt.Errorf("creating noop statsd connection: %v", err)
+		}
+		return stats, nil
+	}
+
+	stats, err := statsd.New(hostport, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("creating real statsd connection: %v", err)
+	}
+	logger.WithField("statsd_host_port", hostport).Info("Connected to statsd")
+	return stats, nil
+}
+
+func startELBHealthCheckListener() {
+	healthMux := http.NewServeMux()
+	healthMux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	logger.Go(func() {
+		err := http.ListenAndServe(net.JoinHostPort("", "8080"), healthMux)
+		logger.WithError(err).Error("Failure listening to port 8080 with healthMux")
+	})
+}
 func (s *spadeProcessor) run() {
 	numGlobs := 0
 	for {
@@ -257,9 +417,16 @@ func (s *spadeProcessor) run() {
 }
 
 func (s *spadeProcessor) shutdown() {
-	s.tCache.StopAutoDiscovery()
+	var wg sync.WaitGroup
+	for _, closer := range s.closers {
+		c := closer
+		wg.Add(1)
+		logger.Go(func() {
+			c.Close()
+			wg.Done()
+		})
+	}
 
-	s.kinesisConfigLoader.Close()
 	s.resultPipe.Close()
 	s.deglobberPool.Close()
 	s.processorPool.Close()
@@ -270,12 +437,19 @@ func (s *spadeProcessor) shutdown() {
 
 	s.spadeUploaderPool.Close()
 	s.blueprintUploaderPool.Close()
+	wg.Wait()
 }
 
 func main() {
 	flag.Parse()
-	loadConfig()
-	logger.InitWithRollbar("info", config.RollbarToken, config.RollbarEnvironment)
+	cfg, err := loadConfig(*_configFilename, *_replay)
+	if err != nil {
+		logger.WithField("configFilename", *_configFilename).WithError(
+			err).Error("Failed to load config")
+		logger.Wait()
+		os.Exit(1)
+	}
+	logger.InitWithRollbar("info", cfg.RollbarToken, cfg.RollbarEnvironment)
 	logger.Info("Starting processor")
 	logger.CaptureDefault()
 	defer logger.LogPanic()
@@ -286,8 +460,21 @@ func main() {
 			Error("Serving pprof failed")
 	})
 
-	deps := buildDeps()
-	s := newProcessor(deps)
+	deps, err := buildDeps(cfg, *_runTag, *_replay)
+	if err != nil {
+		logger.WithError(err).Error("Failed to build deps")
+		logger.Wait()
+		os.Exit(1)
+	}
+	s, err := newProcessor(deps)
+	if err != nil {
+		logger.WithError(err).Error("Failed to build processor")
+		logger.Wait()
+		os.Exit(1)
+	}
+
+	startELBHealthCheckListener()
+
 	s.run()
 
 	logger.Info("Main loop exited, shutting down")

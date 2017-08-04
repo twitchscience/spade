@@ -153,6 +153,7 @@ func (d *DynamicLoader) Crank() {
 	for {
 		select {
 		case <-d.closer:
+			tick.Stop()
 			return
 		case <-tick.C:
 			// can put a circuit breaker here.

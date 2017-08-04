@@ -59,17 +59,20 @@ func checkFileIs(path, contents string) (bool, error) {
 
 func initUpdater(s s3iface.S3API) *Updater {
 	conf := Config{
-		ConfigBucket:        "this-bucket-is-faker-than-drakes-rap-rivals",
-		IPCityKey:           "ip",
-		IPASNKey:            "asn",
+		ConfigBucket: "this-bucket-is-faker-than-drakes-rap-rivals",
+		IPCity: Keypath{
+			Key:  "ip",
+			Path: ippath,
+		},
+		IPASN: Keypath{
+			Key:  "asn",
+			Path: asnpath,
+		},
 		UpdateFrequencyMins: 1,
 		JitterSecs:          1,
 	}
 	geoIPUpdater := NewUpdater(time.Now(), nil, conf, s)
 
-	// Have to overwrite this here since the updater gets it from env vars
-	geoIPUpdater.ipCityPath = ippath
-	geoIPUpdater.ipASNPath = asnpath
 	return geoIPUpdater
 }
 

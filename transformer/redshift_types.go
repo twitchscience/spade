@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
-	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/reporter"
 
@@ -74,9 +72,12 @@ func (r *RedshiftType) Format(eventProperties map[string]interface{}) (string, s
 }
 
 // GetSingleValueTransform returns us a single value Transformer for a given identifier string.
-func GetSingleValueTransform(tType string) ColumnTransformer {
+func GetSingleValueTransform(tType string, geoip geoip.GeoLookup) ColumnTransformer {
 	if t, ok := singleValueTransformMap[tType]; ok {
 		return safeColumnTransformer(t, 1)
+	}
+	if t, ok := geoipTransformGeneratorMap[tType]; ok {
+		return safeColumnTransformer(t(geoip), 1)
 	}
 	if tType[0] == 'f' { // were building a transform function
 		transformParams := strings.Split(tType, "@")
@@ -102,11 +103,13 @@ func GetMappingTransform(tType string, config MappingTransformerConfig) ColumnTr
 // New types should register here
 var (
 	singleValueTransformMap = map[string]ColumnTransformer{
-		"int":          intFormat(32),
-		"bigint":       intFormat(64),
-		"float":        floatFormat,
-		"varchar":      varcharFormat,
-		"bool":         boolFormat,
+		"int":     intFormat(32),
+		"bigint":  intFormat(64),
+		"float":   floatFormat,
+		"varchar": varcharFormat,
+		"bool":    boolFormat,
+	}
+	geoipTransformGeneratorMap = map[string]func(geoip.GeoLookup) ColumnTransformer{
 		"ipCity":       ipCityFormat,
 		"ipCountry":    ipCountryFormat,
 		"ipRegion":     ipRegionFormat,
@@ -131,33 +134,7 @@ var (
 	ErrUnknownTransform = errors.New("Unrecognized transform")
 	// ErrColumnNotFound is when a property from blueprint is not on an event.
 	ErrColumnNotFound = errors.New("Property Not Found")
-	// GeoIPDB is a Geo IP database, automatically kept updated.
-	GeoIPDB = loadDB()
 )
-
-func loadDB() geoip.GeoLookup {
-	dbloc, asnloc := os.Getenv("GEO_IP_DB"), os.Getenv("ASN_IP_DB")
-	g, loadErr := geoip.NewGeoMMIp(dbloc, asnloc)
-	if loadErr != nil {
-		logger.WithError(loadErr).WithFields(map[string]interface{}{
-			"db_location":  dbloc,
-			"asn_location": asnloc,
-		}).Error("Failed to load GeoIP DB, using no-op DB instead")
-		return geoip.Noop()
-	}
-	return g
-}
-
-// SetGeoDB initializes the global GeoIPDB with the given DB locations.
-func SetGeoDB(geoloc string, asnloc string) error {
-	g, loadErr := geoip.NewGeoMMIp(geoloc, asnloc)
-	if loadErr != nil {
-		return fmt.Errorf("could not find geoIP db at %s or %s, using noop db instead",
-			geoloc, asnloc)
-	}
-	GeoIPDB = g
-	return nil
-}
 
 // ColumnTransformer takes an event property and transforms it to a string.
 type ColumnTransformer func([]interface{}) (string, error)
@@ -302,56 +279,52 @@ func boolFormat(args []interface{}) (string, error) {
 	return "", genError(args[0], "Bool")
 }
 
-func ipCityFormat(args []interface{}) (string, error) {
-	str, ok := args[0].(string)
-	if !ok {
-		return "", genError(args[0], "Ip City")
+func getGeoIPTransformer(name string, transformer func(string) string) ColumnTransformer {
+	return func(args []interface{}) (string, error) {
+		str, ok := args[0].(string)
+		if !ok {
+			return "", genError(args[0], name)
+		}
+		return transformer(str), nil
 	}
-	return GeoIPDB.GetCity(str), nil
 }
 
-func ipCountryFormat(args []interface{}) (string, error) {
-	str, ok := args[0].(string)
-	if !ok {
-		return "", genError(args[0], "Ip Country")
-	}
-	return GeoIPDB.GetCountry(str), nil
+func ipCityFormat(geoip geoip.GeoLookup) ColumnTransformer {
+	return getGeoIPTransformer("Ip City", geoip.GetCity)
 }
 
-func ipRegionFormat(args []interface{}) (string, error) {
-	str, ok := args[0].(string)
-	if !ok {
-		return "", genError(args[0], "Ip Region")
-	}
-	return GeoIPDB.GetRegion(str), nil
+func ipCountryFormat(geoip geoip.GeoLookup) ColumnTransformer {
+	return getGeoIPTransformer("Ip Country", geoip.GetCountry)
 }
 
-func ipAsnFormat(args []interface{}) (string, error) {
-	str, ok := args[0].(string)
-	if !ok {
-		return "", genError(args[0], "Ip Asn")
-	}
-	return GeoIPDB.GetAsn(str), nil
+func ipRegionFormat(geoip geoip.GeoLookup) ColumnTransformer {
+	return getGeoIPTransformer("Ip Region", geoip.GetRegion)
 }
 
-func ipAsnIntFormat(args []interface{}) (string, error) {
-	str, ok := args[0].(string)
-	if !ok {
-		return "", genError(args[0], "Ip Asn")
+func ipAsnFormat(geoip geoip.GeoLookup) ColumnTransformer {
+	return getGeoIPTransformer("Ip Asn", geoip.GetAsn)
+}
+
+func ipAsnIntFormat(geoip geoip.GeoLookup) ColumnTransformer {
+	return func(args []interface{}) (string, error) {
+		str, ok := args[0].(string)
+		if !ok {
+			return "", genError(args[0], "Ip Asn")
+		}
+		asnString := geoip.GetAsn(str)
+		if !strings.HasPrefix(asnString, "AS") {
+			return "", genError(args[0], "Ip Asn")
+		}
+		index := strings.Index(asnString, " ")
+		if index < 0 {
+			index = len(asnString)
+		}
+		asnInt, err := strconv.Atoi(asnString[2:index])
+		if err != nil {
+			return "", genError(args[0], "Ip Asn")
+		}
+		return strconv.Itoa(asnInt), nil
 	}
-	asnString := GeoIPDB.GetAsn(str)
-	if !strings.HasPrefix(asnString, "AS") {
-		return "", genError(args[0], "Ip Asn")
-	}
-	index := strings.Index(asnString, " ")
-	if index < 0 {
-		index = len(asnString)
-	}
-	asnInt, err := strconv.Atoi(asnString[2:index])
-	if err != nil {
-		return "", genError(args[0], "Ip Asn")
-	}
-	return strconv.Itoa(asnInt), nil
 }
 
 func recordCacheError(stats reporter.StatsLogger, err error, operation string) {

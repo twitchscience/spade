@@ -12,6 +12,7 @@ import (
 
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	eventMetadatConfig "github.com/twitchscience/spade/event_metadata"
+	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/parser/json"
 	"github.com/twitchscience/spade/reporter"
@@ -33,19 +34,19 @@ var (
 		map[string][]transformer.RedshiftType{
 			"login": {
 				{
-					Transformer: transformer.GetSingleValueTransform("float"),
+					Transformer: transformer.GetSingleValueTransform("float", geoip.Noop()),
 					InboundName: "sampling_factor",
 				},
 				{
-					Transformer: transformer.GetSingleValueTransform("varchar"),
+					Transformer: transformer.GetSingleValueTransform("varchar", geoip.Noop()),
 					InboundName: "distinct_id",
 				},
 				{
-					Transformer: transformer.GetSingleValueTransform("f@timestamp@unix"),
+					Transformer: transformer.GetSingleValueTransform("f@timestamp@unix", geoip.Noop()),
 					InboundName: "time",
 				},
 				{
-					Transformer: transformer.GetSingleValueTransform("f@timestamp@unix"),
+					Transformer: transformer.GetSingleValueTransform("f@timestamp@unix", geoip.Noop()),
 					InboundName: "client_time",
 				},
 			},
