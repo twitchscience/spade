@@ -9,6 +9,7 @@ import (
 
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
+	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/transformer"
 )
 
@@ -20,6 +21,7 @@ type Tables struct {
 func getTypes(
 	definitions []scoop_protocol.ColumnDefinition,
 	tConfigs map[string]transformer.MappingTransformerConfig,
+	geoip geoip.GeoLookup,
 ) ([]transformer.RedshiftType, error) {
 	types := make([]transformer.RedshiftType, len(definitions))
 	for i, definition := range definitions {
@@ -30,10 +32,11 @@ func getTypes(
 			t = transformer.GetMappingTransform(definition.Transformer, tConfig)
 			supportingColumns = strings.Split(definition.SupportingColumns, ",")
 		} else {
-			t = transformer.GetSingleValueTransform(definition.Transformer)
+			t = transformer.GetSingleValueTransform(definition.Transformer, geoip)
 		}
 		if t == nil {
-			logger.WithError(transformer.ErrUnknownTransform).Error("Failed to parse config")
+			logger.WithError(transformer.ErrUnknownTransform).WithField(
+				"transform", definition.Transformer).Error("Failed to parse config")
 			return nil, transformer.ErrUnknownTransform
 		}
 		_type := transformer.RedshiftType{
@@ -79,11 +82,12 @@ func LoadConfig(file io.Reader) (Tables, error) {
 // CompileForParsing returns a map of transformers and versions for our table configs.
 func (c *Tables) CompileForParsing(
 	tConfigs map[string]transformer.MappingTransformerConfig,
+	geoip geoip.GeoLookup,
 ) (map[string][]transformer.RedshiftType, map[string]int, error) {
 	configs := make(map[string][]transformer.RedshiftType)
 	versions := make(map[string]int)
 	for _, config := range c.Configs {
-		typedConfig, typeErr := getTypes(config.Columns, tConfigs)
+		typedConfig, typeErr := getTypes(config.Columns, tConfigs, geoip)
 		if typeErr == nil {
 			configs[config.EventName] = typedConfig
 			versions[config.EventName] = config.Version

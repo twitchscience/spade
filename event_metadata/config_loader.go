@@ -135,6 +135,7 @@ func (d *DynamicLoader) Crank() {
 			d.stats.Timing("config.success", time.Since(now))
 			d.configs = newConfig
 		case <-d.closer:
+			tick.Stop()
 			return
 		}
 	}

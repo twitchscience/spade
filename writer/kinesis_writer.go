@@ -270,10 +270,7 @@ func (w *KinesisWriter) submit(name string, columns map[string]string) {
 	if len(pruned) > 0 {
 		// if we want data compressed, we send it to globber
 		if w.config.Compress {
-			entry := struct {
-				Name   string
-				Fields map[string]string
-			}{
+			entry := Event{
 				Name:   name,
 				Fields: pruned,
 			}
@@ -341,18 +338,26 @@ func (w *KinesisWriter) sendWorker() {
 
 const version = 1
 
-type record struct {
+// Record is a compressed record to be sent to Kinesis.
+type Record struct {
 	UUID      string
 	Version   int
 	Data      []byte
 	CreatedAt string
 }
 
-type jsonRecord struct {
+// JSONRecord is a raw JSON record to be sent to Kinesis.
+type JSONRecord struct {
 	UUID      string
 	Version   int
 	Data      map[string]string
 	CreatedAt string
+}
+
+// Event is a collection of name and fields for compressed streams.
+type Event struct {
+	Name   string
+	Fields map[string]string
 }
 
 // SendBatch writes the given batch to a stream, configured by the KinesisWriter
@@ -369,7 +374,7 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 		var unmarshalErr error
 		if w.config.Compress {
 			// if we are sending compressed data, send it as is
-			data, marshalErr = json.Marshal(&record{
+			data, marshalErr = json.Marshal(&Record{
 				UUID:      UUID.String(),
 				Version:   version,
 				Data:      e,
@@ -379,7 +384,7 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 			// if sending uncompressed json, remarshal batch into new objects
 			var unpacked map[string]string
 			unmarshalErr = json.Unmarshal(e, &unpacked)
-			data, marshalErr = json.Marshal(&jsonRecord{
+			data, marshalErr = json.Marshal(&JSONRecord{
 				UUID:      UUID.String(),
 				Version:   version,
 				Data:      unpacked,
@@ -492,7 +497,7 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 		var unmarshalErr error
 		if w.config.Compress {
 			// if we are sending compressed data, send it as is
-			data, marshalErr = json.Marshal(&record{
+			data, marshalErr = json.Marshal(&Record{
 				UUID:    UUID.String(),
 				Version: version,
 				Data:    e,
@@ -509,7 +514,7 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 			// if sending uncompressed json, remarshal batch into new objects
 			var unpacked map[string]string
 			unmarshalErr = json.Unmarshal(e, &unpacked)
-			data, marshalErr = json.Marshal(&jsonRecord{
+			data, marshalErr = json.Marshal(&JSONRecord{
 				UUID:    UUID.String(),
 				Version: version,
 				Data:    unpacked,

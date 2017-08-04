@@ -8,6 +8,7 @@ import (
 
 	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
+	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/reporter"
 	"github.com/twitchscience/spade/transformer"
 )
@@ -37,6 +38,7 @@ type DynamicLoader struct {
 	closer     chan bool
 	stats      reporter.StatsLogger
 	tConfigs   map[string]transformer.MappingTransformerConfig
+	geoip      geoip.GeoLookup
 }
 
 // NewDynamicLoader returns a new DynamicLoader, performing the first fetch.
@@ -46,6 +48,7 @@ func NewDynamicLoader(
 	retryDelay time.Duration,
 	stats reporter.StatsLogger,
 	tConfigs map[string]transformer.MappingTransformerConfig,
+	geoip geoip.GeoLookup,
 ) (*DynamicLoader, error) {
 	d := DynamicLoader{
 		fetcher:    fetcher,
@@ -57,6 +60,7 @@ func NewDynamicLoader(
 		closer:     make(chan bool),
 		stats:      stats,
 		tConfigs:   tConfigs,
+		geoip:      geoip,
 	}
 	config, versions, err := d.retryPull(5, retryDelay)
 	if err != nil {
@@ -110,7 +114,7 @@ func (d *DynamicLoader) pullConfigIn() (map[string][]transformer.RedshiftType, m
 		return nil, nil, err
 	}
 
-	newConfigs, newVersions, err := tables.CompileForParsing(d.tConfigs)
+	newConfigs, newVersions, err := tables.CompileForParsing(d.tConfigs, d.geoip)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -167,6 +171,7 @@ func (d *DynamicLoader) Crank() {
 			d.versions = newVersions
 			d.lock.Unlock()
 		case <-d.closer:
+			tick.Stop()
 			return
 		}
 	}

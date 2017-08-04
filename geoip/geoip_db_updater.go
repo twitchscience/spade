@@ -22,16 +22,20 @@ type Updater struct {
 	closer      chan bool
 	geo         GeoLookup
 	config      Config
-	ipCityPath  string
-	ipASNPath   string
 	s3          s3iface.S3API
+}
+
+// Keypath is the combination of the s3 key to read from and the local path to write to
+type Keypath struct {
+	Key  string
+	Path string
 }
 
 // Config defines how a GeoLookup should be kept updated.
 type Config struct {
 	ConfigBucket        string
-	IPCityKey           string
-	IPASNKey            string
+	IPCity              Keypath
+	IPASN               Keypath
 	UpdateFrequencyMins int
 	JitterSecs          int
 }
@@ -42,8 +46,6 @@ func NewUpdater(lastUpdated time.Time, geo GeoLookup, config Config, s3 s3iface.
 		lastUpdated: lastUpdated,
 		closer:      make(chan bool),
 		geo:         geo,
-		ipCityPath:  os.Getenv("GEO_IP_DB"),
-		ipASNPath:   os.Getenv("ASN_IP_DB"),
 		config:      config,
 		s3:          s3,
 	}
@@ -67,14 +69,10 @@ func writeWithRename(data io.Reader, fname string) error {
 // getIfNew downloads the new geoip dbs from s3 if there are new ones, and returns
 // a boolean true if it was new
 func (u *Updater) getIfNew() (bool, error) {
-	type keypath struct {
-		key  string
-		path string
-	}
-	for _, kp := range []keypath{{u.config.IPCityKey, u.ipCityPath}, {u.config.IPASNKey, u.ipASNPath}} {
+	for _, kp := range []Keypath{u.config.IPCity, u.config.IPASN} {
 		resp, err := u.s3.GetObject(&s3.GetObjectInput{
 			Bucket:          aws.String(u.config.ConfigBucket),
-			Key:             aws.String(kp.key),
+			Key:             aws.String(kp.Key),
 			IfModifiedSince: aws.Time(u.lastUpdated),
 		})
 		if err != nil {
@@ -82,9 +80,9 @@ func (u *Updater) getIfNew() (bool, error) {
 				// Not a new geoip db
 				return false, nil
 			}
-			return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, u.config.IPCityKey, err)
+			return false, fmt.Errorf("Error getting s3 object at 's3://%s/%s': %s", u.config.ConfigBucket, kp.Key, err)
 		}
-		err = writeWithRename(resp.Body, kp.path)
+		err = writeWithRename(resp.Body, kp.Path)
 		if err != nil {
 			return false, err
 		}

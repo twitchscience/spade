@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/elasticache"
 	"github.com/aws/aws-sdk-go/service/elasticache/elasticacheiface"
 	"github.com/bradfitz/gomemcache/memcache"
@@ -32,43 +31,39 @@ type Config struct {
 // A Client is a client for an ElastiCache cluster backed by memcache.
 type Client struct {
 	config         Config
-	serverSelector *memcache.ServerList
-	memcacheClient *memcache.Client
+	memcacheClient MemcacheClient
+	serverSelector ServerList
 	awsClient      elasticacheiface.ElastiCacheAPI
 	closer         chan bool
 	rand           *rand.Rand
 }
 
-// NewClient returns a Client with a default aws session to interact with a elasticache cluster.
-func NewClient(config Config) (*Client, error) {
-	sess, err := session.NewSession()
-	if err != nil {
-		return nil, err
-	}
-	return NewClientWithSession(sess, config)
+// MemcacheClient is a client for getting and setting keys in memcache.
+type MemcacheClient interface {
+	Get(key string) (*memcache.Item, error)
+	Set(item *memcache.Item) error
 }
 
-// NewClientWithSession should be used if you want to override the elasticache instance with a
-// non-default aws session.
-func NewClientWithSession(session *session.Session, config Config) (*Client, error) {
-	return NewClientWithInterface(elasticache.New(session), config)
+// ServerList is settable group of servers that memcache can use to choose one.
+type ServerList interface {
+	SetServers(servers ...string) error
+	memcache.ServerSelector
 }
 
 // NewClientWithInterface returns a client instantiated from a custom elasticache client.
 func NewClientWithInterface(
 	awsClient elasticacheiface.ElastiCacheAPI,
+	memcacheClient MemcacheClient,
+	serverSelector ServerList,
 	config Config,
 ) (*Client, error) {
 	if awsClient == nil {
 		return nil, fmt.Errorf("no elasticache interface was provided")
 	}
 
-	ss := &memcache.ServerList{}
-	memcacheClient := memcache.NewFromSelector(ss)
-
 	client := &Client{
 		config:         config,
-		serverSelector: ss,
+		serverSelector: serverSelector,
 		memcacheClient: memcacheClient,
 		awsClient:      awsClient,
 		closer:         make(chan bool),
@@ -168,8 +163,8 @@ func (c *Client) StartAutoDiscovery() {
 	}
 }
 
-// StopAutoDiscovery shuts down auto-discovery cleanly and blocks until it succeeds.
-func (c *Client) StopAutoDiscovery() {
+// Close stops the auto discovery goroutine.
+func (c *Client) Close() {
 	c.closer <- true
 }
 

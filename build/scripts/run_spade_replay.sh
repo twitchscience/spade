@@ -10,6 +10,4 @@ set +a
 
 exec ${SPADE_DIR}/bin/spade -replay \
   -run_tag "${RUN_TAG}" \
-  -spade_dir ${SPADE_DATA_DIR} \
-  -config "${SPADE_DIR}/config/conf.json" \
-  -stat_prefix "${STATSD_PREFIX}"
+  -config "${SPADE_DIR}/config/conf.json"

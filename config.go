@@ -3,13 +3,12 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"flag"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/vrischmann/jsonutil"
 
-	"github.com/twitchscience/aws_utils/logger"
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/consumer"
@@ -17,12 +16,9 @@ import (
 	"github.com/twitchscience/spade/lookup"
 )
 
-var (
-	configFilename = flag.String("config", "conf.json", "name of config file")
-	printConfig    = flag.Bool("printConfig", false, "Print the config object after parsing?")
-)
-
-var config struct {
+type config struct {
+	// Directory for all spade output
+	SpadeDir string
 	// ConfigBucket is the bucket that the blueprint published config lives in
 	ConfigBucket string
 	// SchemasKey is the s3 key to the blueprint published schemas config
@@ -49,6 +45,8 @@ var config struct {
 	MaxLogBytes int64
 	// MaxLogAgeSecs is the max number of seconds between log rotations
 	MaxLogAgeSecs int64
+	// NontrackedMaxLogAgeSecs is the max number of seconds between nontracked log rotations
+	NontrackedMaxLogAgeSecs int64
 	// Consumer is the config for the kinesis based event consumer
 	Consumer consumer.Config
 	// Geoip is the config for the geoip updater
@@ -92,40 +90,39 @@ var config struct {
 	EventMetadataReloadFrequency jsonutil.Duration
 	// How long to sleep if there's an error loading event metadata from Blueprint.
 	EventMetadataRetryDelay jsonutil.Duration
+
+	// Host:port to send statsd events to
+	StatsdHostport string
+	// Prefix for statsd metrics
+	StatsdPrefix string
 }
 
-func loadConfig() {
+func loadConfig(configFilename string, replay bool) (*config, error) {
+	cfg := config{}
 	// Default values
-	config.SchemaReloadFrequency = jsonutil.FromDuration(5 * time.Minute)
-	config.SchemaRetryDelay = jsonutil.FromDuration(2 * time.Second)
-	config.KinesisConfigReloadFrequency = jsonutil.FromDuration(10 * time.Minute)
-	config.KinesisConfigRetryDelay = jsonutil.FromDuration(2 * time.Second)
-	config.EventMetadataReloadFrequency = jsonutil.FromDuration(5 * time.Minute)
-	config.EventMetadataRetryDelay = jsonutil.FromDuration(2 * time.Second)
+	cfg.SchemaReloadFrequency = jsonutil.FromDuration(5 * time.Minute)
+	cfg.SchemaRetryDelay = jsonutil.FromDuration(2 * time.Second)
+	cfg.KinesisConfigReloadFrequency = jsonutil.FromDuration(10 * time.Minute)
+	cfg.KinesisConfigRetryDelay = jsonutil.FromDuration(2 * time.Second)
+	cfg.EventMetadataReloadFrequency = jsonutil.FromDuration(5 * time.Minute)
+	cfg.EventMetadataRetryDelay = jsonutil.FromDuration(2 * time.Second)
 
-	entry := logger.WithField("config_file", *configFilename)
-	f, err := os.Open(*configFilename)
+	f, err := os.Open(configFilename)
 	if err != nil {
-		entry.WithError(err).Fatal("Failed to load config")
+		return nil, fmt.Errorf("opening config: %v", err)
 	}
 
-	err = json.NewDecoder(f).Decode(&config)
+	err = json.NewDecoder(f).Decode(&cfg)
 	if err != nil {
-		entry.WithError(err).Fatal("Failed to decode JSON config")
+		return nil, fmt.Errorf("decoding config: %v", err)
 	}
 
-	err = validateConfig()
+	err = validateConfig(cfg, replay)
 	if err != nil {
-		entry.WithError(err).Fatal("Config is invalid")
+		return nil, fmt.Errorf("validating config: %v", err)
 	}
 
-	if *printConfig {
-		if b, err := json.MarshalIndent(config, "", "\t"); err != nil {
-			entry.WithError(err).Error("Failed to marshal config")
-		} else {
-			entry.WithField("config", string(b)).Info("Configuration")
-		}
-	}
+	return &cfg, nil
 }
 
 func checkNonempty(str string) error {
@@ -135,32 +132,34 @@ func checkNonempty(str string) error {
 	return nil
 }
 
-func validateConfig() error {
+func validateConfig(cfg config, replay bool) error {
 	for _, str := range []string{
-		config.ConfigBucket,
-		config.SchemasKey,
-		config.KinesisConfigKey,
-		config.MetadataConfigKey,
-		config.AceBucketName,
-		config.NonTrackedBucketName,
-		config.Geoip.ConfigBucket,
-		config.Geoip.IPCityKey,
-		config.Geoip.IPASNKey,
-		config.RollbarToken,
-		config.RollbarEnvironment,
+		cfg.ConfigBucket,
+		cfg.SchemasKey,
+		cfg.KinesisConfigKey,
+		cfg.MetadataConfigKey,
+		cfg.AceBucketName,
+		cfg.NonTrackedBucketName,
+		cfg.Geoip.ConfigBucket,
+		cfg.Geoip.IPCity.Key,
+		cfg.Geoip.IPCity.Path,
+		cfg.Geoip.IPASN.Key,
+		cfg.Geoip.IPASN.Path,
+		cfg.RollbarToken,
+		cfg.RollbarEnvironment,
 	} {
 		if err := checkNonempty(str); err != nil {
 			return err
 		}
 	}
 
-	if !*replay {
+	if !replay {
 		for _, str := range []string{
-			config.ProcessorErrorTopicARN,
-			config.AceTopicARN,
-			config.AceErrorTopicARN,
-			config.NonTrackedTopicARN,
-			config.NonTrackedErrorTopicARN,
+			cfg.ProcessorErrorTopicARN,
+			cfg.AceTopicARN,
+			cfg.AceErrorTopicARN,
+			cfg.NonTrackedTopicARN,
+			cfg.NonTrackedErrorTopicARN,
 		} {
 			if err := checkNonempty(str); err != nil {
 				return err
@@ -169,11 +168,11 @@ func validateConfig() error {
 	}
 
 	for _, i := range []int64{
-		config.MaxLogBytes,
-		config.MaxLogAgeSecs,
-		config.LRULifetimeSeconds,
-		int64(config.Geoip.UpdateFrequencyMins),
-		int64(config.Geoip.JitterSecs),
+		cfg.MaxLogBytes,
+		cfg.MaxLogAgeSecs,
+		cfg.LRULifetimeSeconds,
+		int64(cfg.Geoip.UpdateFrequencyMins),
+		int64(cfg.Geoip.JitterSecs),
 	} {
 		if i <= 0 {
 			return errors.New("nonpositive integer found in config, must provide positive integer")
@@ -181,8 +180,8 @@ func validateConfig() error {
 	}
 
 	for _, i := range []int64{
-		config.KinesisWriterErrorThrottlePeriodSeconds,
-		int64(config.KinesisWriterErrorsBeforeThrottling),
+		cfg.KinesisWriterErrorThrottlePeriodSeconds,
+		int64(cfg.KinesisWriterErrorsBeforeThrottling),
 	} {
 		if i < 0 {
 			return errors.New(
@@ -190,7 +189,7 @@ func validateConfig() error {
 		}
 	}
 
-	for _, c := range config.KinesisOutputs {
+	for _, c := range cfg.KinesisOutputs {
 		if err := c.Validate(); err != nil {
 			return err
 		}

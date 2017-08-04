@@ -1,8 +1,6 @@
 package writer
 
 import (
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/twitchscience/aws_utils/logger"
@@ -13,29 +11,15 @@ import (
 
 const (
 	inboundChannelBuffer = 400000
+	maxNonTrackedLogSize = 1 << 29 // 500MB
 )
 
 var (
-	maxNonTrackedLogSize        = getInt64FromEnv("MAX_UNTRACKED_LOG_BYTES", 1<<29)                                 // default 500MB
-	maxNonTrackedLogTimeAllowed = time.Duration(getInt64FromEnv("MAX_UNTRACKED_LOG_AGE_SECS", 10*60)) * time.Second // default 10 mins
-
 	// EventsDir is the local subdirectory where successfully-transformed events are written.
 	EventsDir = "events"
 	// NonTrackedDir is the local subdirectory where non-tracked events are written.
 	NonTrackedDir = "nontracked"
 )
-
-func getInt64FromEnv(target string, def int64) int64 {
-	env := os.Getenv(target)
-	if env == "" {
-		return def
-	}
-	i, err := strconv.ParseInt(env, 10, 64)
-	if err != nil {
-		return def
-	}
-	return i
-}
 
 // SpadeWriter is an interface for writing to external sinks, like S3 or Kinesis.
 type SpadeWriter interface {
@@ -67,8 +51,9 @@ type writerController struct {
 	closeChan  chan error
 	rotateChan chan chan rotateResult
 
-	maxLogBytes   int64
-	maxLogAgeSecs int64
+	maxLogBytes             int64
+	maxLogAgeSecs           int64
+	nontrackedMaxLogAgeSecs int64
 }
 
 // NewWriterController returns a writerController that handles logic to distribute
@@ -83,6 +68,7 @@ func NewWriterController(
 	blueprintUploaderPool *uploader.UploaderPool,
 	maxLogBytes int64,
 	maxLogAgeSecs int64,
+	nontrackedMaxLogAgeSecs int64,
 ) (SpadeWriter, error) {
 	c := &writerController{
 		SpadeFolder:       folder,
@@ -95,8 +81,9 @@ func NewWriterController(
 		closeChan:  make(chan error),
 		rotateChan: make(chan chan rotateResult),
 
-		maxLogBytes:   maxLogBytes,
-		maxLogAgeSecs: maxLogAgeSecs,
+		maxLogBytes:             maxLogBytes,
+		maxLogAgeSecs:           maxLogAgeSecs,
+		nontrackedMaxLogAgeSecs: nontrackedMaxLogAgeSecs,
 	}
 	err := c.initNonTrackedWriter()
 	if err != nil {
@@ -174,7 +161,7 @@ func (c *writerController) initNonTrackedWriter() error {
 		c.blueprintUploader,
 		RotateConditions{
 			MaxLogSize:     maxNonTrackedLogSize,
-			MaxTimeAllowed: maxNonTrackedLogTimeAllowed,
+			MaxTimeAllowed: time.Duration(c.nontrackedMaxLogAgeSecs) * time.Second,
 		},
 	)
 	if err != nil {
