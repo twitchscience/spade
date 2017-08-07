@@ -242,6 +242,10 @@ mainloop:
 			for _, record := range records {
 				select {
 				case <-k.stop:
+					_, err := checkpointer.commit()
+					if err != nil {
+						k.shardErrors <- shardConsumerError{shardID: shardID, action: "checkpointer.commit", err: err}
+					}
 					return
 				case k.records <- &consumedRecord{
 					record:       record,
