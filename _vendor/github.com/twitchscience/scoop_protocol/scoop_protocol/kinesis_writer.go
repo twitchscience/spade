@@ -109,7 +109,7 @@ func (c *KinesisWriterConfig) Validate() error {
 
 var filterFuncs = map[string]func(map[string]string) bool{
 	"isAGSEvent": func(fields map[string]string) bool {
-		return fields["adg_product_id"] == "600505cc-de2f-4b99-9960-c47ee5d23f04"
+		return fields["adg_product_id"] == "600505cc-de2f-4b99-9960-c47ee5d23f04" || fields["adg_product_id"] == "9233cb11-d375-4dd1-bd5e-b6d328fd5403"
 	},
 	"isChannelIDSet": func(fields map[string]string) bool {
 		return fields["channel_id"] != ""
