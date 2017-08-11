@@ -23,16 +23,15 @@ type RotateConditions struct {
 	MaxTimeAllowed time.Duration
 }
 
-// NewGzipWriter returns a gzipFileWriter, a pool of gzip goroutines that report results.
-func NewGzipWriter(
-	folder, subfolder, writerType string,
+// newGzipWriter returns a gzipFileWriter, a pool of gzip goroutines that report results.
+func newGzipWriter(
+	bufferPath, writerType string,
 	reporter reporter.Reporter,
 	uploader *uploader.UploaderPool,
 	rotateOn RotateConditions,
-) (SpadeWriter, error) {
-	path := folder + "/" + subfolder
+) (*gzipFileWriter, error) {
 	// Append a period to keep the version separate from the TempFile suffix.
-	file, err := ioutil.TempFile(path, writerType+".")
+	file, err := ioutil.TempFile(bufferPath, writerType+".")
 	if err != nil {
 		return nil, err
 	}
