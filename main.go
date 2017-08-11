@@ -423,6 +423,7 @@ func (s *spadeProcessor) shutdown() {
 			wg.Done()
 		})
 	}
+	signal.Stop(s.sigc)
 
 	s.resultPipe.Close()
 	s.deglobberPool.Close()
@@ -435,6 +436,9 @@ func (s *spadeProcessor) shutdown() {
 	s.spadeUploaderPool.Close()
 	s.blueprintUploaderPool.Close()
 	wg.Wait()
+	logger.WithFields(map[string]interface{}{
+		"stats": s.spadeReporter.Report(),
+	}).Info("Processed data rotated to output")
 }
 
 func main() {
