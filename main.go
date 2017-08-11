@@ -195,12 +195,9 @@ func newProcessor(deps *spadeProcessorDeps) (*spadeProcessor, error) {
 	}
 
 	multee := writer.NewMultee()
-	spadeWriter, err := writer.NewWriterController(deps.cfg.SpadeDir, spadeReporter,
+	spadeWriter := writer.NewWriterController(deps.cfg.SpadeDir, spadeReporter,
 		spadeUploaderPool, blueprintUploaderPool,
 		deps.cfg.MaxLogBytes, deps.cfg.MaxLogAgeSecs, deps.cfg.NontrackedMaxLogAgeSecs)
-	if err != nil {
-		return nil, fmt.Errorf("creating spade writer: %v", err)
-	}
 	multee.Add(spadeWriterKey, spadeWriter)
 
 	for _, c := range deps.cfg.KinesisOutputs {
