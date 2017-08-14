@@ -49,7 +49,7 @@ type EventMetadataType string
 const (
 	COMMENT    EventMetadataType = "comment"
 	EDGE_TYPE  EventMetadataType = "edge_type"
-	TAHOE_ONLY EventMetadataType = "tahoe_only"
+	DATASTORES EventMetadataType = "datastores"
 )
 
 type EventMetadataRow struct {
