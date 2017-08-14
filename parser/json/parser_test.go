@@ -1,15 +1,16 @@
 package json
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
-	"reflect"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/parser"
 	"github.com/twitchscience/spade/reporter"
@@ -38,7 +39,7 @@ func loadFile(path string, t *testing.T) []byte {
 	if err != nil {
 		t.Fatalf("loadFile: %s, %v", path, err)
 	}
-	return b
+	return bytes.Trim(b, "\n")
 }
 
 func singleEventUUIDChecker(mes []parser.MixpanelEvent, t *testing.T, uuid string) {
@@ -116,9 +117,7 @@ func TestSuccessfulJSONLogParser(t *testing.T) {
 		if me.UserAgent != userAgent {
 			t.Fatalf("mixpanel event: incorrect user agent. Expected %v got %v", userAgent, me.UserAgent)
 		}
-		if !reflect.DeepEqual(me.Properties, tt.rawProps) {
-			t.Fatalf("mixpanel event: mismatched properties. Expected %s got %s", tt.rawProps, me.Properties)
-		}
+		assert.Equal(t, string(tt.rawProps), string(me.Properties))
 
 		tt.uuidChecker(mes, t, uuid)
 	}

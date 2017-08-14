@@ -2,9 +2,10 @@ package parser
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
+
+	"github.com/twitchscience/scoop_protocol/spade"
 )
 
 var multiEventEscape = []byte{'[', '{'}
@@ -17,13 +18,9 @@ func DecodeBase64(matches ParseResult, escaper URLEscaper) ([]MixpanelEvent, err
 		return nil, err
 	}
 
-	var n int
+	enc := spade.DetermineBase64Encoding(data)
 	// We dont have to allocate a new byte array here because the len(dst) < len(src)
-	if !bytes.ContainsAny(data, "-_") {
-		n, err = base64.StdEncoding.Decode(data, data)
-	} else {
-		n, err = base64.URLEncoding.Decode(data, data)
-	}
+	n, err := enc.Decode(data, data)
 
 	if err != nil {
 		return nil, err

@@ -41,6 +41,16 @@ func TestDecodeData(t *testing.T) {
 	}
 }
 
+func TestSpaceDecodeData(t *testing.T) {
+	_, err := DecodeBase64(&testShim{
+		data: loadFile("test_resources/b64payload_space.txt"),
+		uuid: "39bffff7-4ffff880-539775b5-0",
+	}, &ByteQueryUnescaper{})
+	if err != nil {
+		t.Fatalf("got error: %v\n", err)
+	}
+}
+
 func TestURLSafeDecodeData(t *testing.T) {
 	_, err := DecodeBase64(&testShim{
 		data: loadFile("test_resources/urlsafeb64payload.txt"),
