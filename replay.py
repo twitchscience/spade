@@ -83,6 +83,7 @@ def s3_object_keys(start, end):
     # Or if it's differentiated by bucket
     # Maybe do environment check and use different logic for integration
     # Maybe use command line arg option for integration if needed
+    print("EDGE_BUCKET {}".format(EDGE_BUCKET))
     edge_objects =\
         boto3.resource('s3').Bucket(EDGE_BUCKET).objects
     return [s.key
@@ -209,6 +210,7 @@ def upload_to_db(args, start, end, run_tag, tables):
 
 def main(args):
     set_up_logging(args)
+    LOGGER.info("EDGE BUCKET: %s", EDGE_BUCKET)
 
     run_tag = args.get('--from-runtag')
     processor_only = args.get('--processor-only')
