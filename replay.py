@@ -78,15 +78,6 @@ def spark_context():
 
 
 def s3_object_keys(start, end):
-    s3 = boto3.resource('s3')
-    bucket = s3.Bucket(EDGE_BUCKET)
-    try:
-        s3.meta.client.head_bucket(Bucket=EDGE_BUCKET)
-    except botocore.exceptions.ClientError as e:
-        # Create the bucket if it doesn't exist
-        error_code = int(e.response['Error']['Code'])
-        if error_code == 404:
-            s3.create_bucket(Bucket=EDGE_BUCKET, CreateBucketConfiguration={'LocationConstraint': 'us-west-2'})
     edge_objects = boto3.resource('s3').Bucket(EDGE_BUCKET).objects
     return [s.key
             for prefix in get_days(start, end)
