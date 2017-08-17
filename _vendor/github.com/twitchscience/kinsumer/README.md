@@ -16,6 +16,9 @@ Kinsumer will rebalance shards to each client whenever it detects the list of sh
 
 If you are running multiple Kinsumer apps against a single stream, make sure to increase the throttleDelay to at least `50ms + (200ms * <the number of reader apps>)`. Note that Kinesis does not support more than two readers per writer on a fully utilized stream, so make sure you have enough stream capcity.
 
+## Example
+See `cmd/noopkinsumer` for a fully working example of a kinsumer client.
+
 ## Testing
 
 ### Testing with local test servers
