@@ -230,7 +230,7 @@ def main(args):
         fragment_list = [f for t in tables for f in fragments(t)]
 
     if not run_tag:
-        run_tag = os.environ['USER'] + datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
+        run_tag = os.environ['USER'] + "-" + datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
         print "Starting processors now, dumping to runtag {}".format(run_tag)
         replay_processor(start, end, run_tag, fragment_list)
 
