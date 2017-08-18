@@ -323,11 +323,11 @@
 		},
 		{
 			"ImportPath": "github.com/twitchscience/kinsumer",
-			"Rev": "4dfd57cc0f37f16ad5a1af1884f083d2cd5c4007"
+			"Rev": "33592cec0df3caf4755257a7ecc38dcef5d5cbcc"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/kinsumer/statsd",
-			"Rev": "4dfd57cc0f37f16ad5a1af1884f083d2cd5c4007"
+			"Rev": "33592cec0df3caf4755257a7ecc38dcef5d5cbcc"
 		},
 		{
 			"ImportPath": "github.com/twitchscience/scoop_protocol/msg_signer",
