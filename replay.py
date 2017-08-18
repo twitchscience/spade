@@ -4,7 +4,7 @@
     Usage:
         replay.py START END [TABLE ... | --all-tables] --rsurl=<url>
                   [--processor-only] [--from-runtag=<runtag>]
-                  [--poolsize=<size>] [--log=<level>]
+                  [--poolsize=<size>] [--log=<level>] [--namespace=<namespace>]
         replay.py --help
 
     Arguments:
@@ -23,6 +23,8 @@
         --log=<level>   the logging level [default: INFO]
         --all-tables
             if present, upload data to all database tables known to blueprint
+        --namespace=<namespace>
+            If present, uses the namespace as a prefix to the output folder
 """
 from base64 import b64encode
 import datetime
@@ -78,8 +80,7 @@ def spark_context():
 
 
 def s3_object_keys(start, end):
-    edge_objects =\
-        boto3.resource('s3').Bucket(EDGE_BUCKET).objects
+    edge_objects = boto3.resource('s3').Bucket(EDGE_BUCKET).objects
     return [s.key
             for prefix in get_days(start, end)
             for s in edge_objects.filter(Prefix=prefix)
@@ -205,6 +206,7 @@ def upload_to_db(args, start, end, run_tag, tables):
 def main(args):
     set_up_logging(args)
 
+    namespace = args.get('--namespace')
     run_tag = args.get('--from-runtag')
     processor_only = args.get('--processor-only')
     if run_tag and processor_only:
@@ -230,7 +232,10 @@ def main(args):
         fragment_list = [f for t in tables for f in fragments(t)]
 
     if not run_tag:
-        run_tag = datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
+        if namespace:
+            run_tag = namespace + "-" + datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
+        else:
+            run_tag = datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
         print "Starting processors now, dumping to runtag {}".format(run_tag)
         replay_processor(start, end, run_tag, fragment_list)
 
