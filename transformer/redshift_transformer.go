@@ -211,7 +211,9 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 			_, _ = tsvOutput.WriteRune('\t')
 		}
 		_, _ = tsvOutput.WriteString(fmt.Sprintf("%q", v))
-		kvOutput[k] = v
+		if v != "" {
+			kvOutput[k] = v
+		}
 	}
 	for stat, count := range results {
 		t.stats.IncrBy(fmt.Sprintf("transformer.%s.%s", event.Event, stat), count)
