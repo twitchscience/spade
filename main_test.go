@@ -22,6 +22,7 @@ import (
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/scoop_protocol/spade"
 	"github.com/twitchscience/spade/cache/elastimemcache"
+	"github.com/twitchscience/spade/config"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/geoip"
 	"github.com/twitchscience/spade/lookup"
@@ -282,8 +283,8 @@ var (
 	}
 )
 
-func getTestConfig(spadeDir string) *config {
-	return &config{
+func getTestConfig(spadeDir string) *config.Config {
+	return &config.Config{
 		SpadeDir:                spadeDir,
 		ConfigBucket:            "ConfigBucket",
 		SchemasKey:              "SchemasKey",
@@ -382,7 +383,7 @@ func decodeCompressedKinesis(data string) (*writer.Record, []writer.Event, error
 // testParam. It returns a count of how many records of each type it received. It will return
 // after 5 seconds or receiving all the records it expects in testP.expectedCount,
 // whichever is first.
-func waitForProcessor(t *testing.T, sentRecords chan sentRecord, testP testParam, cfg *config) map[string]int {
+func waitForProcessor(t *testing.T, sentRecords chan sentRecord, testP testParam, cfg *config.Config) map[string]int {
 	timeout := time.After(5 * time.Second)
 	recordCount := map[string]int{}
 	for {

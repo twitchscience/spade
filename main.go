@@ -44,6 +44,7 @@ import (
 	"github.com/twitchscience/scoop_protocol/scoop_protocol"
 	"github.com/twitchscience/spade/cache/elastimemcache"
 	"github.com/twitchscience/spade/cache/lru"
+	"github.com/twitchscience/spade/config"
 	"github.com/twitchscience/spade/config_fetcher/fetcher"
 	"github.com/twitchscience/spade/consumer"
 	"github.com/twitchscience/spade/deglobber"
@@ -110,12 +111,12 @@ type spadeProcessorDeps struct {
 	memcacheSelector    elastimemcache.ServerList
 	geoip               geoip.GeoLookup
 	stats               statsd.Statter
-	cfg                 *config
+	cfg                 *config.Config
 	runTag              string
 	replay              bool
 }
 
-func buildDeps(cfg *config, runTag string, replay bool) (*spadeProcessorDeps, error) {
+func buildDeps(cfg *config.Config, runTag string, replay bool) (*spadeProcessorDeps, error) {
 	// aws resources
 	session, err := session.NewSession(&aws.Config{
 		HTTPClient: &http.Client{
@@ -287,7 +288,7 @@ func startProcessorPool(deps *spadeProcessorDeps, multee *writer.Multee,
 
 	schemaLoader, err := tableConfig.NewDynamicLoader(
 		schemaFetcher, deps.cfg.SchemaReloadFrequency.Duration,
-		deps.cfg.SchemaReloadFrequency.Duration, reporterStats, tConfigs, deps.geoip)
+		deps.cfg.SchemaRetryDelay.Duration, reporterStats, tConfigs, deps.geoip)
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating dynamic schema loader: %v", err)
 	}
@@ -443,7 +444,7 @@ func (s *spadeProcessor) shutdown() {
 
 func main() {
 	flag.Parse()
-	cfg, err := loadConfig(*_configFilename, *_replay)
+	cfg, err := config.LoadConfig(*_configFilename, *_replay)
 	if err != nil {
 		logger.WithField("configFilename", *_configFilename).WithError(
 			err).Error("Failed to load config")

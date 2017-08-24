@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"encoding/json"
@@ -16,7 +16,8 @@ import (
 	"github.com/twitchscience/spade/lookup"
 )
 
-type config struct {
+// Config controls the processor's behavior.
+type Config struct {
 	// Directory for all spade output
 	SpadeDir string
 	// ConfigBucket is the bucket that the blueprint published config lives in
@@ -97,8 +98,9 @@ type config struct {
 	StatsdPrefix string
 }
 
-func loadConfig(configFilename string, replay bool) (*config, error) {
-	cfg := config{}
+// LoadConfig loads the config object from the file, performing validations.
+func LoadConfig(configFilename string, replay bool) (*Config, error) {
+	cfg := Config{}
 	// Default values
 	cfg.SchemaReloadFrequency = jsonutil.FromDuration(5 * time.Minute)
 	cfg.SchemaRetryDelay = jsonutil.FromDuration(2 * time.Second)
@@ -132,7 +134,7 @@ func checkNonempty(str string) error {
 	return nil
 }
 
-func validateConfig(cfg config, replay bool) error {
+func validateConfig(cfg Config, replay bool) error {
 	for _, str := range []string{
 		cfg.ConfigBucket,
 		cfg.SchemasKey,
