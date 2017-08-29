@@ -3,7 +3,7 @@ package geoip
 import "testing"
 
 func TestGeoIp(t *testing.T) {
-	g, err := NewGeoMMIp("TestOldGeoIPCity.dat", "TestOldGeoIPASNum.dat")
+	g, err := NewGeoMMIp("testdata/TestOldGeoIPCity.dat", "testdata/TestOldGeoIPASNum.dat")
 	if err != nil {
 		t.Error("Failed to load geo DB")
 		t.FailNow()
@@ -49,8 +49,8 @@ func TestGeoIp(t *testing.T) {
 		t.Fail()
 	}
 
-	g.geoLoc = "TestNewGeoIPCity.dat"
-	g.asnLoc = "TestNewGeoIPASNum.dat"
+	g.geoLoc = "testdata/TestNewGeoIPCity.dat"
+	g.asnLoc = "testdata/TestNewGeoIPASNum.dat"
 	if err = g.Reload(); err != nil {
 		t.Error("Error reloading: ", err)
 		t.Fail()
