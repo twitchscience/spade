@@ -140,7 +140,7 @@ func TestBooleanConversion(t *testing.T) {
 }
 
 func TestIpConversion(t *testing.T) {
-	g, err := geoip.NewGeoMMIp("../geoip/TestOldGeoIPCity.dat", "../geoip/TestOldGeoIPASNum.dat")
+	g, err := geoip.NewGeoMMIp("../geoip/testdata/TestOldGeoIPCity.dat", "../geoip/testdata/TestOldGeoIPASNum.dat")
 	require.NoError(t, err)
 	ipCityConverter := RedshiftType{ipCityFormat(g), "_", "_", nil}
 	_typeRunner(t, "222.22.24.22", ipCityConverter, "Zhengzhou", false)
