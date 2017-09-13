@@ -39,10 +39,9 @@ func (s *RedshiftSNSNotifierHarness) SendMessage(message *uploader.UploadReceipt
 	err = s.notifier.SendMessage("uploadNotify", s.topicARN, eventName, message.KeyName, version)
 	if err != nil {
 		return fmt.Errorf("sending Redshift SNS message: %v", err)
-	} else {
-		logger.WithField("event", eventName).WithField("version", version).
-			WithField("keyName", message.KeyName).Info("sent SNS message")
 	}
+	logger.WithField("event", eventName).WithField("version", version).
+		WithField("keyName", message.KeyName).Info("sent SNS message")
 
 	return nil
 }
