@@ -2,7 +2,9 @@ package writer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -82,6 +84,22 @@ func (t *taskRateLimiter) attempt(f func()) {
 	if t.rateLimiter.Allow() {
 		f()
 	}
+}
+
+func formatErrorCounts(errorCounts map[string]int) error {
+	keys := make([]string, 0, len(errorCounts))
+	for k := range errorCounts {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	pairs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, fmt.Sprintf("%v: %v", k, errorCounts[k]))
+	}
+
+	return errors.New(strings.Join(pairs, ", "))
 }
 
 // StreamBatchWriter writes batches to Kinesis Streams
@@ -366,53 +384,12 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 		return
 	}
 
-	records := make([]*kinesis.PutRecordsRequestEntry, len(batch))
-	for i, e := range batch {
-		UUID := uuid.NewV4()
-		var data []byte
-		var marshalErr error
-		var unmarshalErr error
-		if w.config.Compress {
-			// if we are sending compressed data, send it as is
-			data, marshalErr = json.Marshal(&Record{
-				UUID:      UUID.String(),
-				Version:   version,
-				Data:      e,
-				CreatedAt: time.Now().UTC().Format(RedshiftDatetimeIngestString),
-			})
-		} else {
-			// if sending uncompressed json, remarshal batch into new objects
-			var unpacked map[string]string
-			unmarshalErr = json.Unmarshal(e, &unpacked)
-			data, marshalErr = json.Marshal(&JSONRecord{
-				UUID:      UUID.String(),
-				Version:   version,
-				Data:      unpacked,
-				CreatedAt: time.Now().UTC().Format(RedshiftDatetimeIngestString),
-			})
-		}
-		if marshalErr != nil {
-			w.limiter.attempt(func() {
-				logger.WithField("stream", w.config.StreamName).
-					WithError(marshalErr).
-					Error("Failed to marshal into Record")
-			})
-		}
-		if unmarshalErr != nil {
-			w.limiter.attempt(func() {
-				logger.WithField("stream", w.config.StreamName).
-					WithError(unmarshalErr).
-					Error("Failed to unmarshal into Record")
-			})
-		}
-		records[i] = &kinesis.PutRecordsRequestEntry{
-			PartitionKey: aws.String(UUID.String()),
-			Data:         data,
-		}
+	records := make([]*kinesis.PutRecordsRequestEntry, 0, len(batch))
+	for _, e := range batch {
+		records = append(records, w.putRecordsRequestEntry(e))
 	}
 
 	retryDelay, _ := time.ParseDuration(w.config.RetryDelay)
-
 	args := &kinesis.PutRecordsInput{
 		StreamName: aws.String(w.config.StreamName),
 		Records:    records,
@@ -420,67 +397,128 @@ func (w *StreamBatchWriter) SendBatch(batch [][]byte) {
 
 	var err error
 	for attempt := 1; attempt <= w.config.MaxAttemptsPerRecord; attempt++ {
-		w.statter.IncStat(statPutRecordsAttempted, 1)
-		w.statter.IncStat(statPutRecordsLength, int64(len(records)))
-
-		var res *kinesis.PutRecordsOutput
-		res, err = w.client.PutRecords(args)
-
-		if err != nil {
-			logger.WithError(err).WithFields(map[string]interface{}{
-				"attempt":      attempt,
-				"max_attempts": w.config.MaxAttemptsPerRecord,
-				"stream":       w.config.StreamName,
-			}).Warn("Failed to put records")
-			w.statter.IncStat(statPutRecordsErrors, 1)
-			time.Sleep(retryDelay)
-			continue
-		}
-
-		// Find all failed records and update the slice to contain only failures
-		retryCount := 0
-		var provisionThroughputExceeded, internalFailure, unknownError, succeeded int64
-		for j, result := range res.Records {
-			if aws.StringValue(result.ErrorCode) != "" {
-				switch aws.StringValue(result.ErrorCode) {
-				// Kinesis stream throttling
-				case "ProvisionedThroughputExceededException":
-					provisionThroughputExceeded++
-				// Firehose throttling
-				case "ServiceUnavailableException":
-					provisionThroughputExceeded++
-				case "InternalFailure":
-					internalFailure++
-				default:
-					// Something undocumented
-					unknownError++
-				}
-				args.Records[retryCount] = args.Records[j]
-				retryCount++
-			} else {
-				succeeded++
-			}
-		}
-		w.statter.IncStat(statRecordsFailedThrottled, provisionThroughputExceeded)
-		w.statter.IncStat(statRecordsFailedInternalError, internalFailure)
-		w.statter.IncStat(statRecordsFailedUnknown, unknownError)
-		w.statter.IncStat(statRecordsSucceeded, succeeded)
-		args.Records = args.Records[:retryCount]
-
-		if retryCount == 0 {
+		err = w.attemptPutRecords(args)
+		if err == nil {
 			return
 		}
 
-		time.Sleep(retryDelay)
+		logger.WithError(err).WithFields(map[string]interface{}{
+			"attempt":      attempt,
+			"max_attempts": w.config.MaxAttemptsPerRecord,
+			"stream":       w.config.StreamName,
+		}).Warn("Failed to put records")
+
+		if attempt < w.config.MaxAttemptsPerRecord {
+			time.Sleep(retryDelay)
+		}
 	}
+
 	w.limiter.attempt(func() {
-		logger.WithField("failures", len(args.Records)).
-			WithField("attempts", len(records)).
-			WithField("stream", w.config.StreamName).
-			WithError(err).
-			Error("Failed to send records to Kinesis")
+		logger.WithError(err).WithFields(map[string]interface{}{
+			"failures": len(args.Records),
+			"attempts": len(records),
+			"stream":   w.config.StreamName,
+		}).Error("Failed to send records to Kinesis")
 	})
 	w.statter.IncStat(statRecordsDropped, int64(len(args.Records)))
+}
+
+func (w *StreamBatchWriter) putRecordsRequestEntry(eventData []byte) *kinesis.PutRecordsRequestEntry {
+	UUIDString := uuid.NewV4().String()
+
+	var data []byte
+	var marshalErr error
+	var unmarshalErr error
+	if w.config.Compress {
+		// if we are sending compressed data, send it as is
+		data, marshalErr = json.Marshal(&Record{
+			UUID:      UUIDString,
+			Version:   version,
+			Data:      eventData,
+			CreatedAt: time.Now().UTC().Format(RedshiftDatetimeIngestString),
+		})
+	} else {
+		// if sending uncompressed json, remarshal batch into new objects
+		var unpacked map[string]string
+		unmarshalErr = json.Unmarshal(eventData, &unpacked)
+		data, marshalErr = json.Marshal(&JSONRecord{
+			UUID:      UUIDString,
+			Version:   version,
+			Data:      unpacked,
+			CreatedAt: time.Now().UTC().Format(RedshiftDatetimeIngestString),
+		})
+	}
+
+	if marshalErr != nil {
+		w.limiter.attempt(func() {
+			logger.WithField("stream", w.config.StreamName).
+				WithError(marshalErr).
+				Error("Failed to marshal into Record")
+		})
+	}
+
+	if unmarshalErr != nil {
+		w.limiter.attempt(func() {
+			logger.WithField("stream", w.config.StreamName).
+				WithError(unmarshalErr).
+				Error("Failed to unmarshal into Record")
+		})
+	}
+
+	return &kinesis.PutRecordsRequestEntry{
+		PartitionKey: aws.String(UUIDString),
+		Data:         data,
+	}
+}
+
+func (w *StreamBatchWriter) attemptPutRecords(args *kinesis.PutRecordsInput) error {
+	w.statter.IncStat(statPutRecordsAttempted, 1)
+	w.statter.IncStat(statPutRecordsLength, int64(len(args.Records)))
+
+	res, err := w.client.PutRecords(args)
+	if err != nil {
+		return err
+	}
+
+	// Find all failed records and update the slice to contain only failures
+	retryCount := 0
+	var provisionThroughputExceeded, internalFailure, unknownError, succeeded int64
+	awsErrorCounts := make(map[string]int)
+	for j, result := range res.Records {
+		awsError := aws.StringValue(result.ErrorCode)
+		if awsError == "" {
+			succeeded++
+			continue
+		}
+
+		awsErrorCounts[awsError]++
+		switch awsError {
+		// Kinesis stream throttling
+		case "ProvisionedThroughputExceededException":
+			provisionThroughputExceeded++
+			// Firehose throttling
+		case "ServiceUnavailableException":
+			provisionThroughputExceeded++
+		case "InternalFailure":
+			internalFailure++
+		default:
+			// Something undocumented
+			unknownError++
+		}
+		args.Records[retryCount] = args.Records[j]
+		retryCount++
+	}
+
+	w.statter.IncStat(statRecordsFailedThrottled, provisionThroughputExceeded)
+	w.statter.IncStat(statRecordsFailedInternalError, internalFailure)
+	w.statter.IncStat(statRecordsFailedUnknown, unknownError)
+	w.statter.IncStat(statRecordsSucceeded, succeeded)
+	args.Records = args.Records[:retryCount]
+
+	if retryCount == 0 {
+		return nil
+	}
+	return formatErrorCounts(awsErrorCounts)
 }
 
 // SendBatch writes the given batch to a firehose, configured by the FirehoseBatchWriter
@@ -489,60 +527,12 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 		return
 	}
 
-	records := make([]*firehose.Record, len(batch))
-	for i, e := range batch {
-		UUID := uuid.NewV4()
-		var data []byte
-		var marshalErr error
-		var unmarshalErr error
-		if w.config.Compress {
-			// if we are sending compressed data, send it as is
-			data, marshalErr = json.Marshal(&Record{
-				UUID:    UUID.String(),
-				Version: version,
-				Data:    e,
-			})
-		} else if w.config.FirehoseRedshiftStream {
-			// if streaming data to Redshift, send data as top level JSON and scrub away null bytes
-			var unpacked map[string]string
-			unmarshalErr = json.Unmarshal(e, &unpacked)
-			for k, v := range unpacked {
-				unpacked[k] = strings.Replace(v, "\x00", "", -1)
-			}
-			data, marshalErr = json.Marshal(unpacked)
-		} else {
-			// if sending uncompressed json, remarshal batch into new objects
-			var unpacked map[string]string
-			unmarshalErr = json.Unmarshal(e, &unpacked)
-			data, marshalErr = json.Marshal(&JSONRecord{
-				UUID:    UUID.String(),
-				Version: version,
-				Data:    unpacked,
-			})
-		}
-		if marshalErr != nil {
-			w.limiter.attempt(func() {
-				logger.WithField("firehose", w.config.StreamName).
-					WithError(marshalErr).
-					Error("Failed to marshal into Record")
-			})
-		}
-		if unmarshalErr != nil {
-			w.limiter.attempt(func() {
-				logger.WithField("firehose", w.config.StreamName).
-					WithError(unmarshalErr).
-					Error("Failed to unmarshal into Record")
-			})
-		}
-		// Add '\n' as a record separator
-		data = append(data, '\n')
-		records[i] = &firehose.Record{
-			Data: data,
-		}
+	records := make([]*firehose.Record, 0, len(batch))
+	for _, e := range batch {
+		records = append(records, w.firehoseRecord(e))
 	}
 
 	retryDelay, _ := time.ParseDuration(w.config.RetryDelay)
-
 	args := &firehose.PutRecordBatchInput{
 		DeliveryStreamName: aws.String(w.config.StreamName),
 		Records:            records,
@@ -550,63 +540,128 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 
 	var err error
 	for attempt := 1; attempt <= w.config.MaxAttemptsPerRecord; attempt++ {
-		w.statter.IncStat(statPutRecordsAttempted, 1)
-		w.statter.IncStat(statPutRecordsLength, int64(len(records)))
-
-		var res *firehose.PutRecordBatchOutput
-		res, err = w.client.PutRecordBatch(args)
-
-		if err != nil {
-			logger.WithError(err).WithFields(map[string]interface{}{
-				"attempt":      attempt,
-				"max_attempts": w.config.MaxAttemptsPerRecord,
-				"stream":       w.config.StreamName,
-			}).Warn("Failed to put record batch")
-			w.statter.IncStat(statPutRecordsErrors, 1)
-			time.Sleep(retryDelay)
-			continue
-		}
-
-		// Find all failed records and update the slice to contain only failures
-		retryCount := 0
-		var provisionThroughputExceeded, internalFailure, unknownError, succeeded int64
-		for j, result := range res.RequestResponses {
-			if aws.StringValue(result.ErrorCode) != "" {
-				switch aws.StringValue(result.ErrorCode) {
-				case "ProvisionedThroughputExceededException":
-					provisionThroughputExceeded++
-				case "InternalFailure":
-					internalFailure++
-				default:
-					// Something undocumented
-					unknownError++
-				}
-				args.Records[retryCount] = args.Records[j]
-				retryCount++
-			} else {
-				succeeded++
-			}
-		}
-		w.statter.IncStat(statRecordsFailedThrottled, provisionThroughputExceeded)
-		w.statter.IncStat(statRecordsFailedInternalError, internalFailure)
-		w.statter.IncStat(statRecordsFailedUnknown, unknownError)
-		w.statter.IncStat(statRecordsSucceeded, succeeded)
-		args.Records = args.Records[:retryCount]
-
-		if retryCount == 0 {
+		err = w.attemptPutRecord(args)
+		if err == nil {
 			return
 		}
 
-		time.Sleep(retryDelay)
+		logger.WithError(err).WithFields(map[string]interface{}{
+			"attempt":      attempt,
+			"max_attempts": w.config.MaxAttemptsPerRecord,
+			"stream":       w.config.StreamName,
+		}).Warn("Failed to put some records")
+
+		if attempt < w.config.MaxAttemptsPerRecord {
+			time.Sleep(retryDelay)
+		}
 	}
+
 	w.limiter.attempt(func() {
-		logger.WithField("failures", len(args.Records)).
-			WithField("attempts", len(records)).
-			WithField("stream", w.config.StreamName).
-			WithError(err).
-			Error("Failed to send records to Firehose")
+		logger.WithError(err).WithFields(map[string]interface{}{
+			"failures": len(args.Records),
+			"attempts": len(records),
+			"stream":   w.config.StreamName,
+		}).Error("Failed to send records to Firehose")
 	})
 	w.statter.IncStat(statRecordsDropped, int64(len(args.Records)))
+}
+
+func (w *FirehoseBatchWriter) firehoseRecord(eventData []byte) *firehose.Record {
+	UUIDString := uuid.NewV4().String()
+
+	var data []byte
+	var marshalErr error
+	var unmarshalErr error
+	if w.config.Compress {
+		// if we are sending compressed data, send it as is
+		data, marshalErr = json.Marshal(&Record{
+			UUID:    UUIDString,
+			Version: version,
+			Data:    eventData,
+		})
+	} else if w.config.FirehoseRedshiftStream {
+		// if streaming data to Redshift, send data as top level JSON and scrub away null bytes
+		var unpacked map[string]string
+		unmarshalErr = json.Unmarshal(eventData, &unpacked)
+		for k, v := range unpacked {
+			unpacked[k] = strings.Replace(v, "\x00", "", -1)
+		}
+		data, marshalErr = json.Marshal(unpacked)
+	} else {
+		// if sending uncompressed json, remarshal batch into new objects
+		var unpacked map[string]string
+		unmarshalErr = json.Unmarshal(eventData, &unpacked)
+		data, marshalErr = json.Marshal(&JSONRecord{
+			UUID:    UUIDString,
+			Version: version,
+			Data:    unpacked,
+		})
+	}
+
+	if marshalErr != nil {
+		w.limiter.attempt(func() {
+			logger.WithField("firehose", w.config.StreamName).
+				WithError(marshalErr).
+				Error("Failed to marshal into Record")
+		})
+	}
+
+	if unmarshalErr != nil {
+		w.limiter.attempt(func() {
+			logger.WithField("firehose", w.config.StreamName).
+				WithError(unmarshalErr).
+				Error("Failed to unmarshal into Record")
+		})
+	}
+
+	// Add '\n' as a record separator
+	return &firehose.Record{Data: append(data, '\n')}
+}
+
+func (w *FirehoseBatchWriter) attemptPutRecord(args *firehose.PutRecordBatchInput) error {
+	w.statter.IncStat(statPutRecordsAttempted, 1)
+	w.statter.IncStat(statPutRecordsLength, int64(len(args.Records)))
+
+	res, err := w.client.PutRecordBatch(args)
+	if err != nil {
+		return err
+	}
+
+	// Find all failed records and update the slice to contain only failures
+	retryCount := 0
+	var provisionThroughputExceeded, internalFailure, unknownError, succeeded int64
+	awsErrorCounts := make(map[string]int)
+	for j, result := range res.RequestResponses {
+		awsError := aws.StringValue(result.ErrorCode)
+		if awsError == "" {
+			succeeded++
+			continue
+		}
+
+		awsErrorCounts[awsError]++
+		switch awsError {
+		case "ProvisionedThroughputExceededException":
+			provisionThroughputExceeded++
+		case "InternalFailure":
+			internalFailure++
+		default:
+			// Something undocumented
+			unknownError++
+		}
+		args.Records[retryCount] = args.Records[j]
+		retryCount++
+	}
+
+	w.statter.IncStat(statRecordsFailedThrottled, provisionThroughputExceeded)
+	w.statter.IncStat(statRecordsFailedInternalError, internalFailure)
+	w.statter.IncStat(statRecordsFailedUnknown, unknownError)
+	w.statter.IncStat(statRecordsSucceeded, succeeded)
+	args.Records = args.Records[:retryCount]
+
+	if retryCount == 0 {
+		return nil
+	}
+	return formatErrorCounts(awsErrorCounts)
 }
 
 // Close closes a KinesisWriter
