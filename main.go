@@ -234,7 +234,7 @@ func newProcessor(deps *spadeProcessorDeps) (*spadeProcessor, error) {
 	logger.Go(gip.UpdateLoop)
 
 	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, syscall.SIGINT)
+	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
 	return &spadeProcessor{
 		geoIPUpdater:          gip,
 		spadeReporter:         spadeReporter,
