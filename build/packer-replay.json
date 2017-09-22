@@ -78,8 +78,10 @@
         "sudo run_apt_get_install.sh libpq-dev gzrt",
         "sudo pip install --upgrade -r /opt/science/{{user `project`}}/requirements-replay.txt",
         "sudo chmod +x /opt/science/{{user `project`}}/bin/*",
-        "sudo rm /opt/science/{{user `project`}}/config/upstart/spade.conf",
-        "for f in /opt/science/{{user `project`}}/config/upstart/*.conf; do sudo ln -s $f /etc/init/$(basename $f); done"
+        "sudo rm /opt/science/{{user `project`}}/config/upstart/spade.service",
+        "sudo mv /opt/science/{{user `project`}}/config/systemd/mount_spade_volumes.service /etc/systemd/system/mount_spade_volumes.service",
+        "sudo systemctl enable mount_spade_volumes",
+        "sudo mv /opt/science/{{user `project`}}/config/journald-cloudwatch-logs.conf /etc/journald-cloudwatch-logs.conf"
       ]
     }
   ]
