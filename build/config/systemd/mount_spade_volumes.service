@@ -1,10 +1,13 @@
 # Systemd service at /etc/systemd/system/mount_spade_volumes.service
 
 [Unit]
-After=filesystem
+After=multi-user.target
 
 [Service]
 Type=oneshot
 ExecStartPre=/bin/ln -sFTf /mnt /opt/science/spade/data
-ExecStartPre=/usr/sbin/ebslvm vgebs lvebs /mnt
+ExecStart=/usr/sbin/ebslvm vgebs lvebs /mnt
 RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
