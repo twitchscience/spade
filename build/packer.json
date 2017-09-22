@@ -68,7 +68,11 @@
       [
         "sudo run_apt_get_install.sh gzrt",
         "sudo chmod +x /opt/science/{{user `project`}}/bin/*",
-        "for f in /opt/science/{{user `project`}}/config/upstart/*.conf; do sudo ln -s $f /etc/init/$(basename $f); done"
+        "sudo mv /opt/science{{user `project`}}/config/systemd/spade.service /etc/systemd/system/spade.service",
+        "sudo mv /opt/science{{user `project`}}/config/systemd/mount_spade_volumes.service /etc/systemd/system/mount_spade_volumes.service",
+        "sudo systemctl enable spade",
+        "sudo systemctl enable mount_spade_volumnes",
+        "sudo mv /opt/science/{{user `project`}}/config/journald-cloudwatch-logs.conf /etc/journald-cloudwatch-logs.conf"
       ]
     }
   ]
