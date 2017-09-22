@@ -5,7 +5,7 @@ set -euo pipefail
 # http://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
 PROJECT=$1
 BRANCH=$2
-SOURCE_AMI=$3
+SOURCE_AMI=ami-e3718d9b
 VPC=$4
 SUBNET=$5
 SECURITY_GROUP=$6
