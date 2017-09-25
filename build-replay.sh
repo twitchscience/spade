@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT=$1
 BRANCH=$2
-SOURCE_AMI=ami-9c43bfe4
+SOURCE_AMI=ami-33817f4b # basesparkami xenial build
 VPC=$4
 SUBNET=$5
 SECURITY_GROUP=$6
