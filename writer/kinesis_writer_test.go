@@ -125,7 +125,7 @@ func (k *kinesisMock) PutRecords(i *kinesis.PutRecordsInput) (*kinesis.PutRecord
 func TestConfigValidation(t *testing.T) {
 	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
-	assert.Nil(t, config.Validate(), "config could not be validated")
+	assert.Nil(t, config.Validate(nil), "config could not be validated")
 }
 
 func TestRedshiftStreamAndCompressValidation(t *testing.T) {
@@ -134,7 +134,7 @@ func TestRedshiftStreamAndCompressValidation(t *testing.T) {
 	config.Compress = true
 
 	// firehose->redshift streaming cannot be used with compress mode
-	assert.NotNil(t, config.Validate(), "redshift streaming and compress cannot both be on")
+	assert.NotNil(t, config.Validate(nil), "redshift streaming and compress cannot both be on")
 }
 
 type forwarderMock struct {
@@ -152,13 +152,14 @@ func TestSubmitCompressed(t *testing.T) {
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
 	config.Compress = true
 	config.FirehoseRedshiftStream = false
-	require.NoError(t, config.Validate())
+	require.NoError(t, config.Validate(nil))
 	globber := forwarderMock{}
 	batcher := forwarderMock{}
 	k := KinesisWriter{
-		globber: &globber,
-		batcher: &batcher,
-		config:  config,
+		globber:       &globber,
+		batcher:       &batcher,
+		config:        config,
+		defaultFilter: scoop_protocol.NoopFilter,
 	}
 	k.submit("minute-watched", map[string]string{"country": "US", "something": "xx"})
 	assert.Len(t, batcher.received, 0)
@@ -170,13 +171,14 @@ func TestSubmitCompressed(t *testing.T) {
 func TestSubmitUncompressed(t *testing.T) {
 	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
-	require.NoError(t, config.Validate())
+	require.NoError(t, config.Validate(nil))
 	globber := forwarderMock{}
 	batcher := forwarderMock{}
 	k := KinesisWriter{
-		globber: &globber,
-		batcher: &batcher,
-		config:  config,
+		globber:       &globber,
+		batcher:       &batcher,
+		config:        config,
+		defaultFilter: scoop_protocol.NoopFilter,
 	}
 	k.submit("minute-watched", map[string]string{"country": "US", "something": "xx"})
 	assert.Len(t, globber.received, 0)
@@ -188,13 +190,14 @@ func TestSubmitUncompressedEventName(t *testing.T) {
 	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
 	config.EventNameTargetField = "event"
-	require.NoError(t, config.Validate())
+	require.NoError(t, config.Validate(nil))
 	globber := forwarderMock{}
 	batcher := forwarderMock{}
 	k := KinesisWriter{
-		globber: &globber,
-		batcher: &batcher,
-		config:  config,
+		globber:       &globber,
+		batcher:       &batcher,
+		config:        config,
+		defaultFilter: scoop_protocol.NoopFilter,
 	}
 	k.submit("minute-watched", map[string]string{"country": "US", "something": "xx"})
 	assert.Len(t, globber.received, 0)
@@ -207,13 +210,14 @@ func TestSubmitUncompressedExcludeEmpty(t *testing.T) {
 	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
 	config.ExcludeEmptyFields = true
-	require.NoError(t, config.Validate())
+	require.NoError(t, config.Validate(nil))
 	globber := forwarderMock{}
 	batcher := forwarderMock{}
 	k := KinesisWriter{
-		globber: &globber,
-		batcher: &batcher,
-		config:  config,
+		globber:       &globber,
+		batcher:       &batcher,
+		config:        config,
+		defaultFilter: scoop_protocol.NoopFilter,
 	}
 	k.submit("video-play", map[string]string{"country": "US", "device_id": "", "something": "xx"})
 	assert.Len(t, globber.received, 0)
@@ -224,18 +228,104 @@ func TestSubmitUncompressedExcludeEmpty(t *testing.T) {
 func TestSubmitRename(t *testing.T) {
 	config := scoop_protocol.KinesisWriterConfig{}
 	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
-	require.NoError(t, config.Validate())
+	require.NoError(t, config.Validate(nil))
 	globber := forwarderMock{}
 	batcher := forwarderMock{}
 	k := KinesisWriter{
-		globber: &globber,
-		batcher: &batcher,
-		config:  config,
+		globber:       &globber,
+		batcher:       &batcher,
+		config:        config,
+		defaultFilter: scoop_protocol.NoopFilter,
 	}
 	k.submit("remapped", map[string]string{"unremapped": "US", "remap": "xx"})
 	assert.Len(t, globber.received, 0)
 	require.Len(t, batcher.received, 1)
 	assert.Equal(t, `{"remapped_name":"xx","unremapped":"US"}`, string(batcher.received[0]))
+}
+
+func TestSubmitFiltered(t *testing.T) {
+	config := scoop_protocol.KinesisWriterConfig{}
+	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
+	config.Events["video-play"].Filter = "USFilter"
+	tkef := scoop_protocol.TestableKinesisEventFilter{
+		Config: []*scoop_protocol.KinesisEventFilterConfig{{
+			Field:    "country",
+			Values:   []string{"US"},
+			Operator: scoop_protocol.IN_SET,
+		}},
+	}
+	filter, err := tkef.Build()
+	require.NoError(t, err)
+	require.NoError(t, config.Validate(map[string]scoop_protocol.EventFilterFunc{"USFilter": filter}))
+	globber := forwarderMock{}
+	batcher := forwarderMock{}
+	k := KinesisWriter{
+		globber:       &globber,
+		batcher:       &batcher,
+		config:        config,
+		defaultFilter: scoop_protocol.NoopFilter,
+	}
+	k.submit("video-play", map[string]string{"country": "CA", "game": "OK"})
+	k.submit("video-play", map[string]string{"country": "US", "game": "OK"})
+	assert.Len(t, globber.received, 0)
+	require.Len(t, batcher.received, 1)
+	assert.Equal(t, `{"country":"US","device_id":"","game":"OK"}`, string(batcher.received[0]))
+}
+
+func TestSubmitDefaultFiltered(t *testing.T) {
+	config := scoop_protocol.KinesisWriterConfig{}
+	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
+	tkef := scoop_protocol.TestableKinesisEventFilter{
+		Config: []*scoop_protocol.KinesisEventFilterConfig{{
+			Field:    "country",
+			Values:   []string{"US"},
+			Operator: scoop_protocol.IN_SET,
+		}},
+	}
+	filter, err := tkef.Build()
+	require.NoError(t, err)
+	require.NoError(t, config.Validate(nil))
+	globber := forwarderMock{}
+	batcher := forwarderMock{}
+	k := KinesisWriter{
+		globber:       &globber,
+		batcher:       &batcher,
+		config:        config,
+		defaultFilter: filter,
+	}
+	k.submit("video-play", map[string]string{"country": "CA", "game": "OK"})
+	k.submit("video-play", map[string]string{"country": "US", "game": "OK"})
+	assert.Len(t, globber.received, 0)
+	require.Len(t, batcher.received, 1)
+	assert.Equal(t, `{"country":"US","device_id":"","game":"OK"}`, string(batcher.received[0]))
+}
+
+func TestSubmitSkipDefaultFilter(t *testing.T) {
+	config := scoop_protocol.KinesisWriterConfig{}
+	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
+	config.Events["video-play"].SkipDefaultFilter = true
+	tkef := scoop_protocol.TestableKinesisEventFilter{
+		Config: []*scoop_protocol.KinesisEventFilterConfig{{
+			Field:    "country",
+			Values:   []string{"US"},
+			Operator: scoop_protocol.IN_SET,
+		}},
+	}
+	filter, err := tkef.Build()
+	require.NoError(t, err)
+	require.NoError(t, config.Validate(nil))
+	globber := forwarderMock{}
+	batcher := forwarderMock{}
+	k := KinesisWriter{
+		globber:       &globber,
+		batcher:       &batcher,
+		config:        config,
+		defaultFilter: filter,
+	}
+	k.submit("video-play", map[string]string{"country": "CA", "game": "OK"})
+	assert.Len(t, globber.received, 0)
+	require.Len(t, batcher.received, 1)
+	assert.Equal(t, `{"country":"CA","device_id":"","game":"OK"}`, string(batcher.received[0]))
 }
 
 func TestRedshiftStreamAndStreamValidation(t *testing.T) {
@@ -244,7 +334,7 @@ func TestRedshiftStreamAndStreamValidation(t *testing.T) {
 	config.StreamType = "stream"
 
 	// firehose->redshift streaming can only be used with firehose
-	assert.NotNil(t, config.Validate(), "redshift streaming can only be used with firehose")
+	assert.NotNil(t, config.Validate(nil), "redshift streaming can only be used with firehose")
 }
 
 func TestStream(t *testing.T) {

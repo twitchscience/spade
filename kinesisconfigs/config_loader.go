@@ -30,6 +30,7 @@ type DynamicLoader struct {
 	multee                 writer.SpadeWriterManager
 	kinesisWriterGenerator func(scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error)
 	staticKeys             map[string]bool
+	commonFilters          map[string]scoop_protocol.EventFilterFunc
 }
 
 // NewDynamicLoader returns a new DynamicLoader, performing the first fetch.
@@ -41,6 +42,7 @@ func NewDynamicLoader(
 	multee writer.SpadeWriterManager,
 	kinesisWriterGenerator func(scoop_protocol.KinesisWriterConfig) (writer.SpadeWriter, error),
 	staticConfigs []scoop_protocol.KinesisWriterConfig,
+	commonFilters map[string]scoop_protocol.EventFilterFunc,
 ) (*DynamicLoader, error) {
 	d := DynamicLoader{
 		fetcher:                fetcher,
@@ -52,6 +54,7 @@ func NewDynamicLoader(
 		multee:                 multee,
 		kinesisWriterGenerator: kinesisWriterGenerator,
 		staticKeys:             make(map[string]bool),
+		commonFilters:          commonFilters,
 	}
 
 	for _, staticConfig := range staticConfigs {
@@ -116,7 +119,7 @@ func (d *DynamicLoader) pullConfigIn() ([]scoop_protocol.AnnotatedKinesisConfig,
 	}
 	// validate
 	for _, kinesisConfig := range acfgs {
-		err = kinesisConfig.SpadeConfig.Validate()
+		err = kinesisConfig.SpadeConfig.Validate(d.commonFilters)
 		if err != nil {
 			return nil, fmt.Errorf("could not validate kinesis configuration %s: %s", kinesisConfig.SpadeConfig.StreamName, err)
 		}

@@ -325,6 +325,7 @@ func getTestConfig(spadeDir string) *config.Config {
 		KinesisOutputs:                          []scoop_protocol.KinesisWriterConfig{},
 		KinesisWriterErrorsBeforeThrottling:     5,
 		KinesisWriterErrorThrottlePeriodSeconds: 60,
+		KinesisDefaultFilterFunc:                scoop_protocol.NoopFilter,
 		JSONValueFetchers: map[string]lookup.JSONValueFetcherConfig{
 			"UserIDFetcher": {},
 		},

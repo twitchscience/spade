@@ -120,13 +120,14 @@ type FirehoseBatchWriter struct {
 
 // KinesisWriter is a writer that writes events to kinesis
 type KinesisWriter struct {
-	incoming    chan *WriteRequest
-	batches     chan [][]byte
-	globber     EventForwarder
-	batcher     EventForwarder
-	config      scoop_protocol.KinesisWriterConfig
-	batchWriter BatchWriter
-	limiter     *taskRateLimiter
+	incoming      chan *WriteRequest
+	batches       chan [][]byte
+	globber       EventForwarder
+	batcher       EventForwarder
+	config        scoop_protocol.KinesisWriterConfig
+	defaultFilter scoop_protocol.EventFilterFunc
+	batchWriter   BatchWriter
+	limiter       *taskRateLimiter
 
 	sync.WaitGroup
 }
@@ -202,46 +203,55 @@ func generateStatNames(streamName string) map[int]string {
 	return stats
 }
 
+// KinesisConfig represents a stream's config and some base kinesis config.
+type KinesisConfig struct {
+	StreamConfig  scoop_protocol.KinesisWriterConfig
+	CommonFilters map[string]scoop_protocol.EventFilterFunc
+	DefaultFilter scoop_protocol.EventFilterFunc
+}
+
 // NewKinesisWriter returns an instance of SpadeWriter that writes
 // events to kinesis
 func NewKinesisWriter(
 	kinesisFactory KinesisFactory,
 	firehoseFactory FirehoseFactory,
 	statter statsd.Statter,
-	config scoop_protocol.KinesisWriterConfig,
+	config *KinesisConfig,
 	errorsBeforeThrottling int,
 	secondsPerError int64) (SpadeWriter, error) {
 
-	if err := config.Validate(); err != nil {
+	sConfig := config.StreamConfig
+	if err := sConfig.Validate(config.CommonFilters); err != nil {
 		return nil, err
 	}
 	var batchWriter BatchWriter
-	wStatter := NewStatter(statter, config.StreamName)
+	wStatter := NewStatter(statter, sConfig.StreamName)
 	limiter := newTaskRateLimiter(errorsBeforeThrottling, secondsPerError)
-	switch config.StreamType {
+	switch sConfig.StreamType {
 	case "stream":
-		batchWriter = &StreamBatchWriter{kinesisFactory.New(config.StreamRegion, config.StreamRole), &config, wStatter, limiter}
+		batchWriter = &StreamBatchWriter{kinesisFactory.New(sConfig.StreamRegion, sConfig.StreamRole), &sConfig, wStatter, limiter}
 	case "firehose":
-		batchWriter = &FirehoseBatchWriter{firehoseFactory.New(config.StreamRegion, config.StreamRole), &config, wStatter, limiter}
+		batchWriter = &FirehoseBatchWriter{firehoseFactory.New(sConfig.StreamRegion, sConfig.StreamRole), &sConfig, wStatter, limiter}
 	default:
-		return nil, fmt.Errorf("unknown stream type: %s", config.StreamType)
+		return nil, fmt.Errorf("unknown stream type: %s", sConfig.StreamType)
 	}
 	w := &KinesisWriter{
-		incoming:    make(chan *WriteRequest, config.BufferSize),
-		batches:     make(chan [][]byte),
-		config:      config,
-		batchWriter: batchWriter,
+		incoming:      make(chan *WriteRequest, sConfig.BufferSize),
+		batches:       make(chan [][]byte),
+		config:        sConfig,
+		batchWriter:   batchWriter,
+		defaultFilter: config.DefaultFilter,
 	}
 
 	var err error
-	w.batcher, err = batcher.New(config.Batcher, func(b [][]byte) {
+	w.batcher, err = batcher.New(sConfig.Batcher, func(b [][]byte) {
 		w.batches <- b
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	w.globber, err = globber.New(config.Globber, func(b []byte) {
+	w.globber, err = globber.New(sConfig.Globber, func(b []byte) {
 		w.batcher.Submit(b)
 	})
 	if err != nil {
@@ -270,6 +280,9 @@ func (w *KinesisWriter) submit(name string, columns map[string]string) {
 		return
 	}
 	if event.FilterFunc != nil && !event.FilterFunc(columns) {
+		return
+	}
+	if !event.SkipDefaultFilter && !w.defaultFilter(columns) {
 		return
 	}
 

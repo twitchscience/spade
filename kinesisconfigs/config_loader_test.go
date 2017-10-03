@@ -244,6 +244,7 @@ func TestRefresh(t *testing.T) {
 			return nil, nil
 		},
 		[]scoop_protocol.KinesisWriterConfig{},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("was expecting no error but got %v\n", err)
@@ -286,6 +287,7 @@ func TestRetryPull(t *testing.T) {
 			return nil, nil
 		},
 		[]scoop_protocol.KinesisWriterConfig{},
+		nil,
 	)
 	if err == nil {
 		t.Fatalf("expected loader to timeout\n")
