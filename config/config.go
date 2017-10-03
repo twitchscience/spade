@@ -66,6 +66,14 @@ type Config struct {
 	// (i.e. once throttling switches on, only one error will be sent to Rollbar per period).
 	// Set to 0 to turn throttling off and send all errors to Rollbar.
 	KinesisWriterErrorThrottlePeriodSeconds int64
+	// KinesisFilters is a set of filters that can be used by Kinesis streams.
+	KinesisFilters map[string]*scoop_protocol.TestableKinesisEventFilter
+	// KinesisFilterFuncs is the instantiation of KinesisFilters.
+	KinesisFilterFuncs map[string]scoop_protocol.EventFilterFunc `json:"-"`
+	// KinesisDefaultFilter is a default filter applied to all events in all streams.
+	KinesisDefaultFilter *scoop_protocol.TestableKinesisEventFilter
+	// KinesisFilterFuncs is the instantiation of KinesisDefaultFilter.
+	KinesisDefaultFilterFunc scoop_protocol.EventFilterFunc `json:"-"`
 
 	// JSONValueFetchers is a map of id to JSONValueFetcherConfigs
 	JSONValueFetchers map[string]lookup.JSONValueFetcherConfig
@@ -119,7 +127,7 @@ func LoadConfig(configFilename string, replay bool) (*Config, error) {
 		return nil, fmt.Errorf("decoding config: %v", err)
 	}
 
-	err = validateConfig(cfg, replay)
+	err = validateAndPopulateConfig(&cfg, replay)
 	if err != nil {
 		return nil, fmt.Errorf("validating config: %v", err)
 	}
@@ -134,7 +142,7 @@ func checkNonempty(str string) error {
 	return nil
 }
 
-func validateConfig(cfg Config, replay bool) error {
+func validateAndPopulateConfig(cfg *Config, replay bool) error {
 	for _, str := range []string{
 		cfg.ConfigBucket,
 		cfg.SchemasKey,
@@ -191,10 +199,29 @@ func validateConfig(cfg Config, replay bool) error {
 		}
 	}
 
-	for _, c := range cfg.KinesisOutputs {
-		if err := c.Validate(); err != nil {
+	cfg.KinesisFilterFuncs = make(map[string]scoop_protocol.EventFilterFunc, len(cfg.KinesisFilters))
+	for name, config := range cfg.KinesisFilters {
+		filter, err := config.Build()
+		if err != nil {
+			return fmt.Errorf("bad kinesis filter %s: %v", name, err)
+		}
+		cfg.KinesisFilterFuncs[name] = filter
+	}
+	if cfg.KinesisDefaultFilter != nil {
+		filter, err := cfg.KinesisDefaultFilter.Build()
+		if err != nil {
+			return fmt.Errorf("bad default kinesis filter: %v", err)
+		}
+		cfg.KinesisDefaultFilterFunc = filter
+	} else {
+		cfg.KinesisDefaultFilterFunc = scoop_protocol.NoopFilter
+	}
+
+	for _, ko := range cfg.KinesisOutputs {
+		if err := ko.Validate(cfg.KinesisFilterFuncs); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }

@@ -206,7 +206,11 @@ func newProcessor(deps *spadeProcessorDeps) (*spadeProcessor, error) {
 			deps.kinesisFactory,
 			deps.firehoseFactory,
 			deps.stats,
-			c,
+			&writer.KinesisConfig{
+				StreamConfig:  c,
+				CommonFilters: deps.cfg.KinesisFilterFuncs,
+				DefaultFilter: deps.cfg.KinesisDefaultFilterFunc,
+			},
 			deps.cfg.KinesisWriterErrorsBeforeThrottling,
 			deps.cfg.KinesisWriterErrorThrottlePeriodSeconds)
 		if werr != nil {
@@ -305,11 +309,16 @@ func startProcessorPool(deps *spadeProcessorDeps, multee *writer.Multee,
 				deps.kinesisFactory,
 				deps.firehoseFactory,
 				reporterStats.GetStatter(),
-				cfg,
+				&writer.KinesisConfig{
+					StreamConfig:  cfg,
+					CommonFilters: deps.cfg.KinesisFilterFuncs,
+					DefaultFilter: deps.cfg.KinesisDefaultFilterFunc,
+				},
 				deps.cfg.KinesisWriterErrorsBeforeThrottling,
 				deps.cfg.KinesisWriterErrorThrottlePeriodSeconds)
 		},
 		deps.cfg.KinesisOutputs,
+		deps.cfg.KinesisFilterFuncs,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating dynamic kinesis config loader: %v", err)
