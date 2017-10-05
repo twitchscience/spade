@@ -58,9 +58,11 @@ COPY_OPTS = ('''removequotes delimiter '\t' gzip escape truncatecolumns ''' +
 
 def set_up_logging(args):
     logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s %(levelname)s: %(message)s')
+                        format='%(asctime)s - %(levelname)s: %(message)s')
     global LOGGER
     LOGGER = logging.getLogger('')
+    for library in ('boto', 'botocore', 'boto3', 'requests'):
+        logging.getLogger(library).setLevel(logging.WARNING)
 
 
 def get_days(start, end):
@@ -151,12 +153,12 @@ def ingester_worker(table, start, end, rsurl, run_tag):
     try:
         with conn, conn.cursor() as cur:
             cur.execute(
-                '''DELETE FROM logs."{}" WHERE time between '{}' and '{}' '''.
+                '''DELETE FROM physical."{}" WHERE time between '{}' and '{}' '''.
                 format(table, start, end))
             LOGGER.info('deleted %d rows from %s', cur.rowcount, table)
 
             cur.execute(
-                '''CREATE TEMP TABLE import (LIKE logs."{}")'''.format(table))
+                '''CREATE TEMP TABLE import (LIKE physical."{}")'''.format(table))
             if not s3_dir_exists('{}/{}/'.format(run_tag, table)):
                 LOGGER.error("No S3 files in {}/{}/".format(run_tag, table))
                 return
@@ -170,7 +172,7 @@ def ingester_worker(table, start, end, rsurl, run_tag):
                                 credentials=credentials,
                                 copy_opts=COPY_OPTS))
 
-            cur.execute(('''INSERT INTO logs."{}" SELECT * FROM import ''' +
+            cur.execute(('''INSERT INTO physical."{}" SELECT * FROM import ''' +
                          '''WHERE time between '{}' and '{}' ''').
                         format(table, start, end))
             LOGGER.info('inserted %d rows into %s, now committing',
