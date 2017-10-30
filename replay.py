@@ -211,9 +211,9 @@ def main(args):
     namespace = args.get('--namespace')
     run_tag = args.get('--from-runtag')
     processor_only = args.get('--processor-only')
-    if run_tag and processor_only:
+    """if run_tag and processor_only:
         print "Looks like you don't want to do anything; exiting"
-        sys.exit(1)
+        sys.exit(1)"""
 
     # Do our best to verify that the timestamps make sense
     start = PT.localize(
