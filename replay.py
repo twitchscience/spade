@@ -209,11 +209,12 @@ def main(args):
     set_up_logging(args)
 
     namespace = args.get('--namespace')
-    run_tag = args.get('--from-runtag')
-    processor_only = args.get('--processor-only')
-    """if run_tag and processor_only:
+    run_tag = args.get('--runtag')
+    skip_processor_transformation = args.get('--no-transform')
+    skip_ace_upload = args.get('--no-ace-upload')
+    if skip_processor_transformation and skip_ace_upload:
         print "Looks like you don't want to do anything; exiting"
-        sys.exit(1)"""
+        sys.exit(1)
 
     # Do our best to verify that the timestamps make sense
     start = PT.localize(
@@ -238,12 +239,17 @@ def main(args):
             run_tag = namespace + "-" + datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
         else:
             run_tag = datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
+        print "no run_tag was supplied, using generated run_tag {}".format(run_tag)
+
+    if not skip_processor_transformation:
         print "Starting processors now, dumping to runtag {}".format(run_tag)
         replay_processor(start, end, run_tag, fragment_list)
 
-    if not processor_only:
+    if not skip_ace_upload:
+        print "Uploading replayed data to Ace"
         upload_to_db(args, start, end, run_tag, tables)
 
+    print "I have done my job; good bye."
 
 if __name__ == '__main__':
     main(docopt(__doc__))
