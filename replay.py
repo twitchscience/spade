@@ -3,7 +3,7 @@
 
     Usage:
         replay.py START END [TABLE ... | --all-tables] --rsurl=<url>
-                  [--processor-only] [--from-runtag=<runtag>]
+                  [--no-transform] [--no-ace-upload] [--runtag=<runtag>]
                   [--poolsize=<size>] [--log=<level>] [--namespace=<namespace>]
         replay.py --help
 
@@ -15,9 +15,10 @@
 
     Options:
         --rsurl=<url>   `postgres://` style url to access the redshift database
-        --processor-only    if present, skip the DB step
-        --from-runtag=<runtag>
-            if present, skip the Spark step and upload to DB from runtag
+        --no-transform  if present, skip the edge-log transformation step
+        --no-ace-upload if present, skip the Ace upload step
+        --runtag=<runtag>
+            if present, use provided runtag instead of generating one
         --poolsize=<size>
             Size of pool for parallel ingester operations [default: 4]
         --log=<level>   the logging level [default: INFO]
