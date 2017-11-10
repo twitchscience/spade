@@ -14,14 +14,14 @@
         TABLE   table[s] to reload into
 
     Options:
-        --rsurl=<url>   `postgres://` style url to access the redshift database
-        --no-transform  if present, skip the edge-log transformation step
-        --no-ace-upload if present, skip the Ace upload step
+        --rsurl=<url>    `postgres://` style url to access the redshift database
+        --no-transform   if present, skip the edge-log transformation step
+        --no-ace-upload  if present, skip the Ace upload step
         --runtag=<runtag>
             if present, use provided runtag instead of generating one
         --poolsize=<size>
             Size of pool for parallel ingester operations [default: 4]
-        --log=<level>   the logging level [default: INFO]
+        --log=<level>    the logging level [default: INFO]
         --all-tables
             if present, upload data to all database tables known to blueprint
         --namespace=<namespace>
