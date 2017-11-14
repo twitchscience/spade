@@ -32,6 +32,7 @@ type KinesisWriterEventConfig struct {
 	FullFieldMap      map[string]string `json:"-"`
 	FilterParameters  []*KinesisEventFilterConfig
 	SkipDefaultFilter bool
+	AllFields         bool
 }
 
 // FilterOperator represents the types of filter operations supported by KinesisEventFilterConfig.
@@ -152,15 +153,24 @@ func (c *KinesisWriterConfig) Validate(commonFilters map[string]EventFilterFunc)
 				}
 			}
 		}
-		e.FullFieldMap = make(map[string]string, len(e.Fields))
-		if e.FieldRenames == nil {
-			e.FieldRenames = make(map[string]string)
-		}
-		for _, f := range e.Fields {
-			if renamed, ok := e.FieldRenames[f]; ok {
-				e.FullFieldMap[f] = renamed
-			} else {
-				e.FullFieldMap[f] = f
+		if e.AllFields {
+			if len(e.Fields) > 0 {
+				return fmt.Errorf("fields must be empty when using AllFields in %s", name)
+			}
+			if len(e.FieldRenames) > 0 {
+				return fmt.Errorf("fieldRenames must be empty when using AllFields in %s", name)
+			}
+		} else {
+			e.FullFieldMap = make(map[string]string, len(e.Fields))
+			if e.FieldRenames == nil {
+				e.FieldRenames = make(map[string]string)
+			}
+			for _, f := range e.Fields {
+				if renamed, ok := e.FieldRenames[f]; ok {
+					e.FullFieldMap[f] = renamed
+				} else {
+					e.FullFieldMap[f] = f
+				}
 			}
 		}
 	}
