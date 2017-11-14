@@ -290,11 +290,17 @@ func (w *KinesisWriter) submit(name string, columns map[string]string) {
 	if w.config.EventNameTargetField != "" {
 		pruned[w.config.EventNameTargetField] = name
 	}
-	for field, outField := range event.FullFieldMap {
-		if val, ok := columns[field]; ok && val != "" {
-			pruned[outField] = val
-		} else if !w.config.ExcludeEmptyFields {
-			pruned[outField] = ""
+	if event.AllFields {
+		for name, value := range columns {
+			pruned[name] = value
+		}
+	} else {
+		for field, outField := range event.FullFieldMap {
+			if val, ok := columns[field]; ok && val != "" {
+				pruned[outField] = val
+			} else if !w.config.ExcludeEmptyFields {
+				pruned[outField] = ""
+			}
 		}
 	}
 

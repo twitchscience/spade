@@ -44,6 +44,9 @@ var FirehoseRedshiftStreamTestConfig = []byte(`
                     "device_id",
 		    "game"
                 ]
+            },
+            "all-fields": {
+                "AllFields": true
             }
         },
         "BufferSize": 1024,
@@ -241,6 +244,26 @@ func TestSubmitRename(t *testing.T) {
 	assert.Len(t, globber.received, 0)
 	require.Len(t, batcher.received, 1)
 	assert.Equal(t, `{"remapped_name":"xx","unremapped":"US"}`, string(batcher.received[0]))
+}
+
+func TestSubmitAllFields(t *testing.T) {
+	config := scoop_protocol.KinesisWriterConfig{}
+	_ = json.Unmarshal(FirehoseRedshiftStreamTestConfig, &config)
+	require.NoError(t, config.Validate(nil))
+	globber := forwarderMock{}
+	batcher := forwarderMock{}
+	k := KinesisWriter{
+		globber:       &globber,
+		batcher:       &batcher,
+		config:        config,
+		defaultFilter: scoop_protocol.NoopFilter,
+	}
+	k.submit("all-fields", map[string]string{"somefield": "US"})
+	k.submit("all-fields", map[string]string{"someotherfield": "1"})
+	assert.Len(t, globber.received, 0)
+	require.Len(t, batcher.received, 2)
+	assert.Equal(t, `{"somefield":"US"}`, string(batcher.received[0]))
+	assert.Equal(t, `{"someotherfield":"1"}`, string(batcher.received[1]))
 }
 
 func TestSubmitFiltered(t *testing.T) {
