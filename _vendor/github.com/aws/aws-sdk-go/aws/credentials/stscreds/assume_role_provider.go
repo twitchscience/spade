@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 // ProviderName provides a name of AssumeRole provider
@@ -148,6 +149,14 @@ func (p *AssumeRoleProvider) Retrieve() (credentials.Value, error) {
 	if err != nil {
 		return credentials.Value{ProviderName: ProviderName}, err
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WithField("input", fmt.Sprintf("%v", input)).
+				WithField("output", fmt.Sprintf("%v", roleOutput)).
+				Error("Panicked at assume role")
+			panic(r)
+		}
+	}()
 
 	// We will proactively generate new credentials before they expire.
 	p.SetExpiration(*roleOutput.Credentials.Expiration, p.ExpiryWindow)
