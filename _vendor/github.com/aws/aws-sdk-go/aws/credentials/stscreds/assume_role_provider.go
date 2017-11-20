@@ -144,15 +144,17 @@ func (p *AssumeRoleProvider) Retrieve() (credentials.Value, error) {
 		input.SerialNumber = p.SerialNumber
 		input.TokenCode = p.TokenCode
 	}
-	roleOutput, err := p.Client.AssumeRole(input)
+	req, roleOutput := c.AssumeRoleRequest(input)
+	err := req.Send()
 
 	if err != nil {
 		return credentials.Value{ProviderName: ProviderName}, err
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			logger.WithField("input", fmt.Sprintf("%v", input)).
-				WithField("output", fmt.Sprintf("%v", roleOutput)).
+			logger.WithField("input", fmt.Sprintf("%+v", input)).
+				WithField("request", fmt.Sprintf("%+v", req)).
+				WithField("output", fmt.Sprintf("%+v", roleOutput)).
 				Error("Panicked at assume role")
 			panic(r)
 		}
