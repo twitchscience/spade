@@ -540,19 +540,6 @@ func (w *StreamBatchWriter) attemptPutRecords(args *kinesis.PutRecordsInput) err
 	return formatErrorCounts(awsErrorCounts)
 }
 
-func (w *FirehoseBatchWriter) debugPutRecord(inp *firehose.PutRecordBatchInput) error {
-	defer func() {
-		if r := recover(); r != nil {
-			logger.WithFields(map[string]interface{}{
-				"stream":  inp.DeliveryStreamName,
-				"records": inp.Records,
-			}).Error("Panic at PutRecords")
-			panic(r)
-		}
-	}()
-	return w.attemptPutRecord(inp)
-}
-
 // SendBatch writes the given batch to a firehose, configured by the FirehoseBatchWriter
 func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 	if len(batch) == 0 {
@@ -572,7 +559,7 @@ func (w *FirehoseBatchWriter) SendBatch(batch [][]byte) {
 
 	var err error
 	for attempt := 1; attempt <= w.config.MaxAttemptsPerRecord; attempt++ {
-		err = w.debugPutRecord(args)
+		err = w.attemptPutRecord(args)
 		if err == nil {
 			return
 		}
