@@ -11,7 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/twitchscience/aws_utils/logger"
 )
 
 // ProviderName provides a name of AssumeRole provider
@@ -20,6 +22,7 @@ const ProviderName = "AssumeRoleProvider"
 // AssumeRoler represents the minimal subset of the STS client API used by this provider.
 type AssumeRoler interface {
 	AssumeRole(input *sts.AssumeRoleInput) (*sts.AssumeRoleOutput, error)
+	AssumeRoleRequest(input *sts.AssumeRoleInput) (req *request.Request, output *sts.AssumeRoleOutput)
 }
 
 // DefaultDuration is the default amount of time in minutes that the credentials
@@ -143,11 +146,21 @@ func (p *AssumeRoleProvider) Retrieve() (credentials.Value, error) {
 		input.SerialNumber = p.SerialNumber
 		input.TokenCode = p.TokenCode
 	}
-	roleOutput, err := p.Client.AssumeRole(input)
+	req, roleOutput := p.Client.AssumeRoleRequest(input)
+	err := req.Send()
 
 	if err != nil {
 		return credentials.Value{ProviderName: ProviderName}, err
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WithField("input", fmt.Sprintf("%+v", input)).
+				WithField("request", fmt.Sprintf("%+v", req)).
+				WithField("output", fmt.Sprintf("%+v", roleOutput)).
+				Error("Panicked at assume role")
+			panic(r)
+		}
+	}()
 
 	// We will proactively generate new credentials before they expire.
 	p.SetExpiration(*roleOutput.Credentials.Expiration, p.ExpiryWindow)
