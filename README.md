@@ -14,23 +14,23 @@ with an example.
 
 The processor can be described by the following diagram:
 ```
-Downloads logs from S3                                         
-   +–+                                                         
-   |                                                           
-+––+––+     +–––––––––––––––––––––+––––+–––+                   
-|     |     |                     |    |   ++                  
-|     |     |                     |    +––––+       XXXXXXXXX  
+Downloads logs from S3
+   +–+
+   |
++––+––+     +–––––––––––––––––––––+––––+–––+
+|     |     |                     |    |   ++
+|     |     |                     |    +––––+       XXXXXXXXX
 |     |     |                     |    |   ++  XXXXXX       XX
 |     |     | Parsing Pool        |    +––––+ XX            XX
 |     |     |                     |    |   ++  X            XX
 |     +–––––+                     |    +––––––––+X   S3      X
 |     |     |                     |    |   ++    XX           X
 |     |  +  |                     |    +––––+  XX          XXXX
-+–––––+  |  +–––––––––––––––––––––+––––+   ++  XXXXXXXXXXXXX   
-         |                                                     
-         |                        +––––––––+                   
++–––––+  |  +–––––––––––––––––––––+––––+   ++  XXXXXXXXXXXXX
+         |
+         |                        +––––––––+
          | chan []byte            Writer Controller and Writers
-         +                                                     
+         +
 ```
 
 By this model if we attached a thread that simple output
@@ -60,9 +60,6 @@ reingest the reprocessed data into Redshift, replacing the erroneous records if 
 Replay can also publish to Kinesis streams, but consumers must be aware that replays
 are possible.
 
-(N.B. this has passed in integration tests but *has not been used in prod yet*.
-Exercise the appropriate level of caution.)
-
 To run in replay mode:
 
 1. Deploy a Spark cluster where each worker node has Spade installed.  Spade should be
@@ -79,6 +76,15 @@ where
 	* `TABLE ...` specifies the tables whose records should be replaced.
 3. If the results of the previous step are unsatisfactory, make necessary
    changes and repeat.
+
+Replay is a 2 step process - transforming edge logs on Spark, and loading the transformed
+data into Redshift. For flexibility, there are 2 flags that lets you skip either steps.
+`--no-ace-upload` will have replay do the edge log transformation, and will place the
+transformed files in S3, but will stop short of actually uploading into Redshift.
+`--no-transform` will have replay skip the edge log transformation step, and directly load
+a runtag's transformed data into Redshift - if this flag is specified, `--runtag` must
+also be specified. For example, `--no-ace-upload` is used by Tahoe replay because the
+transformed files are Tahoe-bound instead of Ace-bound.
 
 For extra reliability, instead of running `replay.sh` locally, start a tmux session on the
 master node and submit from there.
