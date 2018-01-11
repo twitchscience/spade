@@ -79,11 +79,11 @@ where
 
 Replay is a 2 step process - transforming edge logs on Spark, and loading the transformed
 data into Redshift. For flexibility, there are 2 flags that lets you skip either steps.
-`--no-ace-upload` will have replay do the edge log transformation, and will place the
+`--skip-ace-upload` will have replay do the edge log transformation, and will place the
 transformed files in S3, but will stop short of actually uploading into Redshift.
-`--no-transform` will have replay skip the edge log transformation step, and directly load
+`--skip-transform` will have replay skip the edge log transformation step, and directly load
 a runtag's transformed data into Redshift - if this flag is specified, `--runtag` must
-also be specified. For example, `--no-ace-upload` is used by Tahoe replay because the
+also be specified. For example, `--skip-ace-upload` is used by Tahoe replay because the
 transformed files are Tahoe-bound instead of Ace-bound.
 
 For extra reliability, instead of running `replay.sh` locally, start a tmux session on the
