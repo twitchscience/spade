@@ -2,8 +2,8 @@
 """Reload rows of data into acedb from edge through processor.
 
     Usage:
-        replay.py START END [TABLE ... | --all-tables] --rsurl=<url>
-                  [--no-transform] [--no-ace-upload] [--runtag=<runtag>]
+        replay.py START END [TABLE ... | --all-tables] [--rsurl=<url>]
+                  [--skip-transform] [--skip-ace-upload] [--runtag=<runtag>]
                   [--poolsize=<size>] [--log=<level>] [--namespace=<namespace>]
         replay.py --help
 
@@ -14,15 +14,19 @@
         TABLE   table[s] to reload into
 
     Options:
-        --rsurl=<url>    `postgres://` style url to access the redshift database
-        --no-transform   if present, skip the edge-log transformation step, using
+        --rsurl=<url>
+            `postgres://` style url to access the redshift database
+        --skip-transform
+            if present, skip the edge-log transformation step, using
             transformed files from a previous runtag to upload to DB
-        --no-ace-upload  if present, skip the Ace upload step
+        --skip-ace-upload
+            if present, skip the Ace upload step
         --runtag=<runtag>
             if present, use provided runtag instead of generating one
         --poolsize=<size>
             Size of pool for parallel ingester operations [default: 4]
-        --log=<level>    the logging level [default: INFO]
+        --log=<level>
+            the logging level [default: INFO]
         --all-tables
             if present, upload data to all database tables known to blueprint
         --namespace=<namespace>
@@ -121,7 +125,9 @@ def pipe_through_processor(run_tag, fragment_list):
 
 
 def replay_processor(start, end, run_tag, fragment_list):
+    logging.info('Finding all input files')
     s3_keys = s3_object_keys(start, end)
+    logging.info('Starting spark job with %d files', len(s3_keys))
     spark_context().\
         parallelize(s3_keys, len(s3_keys) / 100 + 1).\
         foreachPartition(pipe_through_processor(run_tag, fragment_list))
@@ -201,9 +207,9 @@ def fragments(table_name):
         yield b64encode(table_name[start_idx:end_idx])
 
 
-def upload_to_db(args, start, end, run_tag, tables):
-    Pool(int(args['--poolsize'])).map(
-        lambda x: ingester_worker(x, start, end, args['--rsurl'], run_tag),
+def upload_to_db(poolsize, rsurl, start, end, run_tag, tables):
+    Pool(poolsize).map(
+        lambda x: ingester_worker(x, start, end, rsurl, run_tag),
         tables)
 
 
@@ -212,13 +218,17 @@ def main(args):
 
     namespace = args.get('--namespace')
     run_tag = args.get('--runtag')
-    skip_processor_transformation = args.get('--no-transform')
-    skip_ace_upload = args.get('--no-ace-upload')
+    skip_processor_transformation = args.get('--skip-transform')
+    skip_ace_upload = args.get('--skip-ace-upload')
+    rsurl = args.get('--rsurl')
     if skip_processor_transformation and skip_ace_upload:
         print "Looks like you don't want to do anything; exiting"
         sys.exit(1)
     if skip_processor_transformation and not run_tag:
         print "To skip processor transformation, runtag from previous transformation required"
+        sys.exit(1)
+    if not skip_ace_upload and not rsurl:
+        print "Redshift url required for doing Ace upload"
         sys.exit(1)
 
     # Do our best to verify that the timestamps make sense
@@ -252,7 +262,7 @@ def main(args):
 
     if not skip_ace_upload:
         print "Uploading replayed data to Ace"
-        upload_to_db(args, start, end, run_tag, tables)
+        upload_to_db(int(args['--poolsize']), rsurl, start, end, run_tag, tables)
 
     print "I have done my job; good bye."
 
