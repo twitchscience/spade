@@ -101,7 +101,7 @@ func TestSuccessfulJSONLogParser(t *testing.T) {
 		if me.Pstart != receivedAt {
 			t.Fatalf("mixpanel event: incorrect Pstart times. Expected %v got %v", receivedAt, me.Pstart)
 		}
-		if me.EventTime != receivedAt {
+		if !me.EventTime.Equal(receivedAt) {
 			t.Fatalf("mixpanel event: incorrect event times. Expected %s got %s", receivedAt, me.EventTime)
 		}
 		if me.ClientIP != net.IPv4(10, 0, 0, 1).String() {
@@ -137,7 +137,7 @@ func TestFailurePaths(t *testing.T) {
 		},
 		{
 			errorName:       "Incorrect base64 data",
-			logLine:         loadFile("test_resources/broken_b64_data.json", t),
+			logLine:         loadFile("../test_resources/broken_b64_data.json", t),
 			expectedUUID:    "123abc",
 			expectedTime:    time.Unix(1418172623, 0).UTC(),
 			expectedFailure: reporter.UnableToParseData,
@@ -159,7 +159,7 @@ func TestFailurePaths(t *testing.T) {
 		if mes[0].UUID != tt.expectedUUID {
 			t.Fatalf("mixpanel event: incorrect uuid. Expected %s got %s. Failing test name: %s", tt.expectedUUID, mes[0].UUID, tt.errorName)
 		}
-		if mes[0].EventTime != tt.expectedTime {
+		if !mes[0].EventTime.Equal(tt.expectedTime) {
 			t.Fatalf("mixpanel event: incorrect time. Expected %s got %s. Failing test name: %s", tt.expectedTime, mes[0].EventTime, tt.errorName)
 		}
 	}
