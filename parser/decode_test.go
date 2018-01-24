@@ -34,26 +34,6 @@ func TestDecodeData(t *testing.T) {
 	}
 }
 
-func TestSpaceDecodeData(t *testing.T) {
-	_, err := DecodeBase64(loadFile("test_resources/b64payload_space.txt"), &ByteQueryUnescaper{})
-	if err != nil {
-		t.Fatalf("got error: %v\n", err)
-	}
-}
-
-func TestURLSafeDecodeData(t *testing.T) {
-	_, err := DecodeBase64(loadFile("test_resources/urlsafeb64payload.txt"), &ByteQueryUnescaper{})
-	if err != nil {
-		t.Fatalf("got error: %v\n", err)
-	}
-}
-
-func TestBadUUIDDecodeData(t *testing.T) {
-	_, err := DecodeBase64([]byte("ip=1"), &ByteQueryUnescaper{})
-	if err == nil {
-	}
-}
-
 var sample = []byte("eyJldmVudCI6ImhlbGxvIn0%3D")
 
 type StringQueryUnescaper struct{}
