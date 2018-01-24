@@ -14,60 +14,43 @@ func loadFile(file string) []byte {
 	return b
 }
 
-type testShim struct {
-	data []byte
-	uuid string
-}
-
-func (t *testShim) Data() []byte {
-	return t.data
-}
-
-func (t *testShim) UUID() string {
-	return t.uuid
-}
-
-func (t *testShim) Time() string {
-	return "1395707641"
-}
-
 func TestDecodeData(t *testing.T) {
-	_, err := DecodeBase64(&testShim{
-		data: loadFile("test_resources/b64payload.txt"),
-		uuid: "39bffff7-4ffff880-539775b5-0",
-	}, &ByteQueryUnescaper{})
-	if err != nil {
-		t.Fatalf("got error: %v\n", err)
+	tcs := []struct {
+		data        []byte
+		shouldError bool
+	}{
+		{loadFile("test_resources/b64payload.txt"), false},
+		{loadFile("test_resources/b64payload_space.txt"), false},
+		{loadFile("test_resources/urlsafeb64payload.txt"), false},
+		{[]byte("ip=1"), true},
+	}
+	for _, tc := range tcs {
+		_, err := DecodeBase64(tc.data, &ByteQueryUnescaper{})
+		if tc.shouldError && err == nil {
+			t.Fatalf("got error: %v\n", err)
+		} else if !tc.shouldError && err != nil {
+			t.Fatalf("should have gotten error")
+		}
 	}
 }
 
 func TestSpaceDecodeData(t *testing.T) {
-	_, err := DecodeBase64(&testShim{
-		data: loadFile("test_resources/b64payload_space.txt"),
-		uuid: "39bffff7-4ffff880-539775b5-0",
-	}, &ByteQueryUnescaper{})
+	_, err := DecodeBase64(loadFile("test_resources/b64payload_space.txt"), &ByteQueryUnescaper{})
 	if err != nil {
 		t.Fatalf("got error: %v\n", err)
 	}
 }
 
 func TestURLSafeDecodeData(t *testing.T) {
-	_, err := DecodeBase64(&testShim{
-		data: loadFile("test_resources/urlsafeb64payload.txt"),
-		uuid: "39bffff7-4ffff880-539775b5-0",
-	}, &ByteQueryUnescaper{})
+	_, err := DecodeBase64(loadFile("test_resources/urlsafeb64payload.txt"), &ByteQueryUnescaper{})
 	if err != nil {
 		t.Fatalf("got error: %v\n", err)
 	}
 }
 
 func TestBadUUIDDecodeData(t *testing.T) {
-	_, err := DecodeBase64(&testShim{
-		data: []byte("ip=1"),
-		uuid: "",
-	}, &ByteQueryUnescaper{})
+	_, err := DecodeBase64([]byte("ip=1"), &ByteQueryUnescaper{})
 	if err == nil {
-		t.Fatalf("should have gotten error")
 	}
 }
 

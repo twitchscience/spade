@@ -11,8 +11,7 @@ import (
 var multiEventEscape = []byte{'[', '{'}
 
 // DecodeBase64 base64 decodes and json unmarshals a ParseResult into MixpanelEvents.
-func DecodeBase64(matches ParseResult, escaper URLEscaper) ([]MixpanelEvent, error) {
-	data := matches.Data()
+func DecodeBase64(data []byte, escaper URLEscaper) ([]MixpanelEvent, error) {
 	data, err := escaper.QueryUnescape(data)
 	if err != nil {
 		return nil, err

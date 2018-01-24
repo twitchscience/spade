@@ -2,7 +2,6 @@ package parser
 
 import (
 	"encoding/json"
-	"strconv"
 	"time"
 
 	"github.com/twitchscience/scoop_protocol/spade"
@@ -12,7 +11,7 @@ import (
 // MixpanelEvent is a decoded Mixpanel Event with Properties/source information.
 type MixpanelEvent struct {
 	Pstart     time.Time         // the time that we started processing
-	EventTime  json.Number       // the time that the server recieved the event
+	EventTime  time.Time         // the time that the server recieved the event
 	UUID       string            // UUID of the event as assigned by the edge
 	ClientIP   string            // the ipv4 of the client
 	Event      string            // the type of the event
@@ -26,7 +25,7 @@ type MixpanelEvent struct {
 func MakePanickedEvent(line Parseable) *MixpanelEvent {
 	return &MixpanelEvent{
 		Pstart:     line.StartTime(),
-		EventTime:  json.Number("0"),
+		EventTime:  time.Time{},
 		UUID:       "error",
 		ClientIP:   "",
 		Event:      "Unknown",
@@ -37,19 +36,13 @@ func MakePanickedEvent(line Parseable) *MixpanelEvent {
 }
 
 // MakeErrorEvent returns an event indicating an error happened while parsing the event.
-func MakeErrorEvent(line Parseable, uuid string, when string, edgeType string) *MixpanelEvent {
+func MakeErrorEvent(line Parseable, uuid string, when time.Time, edgeType string) *MixpanelEvent {
 	if uuid == "" || len(uuid) > 64 {
 		uuid = "error"
 	}
-	if when == "" {
-		when = "0"
-	}
-	if _, err := strconv.Atoi(when); err != nil {
-		when = "0"
-	}
 	return &MixpanelEvent{
 		Pstart:     line.StartTime(),
-		EventTime:  json.Number(when),
+		EventTime:  when,
 		UUID:       uuid,
 		ClientIP:   "",
 		Event:      "Unknown",

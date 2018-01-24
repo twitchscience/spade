@@ -46,7 +46,6 @@ type writerController struct {
 	SpadeFolder       string
 	Routes            map[string]SpadeWriter
 	Reporter          reporter.Reporter
-	redshiftUploader  *uploader.UploaderPool
 	blueprintUploader *uploader.UploaderPool
 	// The writer for the untracked events.
 	NonTrackedWriter SpadeWriter
@@ -192,7 +191,6 @@ func NewWriterController(
 		SpadeFolder:       folder,
 		Routes:            make(map[string]SpadeWriter),
 		Reporter:          reporter,
-		redshiftUploader:  spadeUploaderPool,
 		blueprintUploader: blueprintUploaderPool,
 
 		newWriterChan: make(chan *WriteRequest, 200),

@@ -3,7 +3,6 @@ package parser
 import (
 	"crypto/rand"
 	"encoding/json"
-	"fmt"
 	"log"
 	"reflect"
 	"testing"
@@ -21,7 +20,6 @@ const (
 	Error
 	ErrorLongUUID
 	ErrorEmptyUUID
-	ErrorEmptyTime
 	ErrorInvalidTime
 	ErrorInvalidEdgeType
 )
@@ -31,7 +29,7 @@ var (
 	epoch           = time.Unix(0, 0)
 	uuid            = "123abc"
 	longUUID        = randomString(68)
-	when            = fmt.Sprintf("%d", receivedAt.Unix())
+	when            = time.Now()
 	unknownEdgeType = "Unknown"
 )
 
@@ -66,10 +64,8 @@ func makeEvent(t mixpanelEventType) *MixpanelEvent {
 		return MakeErrorEvent(&logLine{}, longUUID, when, spade.INTERNAL_EDGE)
 	case ErrorEmptyUUID:
 		return MakeErrorEvent(&logLine{}, "", when, spade.INTERNAL_EDGE)
-	case ErrorEmptyTime:
-		return MakeErrorEvent(&logLine{}, uuid, "", spade.INTERNAL_EDGE)
 	case ErrorInvalidTime:
-		return MakeErrorEvent(&logLine{}, uuid, "abc", spade.INTERNAL_EDGE)
+		return MakeErrorEvent(&logLine{}, uuid, time.Time{}, spade.INTERNAL_EDGE)
 	case ErrorInvalidEdgeType:
 		return MakeErrorEvent(&logLine{}, uuid, when, unknownEdgeType)
 	}
@@ -80,7 +76,7 @@ func TestMixpanelEvent(t *testing.T) {
 	tests := []struct {
 		t         mixpanelEventType
 		pstart    time.Time
-		eventTime json.Number
+		eventTime time.Time
 		uuid      string
 		clientIP  string
 		eventName string
@@ -91,7 +87,7 @@ func TestMixpanelEvent(t *testing.T) {
 		{
 			t:         BadEncoding,
 			pstart:    epoch, // method uses time.Now()
-			eventTime: json.Number("0"),
+			eventTime: time.Time{},
 			uuid:      "error",
 			clientIP:  "",
 			eventName: "Unknown",
@@ -102,7 +98,7 @@ func TestMixpanelEvent(t *testing.T) {
 		{
 			t:         Panic,
 			pstart:    receivedAt,
-			eventTime: json.Number("0"),
+			eventTime: time.Time{},
 			uuid:      "error",
 			clientIP:  "",
 			eventName: "Unknown",
@@ -113,7 +109,7 @@ func TestMixpanelEvent(t *testing.T) {
 		{
 			t:         Error,
 			pstart:    receivedAt,
-			eventTime: json.Number(when),
+			eventTime: when,
 			uuid:      uuid,
 			clientIP:  "",
 			eventName: "Unknown",
@@ -124,7 +120,7 @@ func TestMixpanelEvent(t *testing.T) {
 		{
 			t:         ErrorLongUUID,
 			pstart:    receivedAt,
-			eventTime: json.Number(when),
+			eventTime: when,
 			uuid:      "error",
 			clientIP:  "",
 			eventName: "Unknown",
@@ -135,19 +131,8 @@ func TestMixpanelEvent(t *testing.T) {
 		{
 			t:         ErrorEmptyUUID,
 			pstart:    receivedAt,
-			eventTime: json.Number(when),
+			eventTime: when,
 			uuid:      "error",
-			clientIP:  "",
-			eventName: "Unknown",
-			edgeType:  spade.INTERNAL_EDGE,
-			rawProps:  json.RawMessage{},
-			failMode:  reporter.UnableToParseData,
-		},
-		{
-			t:         ErrorEmptyTime,
-			pstart:    receivedAt,
-			eventTime: json.Number("0"),
-			uuid:      uuid,
 			clientIP:  "",
 			eventName: "Unknown",
 			edgeType:  spade.INTERNAL_EDGE,
@@ -157,7 +142,7 @@ func TestMixpanelEvent(t *testing.T) {
 		{
 			t:         ErrorInvalidTime,
 			pstart:    receivedAt,
-			eventTime: json.Number("0"),
+			eventTime: time.Time{},
 			uuid:      uuid,
 			clientIP:  "",
 			eventName: "Unknown",
@@ -168,7 +153,7 @@ func TestMixpanelEvent(t *testing.T) {
 		{
 			t:         ErrorInvalidEdgeType,
 			pstart:    receivedAt,
-			eventTime: json.Number(when),
+			eventTime: when,
 			uuid:      uuid,
 			clientIP:  "",
 			eventName: "Unknown",
@@ -210,7 +195,7 @@ func TestMixpanelEvent(t *testing.T) {
 func makeBadEncodedEvent() *MixpanelEvent {
 	return &MixpanelEvent{
 		Pstart:     time.Now(),
-		EventTime:  json.Number("0"),
+		EventTime:  time.Time{},
 		UUID:       "error",
 		ClientIP:   "",
 		Event:      "Unknown",

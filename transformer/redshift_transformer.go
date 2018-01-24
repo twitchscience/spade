@@ -149,7 +149,7 @@ func (t *RedshiftTransformer) transform(event *parser.MixpanelEvent) (string, ma
 	if _, ok := temp["time"]; ok {
 		temp["client_time"] = temp["time"]
 	}
-	temp["time"] = event.EventTime
+	temp["time"] = json.Number(fmt.Sprintf("%d", event.EventTime.Unix()))
 
 	// Still allow clients to override the ip address.
 	if _, ok := temp["ip"]; !ok {
